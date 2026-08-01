@@ -77,7 +77,7 @@ export async function runGitStream(
         chunks: 0,
       };
     }
-    return (await RunStream(runId, req));
+    return await RunStream(runId, req);
   } finally {
     unsubscribe();
     signal?.removeEventListener('abort', abort);

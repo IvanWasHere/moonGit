@@ -1,0 +1,61 @@
+/* Ported from ui-example L188–203. */
+
+.file {
+  border-bottom: 1px solid var(--border);
+}
+
+.fileHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-panel);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.line {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  padding: 0 12px;
+  border-left: 3px solid transparent;
+}
+
+.lineNumber {
+  width: 40px;
+  text-align: right;
+  color: var(--text-muted);
+  padding-right: 12px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.code {
+  flex: 1;
+  white-space: pre;
+}
+
+.add {
+  background: rgba(63, 185, 80, 0.06);
+  border-left-color: var(--green);
+}
+
+.add .code {
+  color: var(--green);
+}
+
+.remove {
+  background: rgba(248, 81, 73, 0.06);
+  border-left-color: var(--red);
+}
+
+.remove .code {
+  color: var(--red);
+}
+
+.context .code {
+  color: var(--text-muted);
+}

@@ -1,0 +1,69 @@
+/* Ported from ui-example L139–156, plus the section-header variant (L595, L601). */
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-left: 2px solid transparent;
+  font-size: 12.5px;
+}
+
+.item:hover {
+  background: var(--bg-hover);
+}
+
+.selected {
+  background: var(--bg-selected);
+  border-left-color: var(--accent);
+}
+
+.icon {
+  width: 16px;
+  text-align: center;
+  font-size: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  display: flex;
+  /* No gap: the mockup renders "+3" and "-1" adjacent inside one `.meta`
+     (L568–571), reading as "+3-1". Separate `.meta` elements are spaced by
+     the row's own 8px gap instead. */
+}
+
+/* The "Changes (5)" divider: a list row that is not a row. */
+.sectionHeader {
+  background: var(--bg-panel);
+  cursor: default;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sectionHeader:hover {
+  background: var(--bg-panel);
+}
+
+.staged {
+  color: var(--green);
+}

@@ -1,0 +1,169 @@
+import { useRef } from 'react';
+import { Button } from '@/components/Button';
+import { Icons } from '@/components/icons';
+import { Panel, PanelAction, PanelHeader } from '@/components/Panel';
+import { Resizer } from '@/components/Resizer';
+import { BranchList } from '@/features/branches/BranchList';
+import { DiffPane } from '@/features/diff/DiffPane';
+import { JournalView } from '@/features/history/JournalView';
+import { RepoList } from '@/features/repositories/RepoList';
+import { FileList } from '@/features/working-tree/FileList';
+import { files, repos } from '@/fixtures/workspace';
+import { showToast } from '@/stores/notificationStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
+import styles from './Layout.module.css';
+
+/**
+ * Main view (ui-example L716–761): Repositories over Branches on the left,
+ * Files over Changes over Journal on the right.
+ *
+ * The resizer arithmetic is the mockup's, kept literally. The third resizer
+ * (L753) is the subtle one: it reads the *sum* of the Files and Changes
+ * heights and sets Changes to the difference, so dragging it moves the
+ * Changes/Journal boundary without disturbing Files above it.
+ */
+export function MainView() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const leftRef = useRef<HTMLDivElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+
+  const main = useWorkspaceStore((state) => state.main);
+  const setMain = useWorkspaceStore((state) => state.setMain);
+  const selectedFileId = useWorkspaceStore((state) => state.selectedFileId);
+  const selectedFile = files.find((file) => file.id === selectedFileId);
+
+  return (
+    <div className={styles.content} ref={containerRef}>
+      <div className={styles.column} ref={leftRef} style={{ width: `${main.leftW}%` }}>
+        <Panel style={{ height: `${main.reposH}%` }}>
+          <PanelHeader
+            title="Repositories"
+            count={repos.length}
+            actions={
+              <>
+                <PanelAction
+                  title="Add Repository"
+                  onClick={() => showToast('Add a repository', 'info')}
+                >
+                  <Icons.Stage size={11} />
+                </PanelAction>
+                <PanelAction title="Refresh" onClick={() => showToast('Refreshing…', 'info')}>
+                  <Icons.Sync size={11} />
+                </PanelAction>
+              </>
+            }
+          />
+          <RepoList />
+        </Panel>
+
+        <Resizer
+          axis="h"
+          containerRef={leftRef}
+          min={10}
+          max={90}
+          onResize={(percent) => setMain({ reposH: percent })}
+        />
+
+        <Panel style={{ flex: 1 }}>
+          <PanelHeader
+            title="Branches"
+            actions={
+              <>
+                <PanelAction
+                  title="New Branch"
+                  onClick={() => showToast('Create new branch', 'info')}
+                >
+                  <Icons.Stage size={11} />
+                </PanelAction>
+                <PanelAction
+                  title="Fetch"
+                  onClick={() => showToast('Fetching from remote...', 'info')}
+                >
+                  <Icons.Pull size={11} />
+                </PanelAction>
+              </>
+            }
+          />
+          <BranchList />
+        </Panel>
+      </div>
+
+      <Resizer
+        axis="v"
+        containerRef={containerRef}
+        min={12}
+        max={55}
+        onResize={(percent) => setMain({ leftW: percent })}
+      />
+
+      <div className={styles.column} ref={rightRef} style={{ flex: 1 }}>
+        <Panel style={{ height: `${main.rightFilesH}%` }}>
+          <PanelHeader
+            title="Files"
+            actions={
+              <>
+                <PanelAction
+                  title="Stage All"
+                  onClick={() => showToast('All files staged', 'success')}
+                >
+                  <Icons.Stage size={11} />
+                </PanelAction>
+                <PanelAction title="Collapse All">
+                  <Icons.CollapseAll size={11} />
+                </PanelAction>
+              </>
+            }
+          />
+          <FileList />
+        </Panel>
+
+        <Resizer
+          axis="h"
+          containerRef={rightRef}
+          min={8}
+          max={85}
+          onResize={(percent) => setMain({ rightFilesH: percent })}
+        />
+
+        <Panel style={{ height: `${main.rightChangesH}%` }}>
+          <PanelHeader
+            title="Changes"
+            {...(selectedFile !== undefined && { count: selectedFile.path })}
+            actions={
+              <Button size="sm" onClick={() => showToast('Diff copied to clipboard', 'success')}>
+                Copy Diff
+              </Button>
+            }
+          />
+          <DiffPane />
+        </Panel>
+
+        {/* Reads the combined boundary and writes back the difference (L753). */}
+        <Resizer
+          axis="h"
+          containerRef={rightRef}
+          min={10}
+          max={92}
+          onResize={(percent) => setMain({ rightChangesH: percent - main.rightFilesH })}
+        />
+
+        <Panel style={{ flex: 1 }}>
+          <PanelHeader
+            title="Journal"
+            actions={
+              <>
+                <PanelAction title="Search">
+                  <Icons.Search size={11} />
+                </PanelAction>
+                <PanelAction title="Filter">
+                  <Icons.Filter size={11} />
+                </PanelAction>
+              </>
+            }
+          />
+          <JournalView />
+        </Panel>
+      </div>
+    </div>
+  );
+}

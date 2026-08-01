@@ -1,0 +1,59 @@
+/* Ported from ui-example L115–137. Dimensions and transitions are exact. */
+
+.vertical,
+.horizontal {
+  background: var(--border);
+  position: relative;
+  z-index: 10;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.vertical {
+  width: 5px;
+  min-width: 5px;
+  cursor: col-resize;
+}
+
+.horizontal {
+  height: 5px;
+  min-height: 5px;
+  cursor: row-resize;
+}
+
+.vertical:hover,
+.horizontal:hover,
+.active {
+  background: var(--accent);
+}
+
+/* The grip: invisible until hover or drag, then a short bar in the middle. */
+.vertical::after,
+.horizontal::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.vertical::after {
+  width: 3px;
+  height: 24px;
+}
+
+.horizontal::after {
+  width: 24px;
+  height: 3px;
+}
+
+.vertical:hover::after,
+.horizontal:hover::after,
+.active::after {
+  opacity: 0.5;
+  background: var(--bg-darkest);
+}

@@ -1,0 +1,61 @@
+/* Ported from ui-example L148–156 (tags) and L164–171 (status squares). */
+
+.tag {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.tagGreen {
+  background: var(--green-dim);
+  color: var(--green);
+}
+.tagRed {
+  background: var(--red-dim);
+  color: var(--red);
+}
+.tagBlue {
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+.tagPurple {
+  background: var(--purple-dim);
+  color: var(--purple);
+}
+.tagAccent {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.status {
+  font-size: 10px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.statusAdded {
+  background: var(--green-dim);
+  color: var(--green);
+}
+.statusModified {
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+.statusDeleted {
+  background: var(--red-dim);
+  color: var(--red);
+}
+.statusUntracked {
+  background: var(--accent-dim);
+  color: var(--accent);
+}

@@ -1,0 +1,74 @@
+/* Ported from ui-example L90–113. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 120px;
+  min-height: 60px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  height: 34px;
+  min-height: 34px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.count {
+  font-size: 10px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+  /* Not in the mockup: the Changes header puts a full file path in this pill
+     (L750), which on a narrow pane would otherwise push the actions out. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+
+.actions {
+  display: flex;
+  gap: 4px;
+}
+
+.action {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  transition: all 0.15s;
+}
+
+.action:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-darkest);
+}

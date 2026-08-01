@@ -1,0 +1,9 @@
+/* The +N / -N counters beside a branch (ui-example L569–570). */
+
+.ahead {
+  color: var(--green);
+}
+
+.behind {
+  color: var(--red);
+}

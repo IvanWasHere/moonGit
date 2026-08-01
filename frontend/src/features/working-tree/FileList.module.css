@@ -1,0 +1,36 @@
+/* Ported from ui-example L158–173. */
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.file:hover {
+  background: var(--bg-hover);
+}
+
+.selected {
+  background: var(--bg-selected);
+}
+
+.path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.filename {
+  color: var(--text-primary);
+}
+
+.dir {
+  color: var(--text-muted);
+}

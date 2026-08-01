@@ -8,11 +8,28 @@ import type { RepoChangeEvent } from './types';
  * and nowhere else — callers get a real type.
  */
 
-/** Subscribe to a raw event. Returns an unsubscribe function. */
+/**
+ * Subscribe to a raw event. Returns an unsubscribe function.
+ *
+ * The unsubscribe is guarded because it is called from React cleanup, and
+ * Wails routes it back through the IPC bridge: in browser dev mode after a hot
+ * reload that bridge can already be gone, and the resulting throw propagates
+ * out of an unmount effect and takes down the whole route. Observed doing
+ * exactly that when navigating away from the dev harness. Failing to detach a
+ * listener during teardown is not worth a crash.
+ */
 export function onEvent<T>(event: string, handler: (payload: T) => void): () => void {
-  return EventsOn(event, (...data: unknown[]) => {
+  const off = EventsOn(event, (...data: unknown[]) => {
     handler(data[0] as T);
   });
+
+  return () => {
+    try {
+      off();
+    } catch (cause) {
+      console.warn(`failed to unsubscribe from "${event}"`, cause);
+    }
+  };
 }
 
 /**

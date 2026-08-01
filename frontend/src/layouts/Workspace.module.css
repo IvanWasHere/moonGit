@@ -1,0 +1,9 @@
+/* Ported from ui-example L51 (`#app`). */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}

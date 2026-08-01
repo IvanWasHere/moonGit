@@ -1,0 +1,61 @@
+/* Ported from ui-example L223–235. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--bg-darkest);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.primary:hover {
+  background: #f0b44a;
+  border-color: #f0b44a;
+  color: var(--bg-darkest);
+}
+
+.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.danger:hover {
+  background: var(--red-dim);
+}
+
+.sm {
+  padding: 3px 8px;
+  font-size: 11px;
+}

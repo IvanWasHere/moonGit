@@ -275,6 +275,25 @@ Ported against the Dexie **seed data reshaped as TS fixtures**, so the port is v
 
 **Exit criteria**: both views indistinguishable from the mockup, all resizers behaving identically, no Mithril/Dexie anywhere.
 
+### ✅ Phase 4 ported — both views, against fixtures
+
+12 components (`Panel`, `Resizer`, `ListItem`, `Badges`, `EmptyState`, `Button`, `MenuBar`, `ToastContainer`), 7 feature panels under `features/`, `layouts/MainView` + `ReviewView` + `Workspace`, `stores/workspaceStore` + `notificationStore`, `utils/format` (9 tests). 258 tests total. Rendered side by side against `ui-example/index.html` served locally.
+
+**Three differences the comparison caught**, all now fixed:
+
+1. **Commit was not gold.** The mockup gives that one button `menu-btn` *and* `btn-primary` (L464) — the only filled control in the bar. Easy to miss reading the markup, obvious side by side.
+2. **`+3 -1` instead of `+3-1`.** A `gap: 4px` on `.meta` that the mockup does not have. Fixed by removing it and giving remote-branch rows two separate `.meta` elements, which is how the mockup spaces `lastCommit` from the counters (L678–682).
+3. **Section headers under-indented by 24px.** The mockup renders an empty `i.icon` in the "Staged Changes (3)" divider (L595, L601) so the label lines up with the filenames beneath it.
+
+**Two notes:**
+
+- **Font Awesome does not load from the CDN here**, so the mockup renders with no icons at all. That is §1.3's rationale demonstrated rather than argued: the port's vendored lucide icons render offline, the mockup's do not.
+- **The 900px breakpoint could not be checked visually** — the browser automation viewport is pinned at 1373px and ignores window resizes. Verified structurally instead: the `max-width: 900px` rules exist in the served stylesheet and target the exact hashed classes on the live menubar (`span { display: none }`, `padding: 0 8px`, `height: 44px`). Worth a manual look at 900×600 before Phase 5.
+
+**One fix outside the port**: `onEvent`'s unsubscribe (`services/wails/events.ts`) now catches. Wails routes `EventsOff` back through the IPC bridge, which in browser dev mode can be gone after a hot reload — the throw escaped a React unmount effect and took down the entire route. Navigating away from `#/dev/bridge` crashed the app before this.
+
+**Not done**: graph lane assignment and the Web Workers (deferred from §5), and the layout percentages do not persist yet — that is Phase 3's `layout_state` table.
+
 ---
 
 ## 8. Phase 5 — Wire real git *(~2.5 days)*

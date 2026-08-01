@@ -1,0 +1,134 @@
+/* Ported from ui-example L53–86, plus the 900px rule at L237–241. */
+
+.menubar {
+  display: flex;
+  align-items: stretch;
+  height: 60px;
+  min-height: 60px;
+  background: var(--bg-dark);
+  border-bottom: 1px solid var(--border);
+  padding: 0 4px;
+  gap: 0;
+  user-select: none;
+  z-index: 100;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
+}
+
+.section {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 6px;
+}
+
+.left {
+  flex: 1;
+  justify-content: flex-start;
+}
+
+.center {
+  flex: 1.2;
+  justify-content: center;
+}
+
+.right {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.separator {
+  width: 1px;
+  background: var(--border);
+  margin: 12px 8px;
+  align-self: stretch;
+}
+
+.button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  position: relative;
+  line-height: 1;
+}
+
+.button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.button:active {
+  background: var(--bg-active);
+  transform: scale(0.95);
+}
+
+.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* The 16px underline marking the current view. */
+.active::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+.danger:hover {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.danger:active {
+  background: rgba(248, 81, 73, 0.2);
+  color: var(--red);
+}
+
+/* Narrow windows drop the labels and shrink the bar to 44px (L237–241). */
+@media (max-width: 900px) {
+  .button span {
+    display: none;
+  }
+
+  .button {
+    padding: 0 8px;
+  }
+
+  .menubar {
+    height: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Commit carries `btn-primary` in the mockup (L464) — the one filled button
+   in the bar. Values from L231–232. */
+.primary {
+  background: var(--accent);
+  color: var(--bg-darkest);
+  border: 1px solid var(--accent);
+  font-weight: 600;
+}
+
+.primary:hover {
+  background: #f0b44a;
+  border-color: #f0b44a;
+  color: var(--bg-darkest);
+}

@@ -1,8 +1,11 @@
-/**
- * Phase 0 placeholder for the mockup's Review View (ui-example L766) —
- * Repositories / Files / Commit Messages over Origin Branch / Changes.
- * Ported in Phase 4 (PLAN.md §7).
- */
+import { ReviewView } from '@/layouts/ReviewView';
+import { Workspace } from '@/layouts/Workspace';
+
+/** Review View — Repositories / Files / Commit Messages over Origin Branch / Changes. */
 export function ReviewPage() {
-  return <div>Review View — Phase 4</div>;
+  return (
+    <Workspace view="review">
+      <ReviewView />
+    </Workspace>
+  );
 }
