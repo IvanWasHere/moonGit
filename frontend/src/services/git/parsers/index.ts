@@ -4,3 +4,6 @@
  * codebase to test exhaustively (PLAN.md §5).
  */
 export * from './status';
+export * from './refs';
+export * from './log';
+export * from './diff';
