@@ -1,5 +1,6 @@
 import { createHashRouter, Navigate } from 'react-router-dom';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { DevBridgePage } from '@/pages/DevBridgePage';
 import { MainPage } from '@/pages/MainPage';
 import { ReviewPage } from '@/pages/ReviewPage';
 
@@ -14,5 +15,7 @@ export const router = createHashRouter([
   { path: '/', element: <DashboardPage /> },
   { path: '/repo/:repoId/main', element: <MainPage /> },
   { path: '/repo/:repoId/review', element: <ReviewPage /> },
+  // Development harness for the native bridge — not linked from the product UI.
+  { path: '/dev/bridge', element: <DevBridgePage /> },
   { path: '*', element: <Navigate to="/" replace /> },
 ]);

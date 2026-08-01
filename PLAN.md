@@ -43,7 +43,7 @@ Staying on stable v2.13.0 rather than the v3 alpha the PRD names. v2 delivers ev
 
 A cache keyed on an immutable object can't go stale, which is what makes the commit/FTS index (§10) safe while the "stale UI" bug class stays structurally impossible.
 
-Why SQLite over a JSON config file, given how little is stored: (1) **crash safety** — layout percentages are written on every resizer drag, and rewriting a whole JSON blob at that frequency risks truncation on force-quit; (2) **search is a PRD feature** — commit/message/author search wants an FTS5 index, not a `git log --grep` per keystroke. *Verify FTS5 is compiled into `modernc.org/sqlite` at Phase 7; fallback is a plain index on message/author.*
+Why SQLite over a JSON config file, given how little is stored: (1) **crash safety** — layout percentages are written on every resizer drag, and rewriting a whole JSON blob at that frequency risks truncation on force-quit; (2) **search is a PRD feature** — commit/message/author search wants an FTS5 index, not a `git log --grep` per keystroke. ✅ **Verified in Phase 1:** `modernc.org/sqlite` ships SQLite 3.53.3 **with FTS5 compiled in**, and the DB opens in WAL mode. The LIKE fallback is not needed; commit search gets a real full-text index in Phase 7. `store.Info()` exposes `hasFts5` at runtime so the frontend can still degrade gracefully if a future build drops it.
 
 ### 1.3 Icons: **lucide-react** ✅ · fonts vendored locally
 `ui-example/index.html` pulls Font Awesome and Google Fonts from CDNs; a packaged Wails app serves from an embedded FS and may be offline. `JetBrains Mono` + `Space Grotesk` get vendored as local `woff2`. Font Awesome is replaced by `lucide-react` — tree-shakable SVG components, no 400 KB webfont for ~30 glyphs. The port maintains an explicit `fa-* → lucide` name map so every substitution is auditable, with sizes/weights matched to the mockup.
@@ -152,6 +152,25 @@ func (s *GitService) Cancel(runID string) error
 Go deps to add: `fsnotify/fsnotify`, `modernc.org/sqlite`, `zalando/go-keyring`, later `creack/pty`.
 
 **Exit criteria**: a TS scratch page can run `git status` in a chosen repo, stream `git log`, cancel mid-stream, and receive a `repo:changed` event on `touch`.
+
+### ✅ Phase 1 verified
+
+Harness at `#/dev/bridge` (`DevBridgePage.tsx`), driven against the live Go backend through `wails dev`'s browser server on :34115. Not linked from product UI.
+
+| Criterion | Result |
+|---|---|
+| Run git | `status --porcelain=v2` on test-repo1 → exit 0 in 41 ms, correct porcelain output |
+| Non-zero exit is data | `rev-parse does-not-exist` → **resolved** with `exit=128`, did not throw |
+| Stream | 215 chunks / **6,970,463 bytes in 424 ms**, contiguous seq, reassembly matches buffered `Run` byte-for-byte |
+| Cancel mid-stream | 18.1 MB in, then `canceled=true`, `exit=-1` — process group killed |
+| Watcher | `touch` → exactly **1** debounced event, `reasons: ["worktree"]`, 19 dirs watched, not degraded |
+| SQLite | 3.53.3, **FTS5 available**, WAL mode, DB open |
+
+**Two findings worth carrying forward:**
+
+1. **Killing git does not kill git's children.** A timeout fired correctly but `cmd.Wait()` still blocked for the full 30 s, because the child process inherited the stdout pipe and `Wait` waits on the pipe, not the process. In production that is `ssh` during a push, or a credential helper, turning every timeout into an indefinite hang. Fixed with `Setpgid` + a process-group kill (`internal/gitexec/proc_unix.go`) and `cmd.WaitDelay` as a second layer. This also cut the Go suite from 41 s to 10 s. **Windows has no equivalent yet** — it needs a Job Object, deferred to the cross-platform milestone.
+
+2. **`go test ./...` matches a vendored Go package inside `frontend/node_modules`.** The Makefile pins the package list to `. ./internal/...` instead; use `make test-go`, not bare `./...`, in any CI config.
 
 ---
 

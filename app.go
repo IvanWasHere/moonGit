@@ -2,26 +2,34 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"runtime"
 )
 
-// App struct
+// App holds application-level concerns that do not belong to a specific
+// service: startup wiring, environment reporting, and shutdown.
 type App struct {
 	ctx context.Context
 }
 
-// NewApp creates a new App application struct
-func NewApp() *App {
-	return &App{}
-}
+func NewApp() *App { return &App{} }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-// Greet returns a greeting for the given name
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
+// Environment is what the frontend reads once at boot to decide what it can do.
+type Environment struct {
+	Platform string `json:"platform"`
+	Arch     string `json:"arch"`
+	Version  string `json:"version"`
 }
+
+func (a *App) Environment() Environment {
+	return Environment{
+		Platform: runtime.GOOS,
+		Arch:     runtime.GOARCH,
+		Version:  appVersion,
+	}
+}
+
+const appVersion = "0.1.0"
