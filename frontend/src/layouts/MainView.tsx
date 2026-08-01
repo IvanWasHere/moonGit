@@ -7,8 +7,9 @@ import { BranchList } from '@/features/branches/BranchList';
 import { DiffPane } from '@/features/diff/DiffPane';
 import { JournalView } from '@/features/history/JournalView';
 import { RepoList } from '@/features/repositories/RepoList';
+import { CommitBox } from '@/features/working-tree/CommitBox';
 import { FileList } from '@/features/working-tree/FileList';
-import { files, repos } from '@/fixtures/workspace';
+
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import styles from './Layout.module.css';
@@ -29,8 +30,8 @@ export function MainView() {
 
   const main = useWorkspaceStore((state) => state.main);
   const setMain = useWorkspaceStore((state) => state.setMain);
-  const selectedFileId = useWorkspaceStore((state) => state.selectedFileId);
-  const selectedFile = files.find((file) => file.id === selectedFileId);
+  const selectedFile = useWorkspaceStore((state) => state.selectedFile);
+  const commitOpen = useWorkspaceStore((state) => state.commitOpen);
 
   return (
     <div className={styles.content} ref={containerRef}>
@@ -38,7 +39,6 @@ export function MainView() {
         <Panel style={{ height: `${main.reposH}%` }}>
           <PanelHeader
             title="Repositories"
-            count={repos.length}
             actions={
               <>
                 <PanelAction
@@ -115,6 +115,7 @@ export function MainView() {
             }
           />
           <FileList />
+          {commitOpen && <CommitBox />}
         </Panel>
 
         <Resizer
@@ -128,7 +129,7 @@ export function MainView() {
         <Panel style={{ height: `${main.rightChangesH}%` }}>
           <PanelHeader
             title="Changes"
-            {...(selectedFile !== undefined && { count: selectedFile.path })}
+            {...(selectedFile !== null && { count: selectedFile.path })}
             actions={
               <Button size="sm" onClick={() => showToast('Diff copied to clipboard', 'success')}>
                 Copy Diff

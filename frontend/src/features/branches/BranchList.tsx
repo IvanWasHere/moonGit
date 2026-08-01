@@ -3,41 +3,81 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { ListItem } from '@/components/ListItem';
 import { PanelBody } from '@/components/Panel';
-import { branchesForRepo } from '@/fixtures/workspace';
+import { useRefs } from '@/queries/git';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { branchType } from './branchType';
 import styles from './BranchList.module.css';
 
-/** Branch list for the Main view (ui-example L545–575). */
+/**
+ * Local branches from `for-each-ref` (ui-example L545–575).
+ *
+ * The mockup's `type` tag came from a seeded column. Real branches have no
+ * type, so it is derived from the name — `feature/x` is a feature branch by
+ * the convention git-flow established, and that is exactly what the tag was
+ * conveying in the mockup.
+ */
 export function BranchList() {
-  const selectedRepoId = useWorkspaceStore((state) => state.selectedRepoId);
-  const selectedBranchId = useWorkspaceStore((state) => state.selectedBranchId);
+  const repoPath = useWorkspaceStore((state) => state.repoPath);
+  const selectedBranch = useWorkspaceStore((state) => state.selectedBranch);
   const selectBranch = useWorkspaceStore((state) => state.selectBranch);
+  const { data: refs, isPending, error } = useRefs(repoPath);
 
-  if (selectedRepoId === null) {
+  if (repoPath === null) {
     return (
       <PanelBody>
         <EmptyState icon={Icons.Branch} message="Select a repository to view branches" />
       </PanelBody>
     );
   }
+  if (error !== null) {
+    return (
+      <PanelBody>
+        <EmptyState icon={Icons.Abort} message={error.message} />
+      </PanelBody>
+    );
+  }
+  if (isPending) {
+    return (
+      <PanelBody>
+        <EmptyState icon={Icons.Sync} message="Reading branches…" />
+      </PanelBody>
+    );
+  }
+  if (refs.branches.length === 0) {
+    return (
+      <PanelBody>
+        <EmptyState icon={Icons.Branch} message="No branches yet" />
+      </PanelBody>
+    );
+  }
+
+  // The checked-out branch is the selection until the user picks another, so
+  // the panel below is never empty on open.
+  const active = selectedBranch ?? refs.head?.shortName ?? null;
 
   return (
     <PanelBody>
-      {branchesForRepo(selectedRepoId).map((branch) => (
+      {refs.branches.map((branch) => (
         <ListItem
-          key={branch.id}
-          selected={selectedBranchId === branch.id}
-          onClick={() => selectBranch(branch.id)}
+          key={branch.name}
+          selected={active === branch.shortName}
+          onClick={() => selectBranch(branch.shortName)}
           icon={
-            <Icons.Branch
-              size={12}
-              color={branch.isActive ? 'var(--green)' : 'var(--text-muted)'}
-            />
+            <Icons.Branch size={12} color={branch.isHead ? 'var(--green)' : 'var(--text-muted)'} />
           }
-          name={branch.name}
-          tag={<BranchTag type={branch.type} />}
-          {...(branch.ahead > 0 || branch.behind > 0
-            ? { meta: <AheadBehind ahead={branch.ahead} behind={branch.behind} /> }
+          name={branch.shortName}
+          tag={<BranchTag type={branchType(branch.shortName)} />}
+          {...(branch.upstream !== null &&
+          (branch.upstream.ahead > 0 || branch.upstream.behind > 0 || branch.upstream.gone)
+            ? {
+                meta: (
+                  <AheadBehind
+                    ahead={branch.upstream.ahead}
+                    behind={branch.upstream.behind}
+                    gone={branch.upstream.gone}
+                  />
+                ),
+              }
             : {})}
         />
       ))}
@@ -48,10 +88,16 @@ export function BranchList() {
 export function AheadBehind({
   ahead,
   behind,
+  gone,
 }: {
   readonly ahead: number;
   readonly behind: number;
+  readonly gone?: boolean;
 }) {
+  // A deleted upstream reports 0/0, which would otherwise render as "in sync"
+  // — the opposite of what it means.
+  if (gone === true) return <span className={styles.gone}>gone</span>;
+
   return (
     <>
       {ahead > 0 && <span className={styles.ahead}>+{ahead}</span>}

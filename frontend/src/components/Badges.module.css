@@ -59,3 +59,16 @@
   background: var(--accent-dim);
   color: var(--accent);
 }
+
+/* Beyond the mockup's four — see Badges.tsx. Purple for the rename family
+   (a move, not a content change), red-on-orange for a conflict so it cannot
+   be mistaken for an ordinary deletion. */
+.statusRenamed {
+  background: var(--purple-dim);
+  color: var(--purple);
+}
+
+.statusConflicted {
+  background: var(--red-dim);
+  color: var(--orange);
+}

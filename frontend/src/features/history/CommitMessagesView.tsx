@@ -1,7 +1,7 @@
 import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { PanelBody } from '@/components/Panel';
-import { commitsForRepo } from '@/fixtures/workspace';
+import { useLog } from '@/queries/git';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { timeAgo } from '@/utils/format';
 import styles from './History.module.css';
@@ -9,33 +9,44 @@ import styles from './History.module.css';
 /**
  * Commit Messages pane in the Review view (ui-example L688–711).
  *
- * The same journal entry shape as `JournalView`, but rows are not selectable
- * and each carries an author-and-file-count footer instead of an inline author.
+ * The mockup showed a per-commit file count from its seed data. Getting that
+ * for real means a diff per commit — one process each — so it is replaced by
+ * the commit body, which the log already returns and which is more useful when
+ * reviewing messages.
  */
 export function CommitMessagesView() {
-  const selectedRepoId = useWorkspaceStore((state) => state.selectedRepoId);
+  const repoPath = useWorkspaceStore((state) => state.repoPath);
+  const { data: commits, isPending, error } = useLog(repoPath, { maxCount: 100 });
 
-  if (selectedRepoId === null) {
+  if (repoPath === null || error !== null) {
     return (
       <PanelBody>
-        <EmptyState icon={Icons.CommitMessages} message="No commits" />
+        <EmptyState icon={Icons.CommitMessages} message={error?.message ?? 'No commits'} />
+      </PanelBody>
+    );
+  }
+  if (isPending) {
+    return (
+      <PanelBody>
+        <EmptyState icon={Icons.Sync} message="Reading history…" />
       </PanelBody>
     );
   }
 
   return (
     <PanelBody>
-      {commitsForRepo(selectedRepoId).map((commit) => (
-        <div key={commit.id} className={styles.entry}>
+      {commits.map((commit) => (
+        <div key={commit.oid} className={styles.entry}>
           <div className={styles.head}>
-            <div className={styles.hash}>{commit.hash}</div>
-            <div className={styles.time}>{timeAgo(commit.date)}</div>
+            <div className={styles.hash}>{commit.shortOid}</div>
+            <div className={styles.time}>{timeAgo(commit.author.date * 1000)}</div>
           </div>
-          <div className={styles.message}>{commit.message}</div>
+          <div className={styles.message}>{commit.subject}</div>
+          {commit.body !== '' && <div className={styles.body}>{commit.body}</div>}
           <div className={styles.footer}>
             <Icons.Author size={11} />
-            <span>{commit.author}</span>
-            <span className={styles.fileCount}>{commit.fileCount} files</span>
+            <span>{commit.author.name}</span>
+            {commit.isMerge && <span className={styles.fileCount}>merge</span>}
           </div>
         </div>
       ))}

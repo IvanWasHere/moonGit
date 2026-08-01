@@ -1,12 +1,16 @@
 import { create } from 'zustand';
 
 /**
- * Selection and layout state for the workspace — the mockup's `state` object
- * (ui-example L346–365) minus the parts git now owns.
+ * Selection and layout state for the workspace.
  *
- * Only the stores the port actually forces the shape of live here. The rest of
- * the PRD's store list waits until there is a component whose needs decide it
- * (PLAN.md §6); inventing them now would be guessing.
+ * Selection is by **identity, not index**. A file is its path, a branch is its
+ * ref name, a commit is its object id — because every one of those survives a
+ * refetch and a row number does not. When the watcher fires and the status
+ * list comes back with one fewer entry, "the third row" is a different file;
+ * "src/app.ts" is the same file or is gone, and both are answerable.
+ *
+ * The repository keeps its database id (the route carries it) alongside the
+ * path every git command needs.
  *
  * Layout percentages keep the mockup's defaults exactly, because the panes
  * were sized against real content and any drift is visible immediately.
@@ -48,49 +52,80 @@ const REVIEW_DEFAULTS: ReviewLayout = {
   bottomRightW: 50,
 };
 
+/** Which list a selected file came from — the two have separate diffs. */
+export type FileSide = 'staged' | 'worktree';
+
+export interface FileSelection {
+  readonly path: string;
+  readonly side: FileSide;
+}
+
 interface WorkspaceState {
-  readonly selectedRepoId: number | null;
-  readonly selectedBranchId: number | null;
-  readonly selectedFileId: number | null;
-  readonly selectedCommitId: number | null;
+  readonly repoId: number | null;
+  readonly repoPath: string | null;
+  readonly selectedBranch: string | null;
+  readonly selectedFile: FileSelection | null;
+  readonly selectedCommit: string | null;
   readonly commitMessage: string;
+  /** The commit composer is opened on demand, not always on screen. */
+  readonly commitOpen: boolean;
   readonly main: MainLayout;
   readonly review: ReviewLayout;
 
-  selectRepo: (id: number, activeBranchId: number | null) => void;
-  selectBranch: (id: number) => void;
-  selectFile: (id: number | null) => void;
-  selectCommit: (id: number) => void;
+  openRepo: (repoId: number, repoPath: string) => void;
+  selectBranch: (name: string) => void;
+  selectFile: (selection: FileSelection | null) => void;
+  selectCommit: (oid: string | null) => void;
   setCommitMessage: (message: string) => void;
+  openCommit: () => void;
+  closeCommit: () => void;
+  toggleCommit: () => void;
   setMain: (patch: Partial<MainLayout>) => void;
   setReview: (patch: Partial<ReviewLayout>) => void;
   resetLayout: () => void;
 }
 
-export const useWorkspaceStore = create<WorkspaceState>((set) => ({
-  selectedRepoId: null,
-  selectedBranchId: null,
-  selectedFileId: null,
-  selectedCommitId: null,
+export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
+  repoId: null,
+  repoPath: null,
+  selectedBranch: null,
+  selectedFile: null,
+  selectedCommit: null,
   commitMessage: '',
+  commitOpen: false,
   main: MAIN_DEFAULTS,
   review: REVIEW_DEFAULTS,
 
-  // Selecting a repository clears everything scoped to the previous one, or
-  // the Changes pane keeps rendering a diff from a repo the user has left
-  // (the mockup does the same at L530).
-  selectRepo: (id, activeBranchId) =>
+  /**
+   * Point the workspace at a repository.
+   *
+   * Re-opening the same one is a no-op rather than a reset: the watcher fires
+   * on every keystroke in an editor, and clearing the user's file selection
+   * because a route re-rendered would make the diff pane flicker empty.
+   */
+  openRepo: (repoId, repoPath) => {
+    if (get().repoId === repoId && get().repoPath === repoPath) return;
     set({
-      selectedRepoId: id,
-      selectedBranchId: activeBranchId,
-      selectedFileId: null,
-      selectedCommitId: null,
-    }),
+      repoId,
+      repoPath,
+      // Everything else is scoped to the previous repository.
+      selectedBranch: null,
+      selectedFile: null,
+      selectedCommit: null,
+      commitMessage: '',
+      commitOpen: false,
+    });
+  },
 
-  selectBranch: (id) => set({ selectedBranchId: id, selectedFileId: null }),
-  selectFile: (id) => set({ selectedFileId: id }),
-  selectCommit: (id) => set({ selectedCommitId: id }),
+  selectBranch: (name) => set({ selectedBranch: name, selectedFile: null }),
+  selectFile: (selection) => set({ selectedFile: selection }),
+  selectCommit: (oid) => set({ selectedCommit: oid }),
   setCommitMessage: (commitMessage) => set({ commitMessage }),
+  openCommit: () => set({ commitOpen: true }),
+  // The message survives closing: a half-written commit message is work, and
+  // losing it because the panel was collapsed would be its own bug.
+  closeCommit: () => set({ commitOpen: false }),
+  toggleCommit: () => set((state) => ({ commitOpen: !state.commitOpen })),
 
   setMain: (patch) => set((state) => ({ main: { ...state.main, ...patch } })),
   setReview: (patch) => set((state) => ({ review: { ...state.review, ...patch } })),

@@ -8,7 +8,6 @@ import { DiffPane } from '@/features/diff/DiffPane';
 import { CommitMessagesView } from '@/features/history/CommitMessagesView';
 import { RepoList } from '@/features/repositories/RepoList';
 import { FileList } from '@/features/working-tree/FileList';
-import { repos } from '@/fixtures/workspace';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import styles from './Layout.module.css';
@@ -34,7 +33,7 @@ export function ReviewView() {
     <div className={`${styles.content} ${styles.vertical}`} ref={containerRef}>
       <div className={styles.row} ref={topRef} style={{ height: `${review.topH}%` }}>
         <Panel style={{ width: `${review.topReposW}%` }}>
-          <PanelHeader title="Repositories" count={repos.length} />
+          <PanelHeader title="Repositories" />
           <RepoList />
         </Panel>
 

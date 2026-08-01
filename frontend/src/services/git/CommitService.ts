@@ -44,6 +44,30 @@ function logArgs(options: LogOptions): string[] {
   return args;
 }
 
+export interface CommitOptions extends ReadOptions {
+  /** Replace the previous commit instead of adding one. */
+  readonly amend?: boolean;
+  readonly signoff?: boolean;
+  readonly allowEmpty?: boolean;
+  /** `Name <email>` — overrides the author, not the committer. */
+  readonly author?: string;
+  /** Commit only these paths, bypassing the index. */
+  readonly paths?: readonly string[];
+}
+
+export interface CommitOutcome {
+  /** False when there was nothing staged — not an error. */
+  readonly created: boolean;
+  readonly summary: string;
+}
+
+function firstLine(text: string): string {
+  for (const line of text.split('\n')) {
+    if (line.trim() !== '') return line.trim();
+  }
+  return '';
+}
+
 export class CommitService {
   constructor(private readonly runner: GitRunner) {}
 
@@ -110,6 +134,55 @@ export class CommitService {
     }
 
     return ok(commits);
+  }
+
+  /**
+   * Create a commit.
+   *
+   * The message goes in on **stdin** (`-F -`), not as an argument. A commit
+   * message can be thousands of characters with newlines, quotes and
+   * backticks in it; passing it as argv means fighting shell-free exec limits
+   * and getting the encoding right for no benefit.
+   *
+   * Hooks are left enabled. A pre-commit hook refusing the commit is a real
+   * answer the user needs to see, and `GIT_TERMINAL_PROMPT=0` from the Go
+   * layer stops an interactive one from hanging the app.
+   */
+  async create(
+    message: string,
+    options: CommitOptions = {},
+  ): Promise<Result<CommitOutcome, GitError>> {
+    const args = ['commit', '--file', '-'];
+    if (options.amend === true) args.push('--amend');
+    if (options.signoff === true) args.push('--signoff');
+    if (options.allowEmpty === true) args.push('--allow-empty');
+    if (options.author !== undefined) args.push('--author', options.author);
+    if (options.paths !== undefined && options.paths.length > 0) {
+      args.push('--', ...options.paths);
+    }
+
+    const result = await this.runner.exec(args, {
+      stdin: message,
+      // Exit 1 with "nothing to commit" is an answer, not a failure.
+      okExitCodes: [0, 1],
+      ...(options.signal !== undefined && { signal: options.signal }),
+    });
+    if (!result.ok) return result;
+
+    const { stdout, stderr, exitCode } = result.value;
+    if (exitCode !== 0) {
+      if (/nothing to commit|no changes added to commit/i.test(stdout + stderr)) {
+        return ok({ created: false, summary: 'Nothing to commit' });
+      }
+      return err(
+        parseFailure(new Error(firstLine(stderr) || firstLine(stdout)), {
+          args,
+          repoPath: this.runner.repoPath,
+        }),
+      );
+    }
+
+    return ok({ created: true, summary: firstLine(stdout) });
   }
 
   /** A single commit, or null when the id does not resolve. */

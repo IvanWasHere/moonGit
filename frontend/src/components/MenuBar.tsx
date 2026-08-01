@@ -1,219 +1,283 @@
 import { useNavigate, useParams } from 'react-router-dom';
+import { useRemotes, useStatus } from '@/queries/git';
+import { useDiscard, useFetch, usePull, usePush, useStage, useUnstage } from '@/queries/mutations';
+import { pushTarget } from '@/queries/pushTarget';
+import { showMessage } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { fileName } from '@/utils/format';
 import { Icons, type LucideIcon } from './icons';
 import styles from './MenuBar.module.css';
 
 /**
- * The 60px icon menubar (ui-example L454–504).
+ * The 60px icon menubar (ui-example L454–504), now driving real git.
  *
- * Driven by a config array rather than sixty lines of inline handlers, so the
- * three sections and their separators are data. The mockup's handlers all
- * called `showToast` directly; here each `run` is a place a service call will
- * go in Phase 5 (PLAN.md §7) — the toasts are placeholders, and deliberately
- * keep the mockup's wording so the two can be compared.
+ * The mockup's handlers all called `showToast`; these call services and report
+ * what actually happened. Two behaviours are deliberate:
+ *
+ * - **Destructive actions confirm first.** Discard has no reflog to recover
+ *   from, so it goes through a native dialog naming the file. The confirm
+ *   lives here rather than in the service, because a service that opens
+ *   dialogs cannot be tested or scripted.
+ * - **Push always reports.** It is the only action that changes something
+ *   other people can see, so its result — including "Everything up-to-date" —
+ *   is never silent.
+ *
+ * Buttons whose features land in Phase 6 say so rather than pretending to work.
  */
 
-type MenuEntry =
-  | { readonly kind: 'separator' }
-  | {
-      readonly kind: 'button';
-      readonly label: string;
-      readonly icon: LucideIcon;
-      readonly tone?: 'danger' | 'primary';
-      readonly run: (context: MenuContext) => void;
-    };
-
-interface MenuContext {
-  readonly selectedFileName: string | null;
-  readonly commitMessage: string;
-  readonly clearCommitMessage: () => void;
+interface MenuAction {
+  readonly kind: 'button';
+  readonly label: string;
+  readonly icon: LucideIcon;
+  readonly tone?: 'danger' | 'primary';
+  readonly run: () => void;
+  readonly busy?: boolean;
 }
 
-const LEFT: readonly MenuEntry[] = [
-  {
-    kind: 'button',
-    label: 'Pull',
-    icon: Icons.Pull,
-    run: () => showToast('Pulling latest changes...', 'info'),
-  },
-  {
-    kind: 'button',
-    label: 'Sync',
-    icon: Icons.Sync,
-    run: () => showToast('Syncing with remote...', 'info'),
-  },
-  {
-    kind: 'button',
-    label: 'Push',
-    icon: Icons.Push,
-    run: () => showToast('Pushed 3 commits to origin', 'success'),
-  },
-  { kind: 'separator' },
-  {
-    kind: 'button',
-    label: 'Git-flow',
-    icon: Icons.GitFlow,
-    run: () => showToast('Git-flow: select an action', 'info'),
-  },
-  {
-    kind: 'button',
-    label: 'Merge',
-    icon: Icons.Merge,
-    run: () => showToast('Merge branch into current', 'info'),
-  },
-  {
-    kind: 'button',
-    label: 'Commit',
-    icon: Icons.Commit,
-    // The mockup gives this one button `btn-primary` as well as `menu-btn`
-    // (L464), making Commit the only filled control in the bar.
-    tone: 'primary',
-    run: ({ commitMessage, clearCommitMessage }) => {
-      if (commitMessage.trim() === '') {
-        showToast('Please enter a commit message', 'error');
-        return;
-      }
-      showToast(`Commit created: ${commitMessage.slice(0, 40)}...`, 'success');
-      clearCommitMessage();
-    },
-  },
-];
-
-const CENTER: readonly MenuEntry[] = [
-  {
-    kind: 'button',
-    label: 'Stage',
-    icon: Icons.Stage,
-    run: ({ selectedFileName }) =>
-      selectedFileName === null
-        ? showToast('Select a file to stage', 'error')
-        : showToast(`Staged: ${selectedFileName}`, 'success'),
-  },
-  {
-    kind: 'button',
-    label: 'Index Editor',
-    icon: Icons.IndexEditor,
-    run: () => showToast('Index editor opened', 'info'),
-  },
-  {
-    kind: 'button',
-    label: 'Unstage',
-    icon: Icons.Unstage,
-    run: ({ selectedFileName }) =>
-      selectedFileName === null
-        ? showToast('Select a file to unstage', 'error')
-        : showToast(`Unstaged: ${selectedFileName}`, 'info'),
-  },
-  { kind: 'separator' },
-  {
-    kind: 'button',
-    label: 'Remove',
-    icon: Icons.Remove,
-    run: () => showToast('File removed from index', 'info'),
-  },
-  {
-    kind: 'button',
-    label: 'Abort',
-    icon: Icons.Abort,
-    run: () => showToast('Operation aborted', 'error'),
-  },
-  {
-    kind: 'button',
-    label: 'Discard',
-    icon: Icons.Discard,
-    tone: 'danger',
-    run: ({ selectedFileName }) =>
-      selectedFileName === null
-        ? showToast('Select changes to discard', 'error')
-        : showToast(`Discarded changes: ${selectedFileName}`, 'error'),
-  },
-  {
-    kind: 'button',
-    label: 'Delete',
-    icon: Icons.Delete,
-    tone: 'danger',
-    run: ({ selectedFileName }) =>
-      selectedFileName === null
-        ? showToast('Select a file to delete', 'error')
-        : showToast('File deleted', 'error'),
-  },
-];
-
-const RIGHT_TOOLS: readonly MenuEntry[] = [
-  {
-    kind: 'button',
-    label: 'Log',
-    icon: Icons.Log,
-    run: () => showToast('Log view loaded', 'info'),
-  },
-  {
-    kind: 'button',
-    label: 'Blame',
-    icon: Icons.Blame,
-    run: () => showToast('Blame annotations loaded', 'info'),
-  },
-  {
-    kind: 'button',
-    label: 'Investigate',
-    icon: Icons.Investigate,
-    run: () => showToast('Investigate mode active', 'info'),
-  },
-];
+type MenuEntry = { readonly kind: 'separator' } | MenuAction;
 
 export function MenuBar({
   view,
-  selectedFileName,
+  selectedFileName: _selectedFileName,
 }: {
   readonly view: 'main' | 'review';
   readonly selectedFileName: string | null;
 }) {
   const navigate = useNavigate();
   const { repoId } = useParams();
-  const commitMessage = useWorkspaceStore((state) => state.commitMessage);
-  const setCommitMessage = useWorkspaceStore((state) => state.setCommitMessage);
 
-  const context: MenuContext = {
-    selectedFileName,
-    commitMessage,
-    clearCommitMessage: () => setCommitMessage(''),
+  const repoPath = useWorkspaceStore((state) => state.repoPath);
+  const selectedFile = useWorkspaceStore((state) => state.selectedFile);
+  const toggleCommit = useWorkspaceStore((state) => state.toggleCommit);
+  const { data: status } = useStatus(repoPath);
+  const { data: remotes } = useRemotes(repoPath);
+
+  const stage = useStage(repoPath);
+  const unstage = useUnstage(repoPath);
+  const discard = useDiscard(repoPath);
+  const fetch = useFetch(repoPath);
+  const pull = usePull(repoPath);
+  const push = usePush(repoPath);
+
+  const entry = status?.entries.find((candidate) => candidate.path === selectedFile?.path);
+  const needsSelection = () => showToast('Select a file first', 'error');
+  const reportError = (error: Error) => showToast(error.message, 'error');
+
+  const doDiscard = () => {
+    if (selectedFile === null || entry === undefined) {
+      needsSelection();
+      return;
+    }
+
+    void (async () => {
+      const choice = await showMessage({
+        kind: 'warning',
+        title: 'Discard changes?',
+        message: `Discard all changes to ${fileName(selectedFile.path)}? This cannot be undone.`,
+        buttons: ['Cancel', 'Discard'],
+        defaultButton: 'Cancel',
+        cancelButton: 'Cancel',
+      });
+      if (choice !== 'Discard') return;
+
+      discard.mutate(
+        { targets: [{ path: entry.path, untracked: entry.kind === 'untracked' }] },
+        {
+          onSuccess: () => showToast(`Discarded changes: ${fileName(entry.path)}`, 'info'),
+          onError: reportError,
+        },
+      );
+    })();
   };
 
+  const left: readonly MenuEntry[] = [
+    {
+      kind: 'button',
+      label: 'Pull',
+      icon: Icons.Pull,
+      busy: pull.isPending,
+      run: () =>
+        pull.mutate(undefined, {
+          onSuccess: () => showToast('Pulled from remote', 'success'),
+          // `--ff-only` refuses a diverged branch, and saying so is exactly
+          // the information the user needs to choose merge or rebase.
+          onError: reportError,
+        }),
+    },
+    {
+      kind: 'button',
+      label: 'Sync',
+      icon: Icons.Sync,
+      busy: fetch.isPending,
+      run: () =>
+        fetch.mutate(
+          { prune: true },
+          { onSuccess: () => showToast('Fetched and pruned', 'success'), onError: reportError },
+        ),
+    },
+    {
+      kind: 'button',
+      label: 'Push',
+      icon: Icons.Push,
+      busy: push.isPending,
+      run: () => {
+        const resolved = pushTarget(status, remotes ?? []);
+        if (!resolved.ok) {
+          showToast(
+            resolved.problem === 'detached'
+              ? 'HEAD is detached — check out a branch to push'
+              : 'No remote configured for this repository',
+            'error',
+          );
+          return;
+        }
+        push.mutate(resolved.target, {
+          onSuccess: (outcome) =>
+            showToast(
+              outcome.upToDate
+                ? 'Everything up-to-date'
+                : `Pushed ${resolved.target.branch} → ${resolved.target.remote}`,
+              outcome.upToDate ? 'info' : 'success',
+            ),
+          onError: reportError,
+        });
+      },
+    },
+    { kind: 'separator' },
+    {
+      kind: 'button',
+      label: 'Commit',
+      icon: Icons.Commit,
+      // The mockup's one filled button (L464). It now opens the composer
+      // rather than committing directly — the message has to be written first.
+      tone: 'primary',
+      run: toggleCommit,
+    },
+    {
+      kind: 'button',
+      label: 'Git-flow',
+      icon: Icons.GitFlow,
+      run: () => showToast('Git-flow arrives in Phase 6', 'info'),
+    },
+    {
+      kind: 'button',
+      label: 'Merge',
+      icon: Icons.Merge,
+      run: () => showToast('Merge UI arrives in Phase 6', 'info'),
+    },
+  ];
+
+  const center: readonly MenuEntry[] = [
+    {
+      kind: 'button',
+      label: 'Stage',
+      icon: Icons.Stage,
+      run: () =>
+        selectedFile === null
+          ? needsSelection()
+          : stage.mutate({ paths: [selectedFile.path] }, { onError: reportError }),
+    },
+    {
+      kind: 'button',
+      label: 'Index Editor',
+      icon: Icons.IndexEditor,
+      run: () => showToast('Index editor arrives in Phase 6', 'info'),
+    },
+    {
+      kind: 'button',
+      label: 'Unstage',
+      icon: Icons.Unstage,
+      run: () =>
+        selectedFile === null
+          ? needsSelection()
+          : unstage.mutate({ paths: [selectedFile.path] }, { onError: reportError }),
+    },
+    { kind: 'separator' },
+    {
+      kind: 'button',
+      label: 'Remove',
+      icon: Icons.Remove,
+      run: () => showToast('Remove arrives in Phase 6', 'info'),
+    },
+    {
+      kind: 'button',
+      label: 'Abort',
+      icon: Icons.Abort,
+      run: () => showToast('Abort arrives with the conflict UI in Phase 6', 'info'),
+    },
+    {
+      kind: 'button',
+      label: 'Discard',
+      icon: Icons.Discard,
+      tone: 'danger',
+      busy: discard.isPending,
+      run: doDiscard,
+    },
+    {
+      kind: 'button',
+      label: 'Delete',
+      icon: Icons.Delete,
+      tone: 'danger',
+      run: () => showToast('Delete arrives in Phase 6', 'info'),
+    },
+  ];
+
+  const rightTools: readonly MenuEntry[] = [
+    {
+      kind: 'button',
+      label: 'Log',
+      icon: Icons.Log,
+      run: () => showToast('Log view arrives in Phase 6', 'info'),
+    },
+    {
+      kind: 'button',
+      label: 'Blame',
+      icon: Icons.Blame,
+      run: () => showToast('Blame view arrives in Phase 6', 'info'),
+    },
+    {
+      kind: 'button',
+      label: 'Investigate',
+      icon: Icons.Investigate,
+      run: () => showToast('Investigate arrives in Phase 6', 'info'),
+    },
+  ];
+
   const render = (entries: readonly MenuEntry[]) =>
-    entries.map((entry, index) =>
-      entry.kind === 'separator' ? (
+    entries.map((item, index) =>
+      item.kind === 'separator' ? (
         <div key={`sep-${index}`} className={styles.separator} />
       ) : (
         <MenuButton
-          key={entry.label}
-          label={entry.label}
-          icon={entry.icon}
-          {...(entry.tone !== undefined && { tone: entry.tone })}
-          onClick={() => entry.run(context)}
+          key={item.label}
+          label={item.label}
+          icon={item.icon}
+          {...(item.tone !== undefined && { tone: item.tone })}
+          {...(item.busy !== undefined && { busy: item.busy })}
+          onClick={item.run}
         />
       ),
     );
 
   return (
     <div className={styles.menubar}>
-      <div className={`${styles.section} ${styles.left}`}>{render(LEFT)}</div>
-      <div className={`${styles.section} ${styles.center}`}>{render(CENTER)}</div>
+      <div className={`${styles.section} ${styles.left}`}>{render(left)}</div>
+      <div className={`${styles.section} ${styles.center}`}>{render(center)}</div>
       <div className={`${styles.section} ${styles.right}`}>
-        {render(RIGHT_TOOLS)}
+        {render(rightTools)}
         <div className={styles.separator} />
-        {/* The mockup toggled `state.view`; the port routes, so the two views
-            are addressable and reloadable (PLAN.md §1.4). */}
         <MenuButton
           label="Main View"
           icon={Icons.MainView}
           active={view === 'main'}
-          onClick={() => void navigate(`/repo/${repoId ?? '1'}/main`)}
+          onClick={() => void navigate(`/repo/${repoId ?? ''}/main`)}
         />
         <MenuButton
           label="Review View"
           icon={Icons.ReviewView}
           active={view === 'review'}
-          onClick={() => void navigate(`/repo/${repoId ?? '1'}/review`)}
+          onClick={() => void navigate(`/repo/${repoId ?? ''}/review`)}
         />
       </div>
     </div>
@@ -226,21 +290,26 @@ function MenuButton({
   onClick,
   active,
   tone,
+  busy,
 }: {
   readonly label: string;
   readonly icon: LucideIcon;
   readonly onClick: () => void;
   readonly active?: boolean;
   readonly tone?: 'danger' | 'primary';
+  readonly busy?: boolean;
 }) {
   return (
     <button
       type="button"
-      className={`${styles.button} ${active === true ? styles.active : ''} ${tone === 'danger' ? styles.danger : ''} ${tone === 'primary' ? styles.primary : ''}`}
+      className={`${styles.button} ${active === true ? styles.active : ''} ${
+        tone === 'danger' ? styles.danger : ''
+      } ${tone === 'primary' ? styles.primary : ''}`}
       onClick={onClick}
+      disabled={busy === true}
       title={label}
     >
-      <Icon size={15} />
+      <Icon size={15} {...(busy === true && { className: styles.spin })} />
       <span>{label}</span>
     </button>
   );

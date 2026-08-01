@@ -1,7 +1,13 @@
 import { useEffect, type ReactNode } from 'react';
+import { Navigate, useParams } from 'react-router-dom';
+import { EmptyState } from '@/components/EmptyState';
+import { Icons } from '@/components/icons';
 import { MenuBar } from '@/components/MenuBar';
+import { TopMenu } from '@/components/menu/TopMenu';
+import { useMenuActions } from '@/components/menu/useMenuActions';
 import { ToastContainer } from '@/components/ToastContainer';
-import { activeBranchFor, files, repos } from '@/fixtures/workspace';
+import { useRepository } from '@/queries/repositories';
+import { useRepoWatcher } from '@/queries/useRepoWatcher';
 import { useLayoutPersistence } from '@/stores/layoutPersistence';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { fileName } from '@/utils/format';
@@ -11,8 +17,9 @@ import styles from './Workspace.module.css';
  * The application shell: menubar, the active view, and the toast stack
  * (ui-example L790–803).
  *
- * The mockup switched views with a state flag; the port routes instead, so
- * `Workspace` is the shared frame both routes render inside.
+ * The repository comes from the route, so a reload lands back where the user
+ * was and the two views share one open repository. Resolving the id to a path
+ * is what connects the SQLite inventory to every git command underneath.
  */
 export function Workspace({
   view,
@@ -21,30 +28,44 @@ export function Workspace({
   readonly view: 'main' | 'review';
   readonly children: ReactNode;
 }) {
-  const selectedRepoId = useWorkspaceStore((state) => state.selectedRepoId);
-  const selectedFileId = useWorkspaceStore((state) => state.selectedFileId);
-  const selectRepo = useWorkspaceStore((state) => state.selectRepo);
+  const { repoId: repoIdParam } = useParams();
+  const repoId = repoIdParam === undefined ? null : Number.parseInt(repoIdParam, 10);
+  const valid = repoId !== null && !Number.isNaN(repoId);
+
+  const { data: repository, isPending } = useRepository(valid ? repoId : null);
+  const repoPath = useWorkspaceStore((state) => state.repoPath);
+  const selectedFile = useWorkspaceStore((state) => state.selectedFile);
+  const openRepo = useWorkspaceStore((state) => state.openRepo);
+
+  useEffect(() => {
+    if (repository === null || repository === undefined) return;
+    openRepo(repository.id, repository.path);
+  }, [repository, openRepo]);
 
   useLayoutPersistence();
+  useRepoWatcher(repoPath);
+  const onMenuAction = useMenuActions();
 
-  // The mockup selected the first repository as soon as the list loaded
-  // (L515–521); without it every panel opens on an empty state.
-  useEffect(() => {
-    if (selectedRepoId !== null) return;
-    const first = repos[0];
-    if (first === undefined) return;
-    selectRepo(first.id, activeBranchFor(first.id)?.id ?? null);
-  }, [selectedRepoId, selectRepo]);
-
-  const selectedFile = files.find((file) => file.id === selectedFileId);
+  // A route pointing at a repository that has been forgotten — or a hand-typed
+  // id — goes back to the dashboard rather than rendering empty panels.
+  if (!valid || (!isPending && (repository === null || repository === undefined))) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className={styles.app}>
+      <TopMenu onAction={onMenuAction} />
       <MenuBar
         view={view}
-        selectedFileName={selectedFile === undefined ? null : fileName(selectedFile.path)}
+        selectedFileName={selectedFile === null ? null : fileName(selectedFile.path)}
       />
-      {children}
+      {isPending ? (
+        <div className={styles.loading}>
+          <EmptyState icon={Icons.Sync} message="Opening repository…" />
+        </div>
+      ) : (
+        children
+      )}
       <ToastContainer />
     </div>
   );

@@ -132,3 +132,19 @@
   border-color: #f0b44a;
   color: var(--bg-darkest);
 }
+
+/* A command in flight — the network ones can take seconds. */
+.spin {
+  animation: menubar-spin 1s linear infinite;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@keyframes menubar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,22 +1,36 @@
+/*
+ * Repository Dashboard (PLAN.md §1.4). No mockup to port, so this is built
+ * from the same tokens and spacing rhythm as the workspace — 34px headers,
+ * 12px gutters, the same hover and selected surfaces — rather than a second
+ * visual language bolted onto the first.
+ */
+
 .page {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
   height: 100%;
   background: var(--bg-darkest);
   padding-top: var(--titlebar-inset);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-dark);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   font-family: var(--font-ui);
-  font-size: 28px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.4px;
   color: var(--text-primary);
 }
 
@@ -24,35 +38,132 @@
   color: var(--accent);
 }
 
-.tagline {
-  font-family: var(--font-mono);
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.searchWrap {
+  position: relative;
+  flex: 1;
+  max-width: 420px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.search {
+  width: 100%;
+  padding: 6px 10px 6px 28px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
   font-size: 12px;
+}
+
+.search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.search::placeholder {
   color: var(--text-muted);
 }
 
-.swatches {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
+.count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
-.swatch {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
+.list {
+  flex: 1;
+  overflow-y: auto;
 }
 
-.status {
+.row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
   align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.path {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Truncates from the right. `direction: rtl` would truncate from the left,
+     which is arguably more useful for a path — but it also relocates the
+     leading "/" to the end, rendering /Users/x as Users/x/. The row already
+     shows the repository name above, so the tail is the expendable part. */
 }
 
-.ok {
-  color: var(--green);
+.opened {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 90px;
+  text-align: right;
+}
+
+.rowActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+/* Destructive actions stay hidden until the row is under the cursor, so
+   "Remove" is never a stray click away while scanning the list. */
+.row:hover .rowActions,
+.row:focus-within .rowActions {
+  opacity: 1;
 }

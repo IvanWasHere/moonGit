@@ -331,6 +331,84 @@ Swap fixtures for live data, one panel at a time, each independently verifiable:
 
 *(Originally written as "commit to its own repository" — but moonGit isn't under version control, see §13a.)*
 
+### ✅ Phase 5 — mutations
+
+Added `WorkingTreeService` (stage / unstage / discard / remove), `CommitService.create`, branch checkout / create / rename / delete, `RemoteService.push` / `pull`, `queries/mutations.ts`, and a `CommitBox`. The menubar drives real git; buttons whose features land in Phase 6 say so rather than pretending.
+
+Verified end to end on a scratch repository with a local origin — **stage → commit → push all work**:
+
+| | Result |
+|---|---|
+| Stage | File moved to Staged Changes; `git status` on disk agreed |
+| Unstage | Moved back, **selection followed it**, diff still rendered |
+| Commit | `eff1532` in the journal, `main` decoration moved, `+1` ahead appeared |
+| Message | Subject *and* body preserved through stdin |
+| Push | `origin/main` decoration moved onto the new commit, `+1` cleared |
+| Discard | `restore --worktree` for tracked, `clean -f -d` for untracked, both confirmed |
+
+**Three git behaviours that shaped the code, each measured first:**
+
+1. **`git restore --staged` fails on an unborn branch** — "could not resolve HEAD", and the file stays staged. The first files added to a fresh repository are exactly the ones a user unstages, so that path falls back to `rm --cached`.
+2. **`git restore` will not delete an untracked file** — it errors with "pathspec did not match". Discarding an untracked file means `git clean`, so the caller has to say which paths are tracked; the status entry already knows.
+3. **Commit messages go in on stdin** (`commit --file -`), not argv. A message is multi-line with arbitrary quoting, and stdin sidesteps all of it.
+
+**A bug the live run caught:** after staging the selected file, the diff pane showed "No diff data available" — the selection still pointed at the *worktree* side, which was now empty, while the row stayed highlighted. It read as a broken diff rather than a stale selection. Stage and unstage now move the selection with the file.
+
+**Deliberate choices:**
+
+- **Optimism is bounded to staging.** Stage/unstage move a row between two lists — cheap to predict, cheap to roll back. Commit, checkout and push are not optimistic: their failure modes have no obvious rollback. Every mutation invalidates afterwards, so even a successful optimistic update ends up showing git's own answer.
+- **`push` uses `--force-with-lease`, never `--force`** — with-lease refuses if the remote moved since the last fetch, so it cannot silently discard someone else's commits.
+- **`pull` defaults to `--ff-only`.** A pull that quietly creates a merge commit is how unwanted merge bubbles get into history; refusing lets the user choose merge or rebase deliberately.
+- **`switch`, not `checkout`,** for branches: `git checkout foo` is ambiguous when a *file* named `foo` exists and silently discards that file's changes instead.
+- **Discard confirms via a native dialog** naming the file. The confirm lives in the UI, not the service — a service that opens dialogs cannot be tested or scripted.
+
+**Not verified interactively**: the discard confirmation dialog, because it is a native window the browser automation cannot answer. The two commands behind it were verified directly.
+
+### ✅ Exit criterion met — commit pushed to GitHub from moonGit
+
+`4c5e77b05a6b4a03f3ed362bffab1a1c483d1d37` on `github.com/IvanWasHere/test-repo1`, branch `moongit-verify`. Staged, written and pushed entirely through the app: porcelain v2 status → the diff renderer → the commit path over stdin → push over HTTPS with the osxkeychain credential helper. Local and remote object ids match.
+
+**Pushed to a branch, not `main`.** `main` had 5 *pre-existing seeded* commits unpushed; pushing it would have sent those to GitHub as a side effect of a verification run. The branch was cut from `origin/main` so it carried exactly one new commit. `main` is untouched at `d564383`, still ahead 5.
+
+**The push failed the first time, and the bug was ours.** moonGit ran `git push --set-upstream` with no remote or branch, relying on git's defaults. Git refused:
+
+    fatal: The upstream branch of your current branch does not match
+    the name of your current branch.
+
+A branch created with `switch -c work origin/main` inherits `origin/main` as its upstream, so a bare push is ambiguous — and what it does otherwise depends on `push.default` too. **`queries/pushTarget.ts` now resolves the remote and branch explicitly**, sets an upstream when there is none *or* when the inherited one names a different branch, and refuses with a clear message on a detached HEAD or with no remote. 10 tests, including the exact case that failed.
+
+Worth noting the failure was nearly invisible: the toast had already expired by the time the screenshot was taken, and the only evidence was the branch missing from `ls-remote`. A verification that had checked "did the button click work" rather than "is the commit on the remote" would have reported success.
+
+**Repository restored.** The seeded working tree was parked with `git stash push -u` and popped afterwards — but `stash pop` does not restore the *index*, so two staged files came back unstaged and a staged rename decomposed into an add plus an unstaged delete. Re-staged to match the original byte for byte. Use `git stash push --index`, or better, do not park a user's working tree at all.
+
+### Phase 5 read path (completed earlier)
+
+**Done (1, 2, 5, 6, and the read halves of 7 and 8).** Fixtures are deleted; every panel renders live git. `queries/repositories.ts` (SQLite inventory + open-via-dialog), a real Repository Dashboard, and `workspaceStore` reshaped so selection is by **identity, not index** — a file is its path, a branch its ref name, a commit its oid. A row number does not survive a refetch; a path does.
+
+**Not done (3, 4, and the write halves of 7 and 8)**: stage / unstage / discard, commit, checkout / create / delete branch, fetch / push / pull. **The exit criterion — stage, commit and push to `test-repo1` — is therefore not met yet.**
+
+Verified live against the seeded test repos:
+
+| | Result |
+|---|---|
+| Dashboard | Both repositories listed from SQLite, search, favourites, open by click |
+| Working tree | `test-repo2`: 2 staged / 2 unstaged with correct A/M/? badges |
+| Diff | Real patch with hunk header `@@ -1,4 +1,6 @@`, correct per-side line numbers |
+| History | Real commits with author, relative time, and ref decorations (`main`, `v1.0.0`) |
+| Branches | 7 branches with real ahead counts, HEAD marked green |
+| Renames | `Widget.tsx  src/legacy/OldWidget.tsx → src/components/` with an `R` badge |
+| **Watcher** | Creating an untracked file made "Changes (2)" become "(3)" **with no interaction** |
+| Repo switch | Every panel swapped cleanly between test-repo1 and test-repo2 (§1.6) |
+
+**Notes:**
+
+- **Selection survives a refetch.** The watcher fires constantly while an editor is open; the selected file stayed selected across the invalidation, which is the identity-keyed store doing its job.
+- **The diff is fetched per selected path**, not fetched whole and filtered. On a branch switch with hundreds of changed files that is the difference between instant and not.
+- **The status badge grew four states** beyond the mockup's four (renamed, copied, typechange, conflicted). Showing a conflict as "modified" would invite staging a file with conflict markers still in it.
+- **`branchType` is derived from the name**, since real branches have no `type` field — `feature/x` by the git-flow convention the mockup's tags were describing. Anything unrecognised is just "branch"; tagging every prefix would fill the panel with labels like `ivan` that mean nothing.
+- **A dashboard CSS bug caught on screen**: `direction: rtl` to truncate long paths from the left also relocates the leading `/`, rendering `/Users/x` as `Users/x/`. Reverted to ordinary right-truncation.
+- **`RepoList` no longer shows a clean/dirty tag.** The mockup's came from seed data; doing it for real is a `git status` per row per render. It belongs in Phase 6 with a cached badge.
+
 ---
 
 ## 9. Phase 6 — Feature build-out *(~2–3 weeks)*

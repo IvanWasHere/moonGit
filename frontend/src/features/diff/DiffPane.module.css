@@ -59,3 +59,40 @@
 .context .code {
   color: var(--text-muted);
 }
+
+/* Additions to the mockup's diff styles, for states real patches have and
+   seeded data did not. */
+
+/* Binary, conflicted, mode-only: a change that exists but has no lines. */
+.notice {
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Hunk headers were absent from the mockup, which showed one continuous run
+   of lines. Real files have gaps, and without a marker the jump in line
+   numbers reads as a rendering bug. */
+.hunkHeader {
+  display: flex;
+  gap: 12px;
+  padding: 2px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan);
+  background: var(--bg-dark);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.hunkContext {
+  color: var(--text-muted);
+}
+
+/* "\ No newline at end of file" — git's own marker, kept visible. */
+.noNewline .code {
+  color: var(--text-muted);
+  font-style: italic;
+}

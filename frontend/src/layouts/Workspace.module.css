@@ -7,3 +7,10 @@
   width: 100vw;
   overflow: hidden;
 }
+
+.loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

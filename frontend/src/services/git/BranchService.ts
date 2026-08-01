@@ -60,6 +60,59 @@ export class BranchService {
     const name = result.value.stdout.trim();
     return ok(name === '' ? null : name);
   }
+
+  /**
+   * Check out a branch.
+   *
+   * `switch`, not `checkout`. They overlap, but `checkout` also takes paths,
+   * so `git checkout foo` is ambiguous when a *file* named `foo` exists — it
+   * silently discards that file's changes instead of switching branch.
+   * `switch` only ever means branches and errors clearly otherwise.
+   */
+  async checkout(name: string, options: ReadOptions = {}): Promise<Result<void, GitError>> {
+    const result = await this.runner.exec(['switch', '--', name], toExecOptions(options));
+    return result.ok ? ok(undefined) : result;
+  }
+
+  /** Create a branch and switch to it. `startPoint` defaults to HEAD. */
+  async create(
+    name: string,
+    startPoint?: string,
+    options: ReadOptions = {},
+  ): Promise<Result<void, GitError>> {
+    const args = ['switch', '--create', name];
+    if (startPoint !== undefined && startPoint !== '') args.push(startPoint);
+    const result = await this.runner.exec(args, toExecOptions(options));
+    return result.ok ? ok(undefined) : result;
+  }
+
+  async rename(
+    from: string,
+    to: string,
+    options: ReadOptions = {},
+  ): Promise<Result<void, GitError>> {
+    const result = await this.runner.exec(['branch', '--move', from, to], toExecOptions(options));
+    return result.ok ? ok(undefined) : result;
+  }
+
+  /**
+   * Delete a branch.
+   *
+   * Unforced by default, so git refuses to drop unmerged work. `force` maps to
+   * `-D`, which the UI must confirm — commits reachable only from that branch
+   * become unreferenced.
+   */
+  async delete(
+    name: string,
+    force = false,
+    options: ReadOptions = {},
+  ): Promise<Result<void, GitError>> {
+    const result = await this.runner.exec(
+      ['branch', force ? '--delete' : '--delete', ...(force ? ['--force'] : []), name],
+      toExecOptions(options),
+    );
+    return result.ok ? ok(undefined) : result;
+  }
 }
 
 const services = new Map<string, BranchService>();

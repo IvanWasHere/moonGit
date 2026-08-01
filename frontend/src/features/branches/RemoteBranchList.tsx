@@ -3,51 +3,61 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { ListItem } from '@/components/ListItem';
 import { PanelBody } from '@/components/Panel';
-import { branchesForRepo } from '@/fixtures/workspace';
+import { useRefs } from '@/queries/git';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { AheadBehind } from './BranchList';
+import { branchType } from './branchType';
 
 /**
- * Origin Branch pane in the Review view (ui-example L661–686).
+ * Remote-tracking branches, the Review view's Origin Branch pane
+ * (ui-example L661–686).
  *
- * Differs from `BranchList` in three ways the mockup establishes: rows are not
- * selectable, the active branch is marked by a green left border rather than
- * the selection highlight, and a branch level with its upstream reads
- * "synced" instead of showing nothing.
+ * Rows are not selectable and the short object id stands in for the mockup's
+ * `lastCommit` column. `origin/HEAD` is already filtered out by `groupRefs` —
+ * it only duplicates whatever it points at.
  */
 export function RemoteBranchList() {
-  const selectedRepoId = useWorkspaceStore((state) => state.selectedRepoId);
+  const repoPath = useWorkspaceStore((state) => state.repoPath);
+  const { data: refs, isPending, error } = useRefs(repoPath);
 
-  if (selectedRepoId === null) {
+  if (repoPath === null) {
     return (
       <PanelBody>
         <EmptyState icon={Icons.Branch} message="No repository selected" />
       </PanelBody>
     );
   }
+  if (error !== null) {
+    return (
+      <PanelBody>
+        <EmptyState icon={Icons.Abort} message={error.message} />
+      </PanelBody>
+    );
+  }
+  if (isPending) {
+    return (
+      <PanelBody>
+        <EmptyState icon={Icons.Sync} message="Reading remote branches…" />
+      </PanelBody>
+    );
+  }
+  if (refs.remotes.length === 0) {
+    return (
+      <PanelBody>
+        <EmptyState icon={Icons.Branch} message="No remote-tracking branches" />
+      </PanelBody>
+    );
+  }
 
   return (
     <PanelBody>
-      {branchesForRepo(selectedRepoId).map((branch) => (
+      {refs.remotes.map((branch) => (
         <ListItem
-          key={branch.id}
-          accent={branch.isActive ? 'var(--green)' : 'transparent'}
-          icon={
-            <Icons.Branch
-              size={12}
-              color={branch.isActive ? 'var(--green)' : 'var(--text-muted)'}
-            />
-          }
-          name={branch.name}
-          tag={<BranchTag type={branch.type} />}
-          metaBefore={branch.lastCommit}
-          meta={
-            branch.ahead > 0 || branch.behind > 0 ? (
-              <AheadBehind ahead={branch.ahead} behind={branch.behind} />
-            ) : (
-              'synced'
-            )
-          }
+          key={branch.name}
+          icon={<Icons.Branch size={12} color="var(--text-muted)" />}
+          name={branch.shortName}
+          tag={<BranchTag type={branchType(branch.shortName.split('/').slice(1).join('/'))} />}
+          metaBefore={branch.oid.slice(0, 7)}
+          meta={branch.subject}
         />
       ))}
     </PanelBody>

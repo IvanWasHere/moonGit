@@ -89,6 +89,90 @@ export class RemoteService {
     });
     return result.ok ? ok(undefined) : result;
   }
+
+  /**
+   * Push.
+   *
+   * `--set-upstream` is passed when the branch has no upstream yet, which is
+   * the difference between "pushed" and "fatal: The current branch has no
+   * upstream branch" on the first push of a new branch.
+   *
+   * Force is `--force-with-lease`, never `--force`: with-lease refuses if the
+   * remote moved since the last fetch, so it cannot silently discard someone
+   * else's commits.
+   */
+  async push(options: PushOptions = {}): Promise<Result<PushOutcome, GitError>> {
+    const args = ['push'];
+    if (options.setUpstream === true) args.push('--set-upstream');
+    if (options.force === true) args.push('--force-with-lease');
+    if (options.tags === true) args.push('--tags');
+    if (options.remote !== undefined) args.push(options.remote);
+    if (options.branch !== undefined) args.push(options.branch);
+
+    const result = await this.runner.exec(args, {
+      ...toExecOptions(options),
+      timeoutMs: 180_000,
+    });
+    if (!result.ok) return result;
+
+    // git reports push progress on stderr even when it succeeds.
+    const output = `${result.value.stdout}${result.value.stderr}`;
+    return ok({
+      upToDate: /Everything up-to-date/i.test(output),
+      summary: firstNonEmptyLine(output),
+    });
+  }
+
+  /**
+   * Pull. Defaults to `--ff-only`.
+   *
+   * A pull that quietly creates a merge commit is how unwanted merge bubbles
+   * get into history. Refusing and telling the user their branch has diverged
+   * lets them choose merge or rebase deliberately.
+   */
+  async pull(options: PullOptions = {}): Promise<Result<void, GitError>> {
+    const args = ['pull'];
+    if (options.rebase === true) args.push('--rebase');
+    else if (options.allowMerge !== true) args.push('--ff-only');
+    if (options.remote !== undefined) args.push(options.remote);
+    if (options.branch !== undefined) args.push(options.branch);
+
+    const result = await this.runner.exec(args, {
+      ...toExecOptions(options),
+      timeoutMs: 180_000,
+    });
+    return result.ok ? ok(undefined) : result;
+  }
+}
+
+export interface PushOptions extends ReadOptions {
+  readonly remote?: string;
+  readonly branch?: string;
+  /** Needed on the first push of a branch that has no upstream. */
+  readonly setUpstream?: boolean;
+  /** Maps to `--force-with-lease`, never bare `--force`. */
+  readonly force?: boolean;
+  readonly tags?: boolean;
+}
+
+export interface PushOutcome {
+  readonly upToDate: boolean;
+  readonly summary: string;
+}
+
+export interface PullOptions extends ReadOptions {
+  readonly remote?: string;
+  readonly branch?: string;
+  readonly rebase?: boolean;
+  /** Permit a merge commit; without it a diverged branch is refused. */
+  readonly allowMerge?: boolean;
+}
+
+function firstNonEmptyLine(text: string): string {
+  for (const line of text.split('\n')) {
+    if (line.trim() !== '') return line.trim();
+  }
+  return '';
 }
 
 export interface TagCreateOptions extends ReadOptions {

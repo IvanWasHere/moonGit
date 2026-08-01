@@ -19,3 +19,4 @@ export * from './DiffService';
 export * from './StashService';
 export * from './IntegrationService';
 export * from './RemoteService';
+export * from './WorkingTreeService';

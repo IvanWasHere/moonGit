@@ -1,0 +1,95 @@
+/*
+ * Application menu bar.
+ *
+ * The 50px top padding clears the macOS traffic lights: the window is created
+ * with `TitleBarHiddenInset`, so the content starts at y=0 and nothing else
+ * reserves room for them.
+ */
+
+.root {
+  padding-top: var(--topmenu-inset);
+  background: var(--bg-dark);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  user-select: none;
+  position: relative;
+  z-index: 200;
+  /* Hiding the title bar removes the only place to grab the window, so the
+     inset strip becomes the drag handle. Wails reads this attribute. */
+  --wails-draggable: drag;
+}
+
+.bar {
+  display: flex;
+  align-items: stretch;
+  height: 28px;
+  padding: 0 6px;
+  /* Buttons must not inherit the drag region, or clicks become drags. */
+  --wails-draggable: no-drag;
+}
+
+.menu {
+  position: relative;
+}
+
+.title {
+  height: 100%;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+
+.title:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.titleOpen {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  z-index: 300;
+}
+
+.item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: default;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.item:hover {
+  background: var(--bg-selected);
+}
+
+.separator {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 6px;
+}

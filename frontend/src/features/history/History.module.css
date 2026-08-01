@@ -60,3 +60,43 @@
 .fileCount {
   margin-left: 8px;
 }
+
+/* Ref decorations beside a commit — branch and tag labels the mockup's seeded
+   history had no equivalent of. */
+.refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.ref {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+
+.refTag {
+  background: var(--purple-dim);
+  color: var(--purple);
+}
+
+.refHead {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+/* Commit body in the Review view, under the subject. */
+.body {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  max-height: 6em;
+  overflow: hidden;
+}

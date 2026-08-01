@@ -44,11 +44,30 @@ function toRepository(row: Row): RepositoryRecord {
 const SELECT = `SELECT id, path, name, group_id, is_favorite, last_opened_at, added_at
                 FROM repositories`;
 
-/** Most recently opened first; never-opened repositories sort last. */
+/**
+ * Most recently opened first; never-opened repositories sort last.
+ *
+ * This ordering is for the **dashboard**, where recency is the point. The
+ * workspace switcher uses `listRepositoriesByName` instead — see there.
+ */
 export async function listRepositories(): Promise<RepositoryRecord[]> {
   const result = await dbQuery(
     `${SELECT} ORDER BY last_opened_at IS NULL, last_opened_at DESC, name COLLATE NOCASE`,
   );
+  return toRecords<Row>(result).map(toRepository);
+}
+
+/**
+ * Alphabetical, and therefore **stable across selection**.
+ *
+ * The workspace's Repositories panel must not reshuffle when a repository is
+ * clicked: opening one updates `last_opened_at`, so a recency-ordered list
+ * would jump the clicked row to the top and move every other row under the
+ * user's cursor. A list you are navigating must not rearrange itself because
+ * you navigated it.
+ */
+export async function listRepositoriesByName(): Promise<RepositoryRecord[]> {
+  const result = await dbQuery(`${SELECT} ORDER BY name COLLATE NOCASE, path`);
   return toRecords<Row>(result).map(toRepository);
 }
 

@@ -7,3 +7,9 @@
 .behind {
   color: var(--red);
 }
+
+/* A configured upstream that no longer exists. Reports 0/0 like an in-sync
+   branch, so it needs to say so in words. */
+.gone {
+  color: var(--orange);
+}

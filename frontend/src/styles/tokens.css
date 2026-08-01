@@ -54,6 +54,9 @@
    * our own 60px menubar. This reserves room for them on the left.
    */
   --titlebar-inset: 78px;
+  /* Top padding above the application menu, clearing the macOS traffic
+     lights on a `TitleBarHiddenInset` window. */
+  --topmenu-inset: 50px;
   --menubar-height: 60px;
   --panel-header-height: 34px;
 }

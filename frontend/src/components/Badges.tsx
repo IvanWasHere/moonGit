@@ -5,13 +5,31 @@ import styles from './Badges.module.css';
  * (ui-example L432–446, styles at L148–171).
  */
 
-export type FileStatus = 'modified' | 'added' | 'deleted' | 'untracked';
+export type FileStatus =
+  | 'modified'
+  | 'added'
+  | 'deleted'
+  | 'untracked'
+  | 'renamed'
+  | 'copied'
+  | 'typechange'
+  | 'conflicted';
 
+/**
+ * The mockup defined four (L432–438). The last four are additions: real
+ * porcelain output distinguishes them, and showing a conflict as "modified"
+ * would invite the user to stage a file with conflict markers still in it.
+ * Colours reuse the mockup's palette rather than introducing new ones.
+ */
 const STATUS: Record<FileStatus, { readonly cls: string; readonly label: string }> = {
   modified: { cls: 'statusModified', label: 'M' },
   added: { cls: 'statusAdded', label: 'A' },
   deleted: { cls: 'statusDeleted', label: 'D' },
-  untracked: { cls: 'statusUntracked', label: 'U' },
+  untracked: { cls: 'statusUntracked', label: '?' },
+  renamed: { cls: 'statusRenamed', label: 'R' },
+  copied: { cls: 'statusRenamed', label: 'C' },
+  typechange: { cls: 'statusRenamed', label: 'T' },
+  conflicted: { cls: 'statusConflicted', label: '!' },
 };
 
 /** Falls back to `modified` for an unknown status, exactly as the mockup does (L439). */
