@@ -6,25 +6,38 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
-	// Create an instance of the app structure
 	app := NewApp()
 
-	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "myproject",
-		Width:  1024,
-		Height: 768,
+		Title:     "moonGit",
+		Width:     1440,
+		Height:    900,
+		MinWidth:  900,
+		MinHeight: 600,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		// Matches --bg-darkest so there is no white flash before the webview paints.
+		BackgroundColour: &options.RGBA{R: 0x0d, G: 0x11, B: 0x17, A: 1},
 		OnStartup:        app.startup,
+		Mac: &mac.Options{
+			// The design supplies its own 60px menubar, so the native title bar is
+			// hidden and the traffic lights float over it. The frontend reserves
+			// space for them via the --titlebar-inset token.
+			TitleBar:   mac.TitleBarHiddenInset(),
+			Appearance: mac.NSAppearanceNameDarkAqua,
+			About: &mac.AboutInfo{
+				Title:   "moonGit",
+				Message: "A native macOS Git client.\nCopyright © 2026 Ivan Marinkovic",
+			},
+		},
 		Bind: []interface{}{
 			app,
 		},

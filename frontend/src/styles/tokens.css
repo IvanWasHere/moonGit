@@ -1,0 +1,66 @@
+/*
+ * Design tokens — lifted verbatim from ui-example/index.html (:root, L12–41).
+ * The mockup is the visual spec (PLAN.md §7); these values must not drift.
+ *
+ * Component stylesheets reference tokens only, never literal hex. That is what
+ * makes light/dark/custom-accent theming (PLAN.md §11) a variable swap rather
+ * than a rewrite.
+ */
+
+:root {
+  /* --- surfaces --- */
+  --bg-darkest: #0d1117;
+  --bg-dark: #111820;
+  --bg-panel: #151b23;
+  --bg-input: #1a2230;
+  --bg-hover: #1c2a3a;
+  --bg-active: #1f3148;
+  --bg-selected: #1a3550;
+
+  /* --- borders --- */
+  --border: #253040;
+  --border-light: #2d3f54;
+
+  /* --- text --- */
+  --text-primary: #e2e8f0;
+  --text-secondary: #8b9ab5;
+  --text-muted: #556580;
+
+  /* --- accent --- */
+  --accent: #e8a838;
+  --accent-dim: rgba(232, 168, 56, 0.12);
+  --accent-glow: rgba(232, 168, 56, 0.25);
+
+  /* --- semantic --- */
+  --green: #3fb950;
+  --green-dim: rgba(63, 185, 80, 0.12);
+  --red: #f85149;
+  --red-dim: rgba(248, 81, 73, 0.12);
+  --blue: #58a6ff;
+  --blue-dim: rgba(88, 166, 255, 0.12);
+  --purple: #bc8cff;
+  --purple-dim: rgba(188, 140, 255, 0.12);
+  --cyan: #56d4dd;
+  --orange: #f0883e;
+
+  /* --- shape & type --- */
+  --radius: 6px;
+  --font-ui: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /*
+   * --- added for the native shell (not in the mockup) ---
+   * main.go uses mac.TitleBarHiddenInset(), so the traffic lights float over
+   * our own 60px menubar. This reserves room for them on the left.
+   */
+  --titlebar-inset: 78px;
+  --menubar-height: 60px;
+  --panel-header-height: 34px;
+}
+
+/* The mockup collapses menu labels below 900px (ui-example L237–241). */
+@media (max-width: 900px) {
+  :root {
+    --menubar-height: 44px;
+  }
+}

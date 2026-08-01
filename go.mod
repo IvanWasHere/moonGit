@@ -1,4 +1,4 @@
-module myproject
+module moongit
 
 go 1.25.0
 

@@ -103,7 +103,7 @@ moonGit/
 
 ## 3. Phase 0 — Foundations *(~0.5 day)*
 
-1. **Rename the project**: `myproject` → `moongit` in `go.mod`, `main.go` imports, `wails.json` (`name`, `outputfilename`), `build/darwin/Info.plist` (`CFBundleName`, bundle id `com.ayetstudios.moongit`). Window title → `moonGit`, background → `#0d1117` to match the design tokens.
+1. **Rename the project**: `myproject` → `moongit` in `go.mod`, `main.go` imports, `wails.json` (`name`, `outputfilename`), `build/darwin/Info.plist` (`CFBundleName`, bundle id `com.marinkovicivan.moongit`). Window title → `moonGit`, background → `#0d1117` to match the design tokens.
 2. **TypeScript**: add `typescript`, `tsconfig.json` with `strict: true`, `noUncheckedIndexedAccess`, path alias `@/*`. Convert `main.jsx`/`App.jsx` → `.tsx`. Delete the Greet demo UI.
 3. **Tooling**: ESLint (typescript-eslint, react-hooks) + Prettier + Vitest + React Testing Library.
    - **Enforce the PRD's architecture rules with lint, not vibes**: `no-restricted-imports` blocking `**/wailsjs/**` from anywhere except `src/services/wails/**`, and blocking `services/git/**` from `components/**`. This is what actually keeps "components never call Wails" true six months in.
@@ -111,7 +111,8 @@ moonGit/
 5. **Styling**: CSS Modules (§1.5). Wire `styles/tokens.css` from the mockup's `:root` block verbatim; every component stylesheet references tokens only, never literal hex.
 6. **Vendor fonts** (`JetBrains Mono`, `Space Grotesk` as `woff2`), and write the `fa-* → lucide` icon map (§1.3).
 7. Scaffold the directory tree above with index barrels.
-8. **`git init` this project** (§13a) — it isn't under version control yet. Commit the scaffold as the baseline.
+8. **`git init` this project** (§13a) — it isn't under version control yet.
+   ⚠️ **Committing is Ivan's call.** Nothing in this repo gets `git add`-ed or committed automatically at any phase; work is reported and he commits it.
 9. Write `scripts/seed-test-repos.sh` (§13a) so Phase 4 has a repo state that actually renders.
 
 **Exit criteria**: `wails dev` boots a dark empty shell with the correct fonts and tokens; `npm run lint` and `npm run test` both pass on an empty suite; `./scripts/seed-test-repos.sh` puts both test repos into a rich state and `git reset --hard origin/main && git clean -fd` restores them.
