@@ -7,3 +7,5 @@ export * from './status';
 export * from './refs';
 export * from './log';
 export * from './diff';
+export * from './stash';
+export * from './blame';

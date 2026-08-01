@@ -200,9 +200,9 @@ This is where the product actually lives.
 
 **Exit criteria**: full test suite over parser fixtures (including pathological filenames, merge commits, binary diffs, renames, submodule entries) with no UI written yet.
 
-### ✅ Phase 2 partially verified — runner, four parsers, four services
+### ✅ Phase 2 verified — everything except the graph
 
-Built: `GitRunner` (+ `RepoLock`, `errors`, `commands`), parsers for **status, refs, log, diff**, and `RepositoryService` / `BranchService` / `CommitService` / `DiffService`. 193 unit tests. Still to do: stash, blame, graph, and the remaining services.
+Built: `GitRunner` (+ `RepoLock`, `errors`, `commands`), parsers for **status, refs, log, diff, stash, blame**, and `Repository` / `Branch` / `Commit` / `Diff` / `Stash` / `Merge` / `Rebase` / `Remote` / `Tag` / `Blame` services. 249 unit tests. **Still to do: graph lane assignment and the Web Workers** (§5, "Workers") — both are better judged against a rendered UI than a fixture, so they are deferred to Phase 4/7.
 
 **Fixtures are generated, not written.** Every parser fixture was captured by running the real command against purpose-built repositories and escaping the bytes into a TS module. Each fixture re-exports the exact format string or arg list it was captured with, and a test asserts the parser still matches it — a format and parser that disagree don't crash, they shift every field by one.
 
@@ -222,6 +222,19 @@ Verified against the live backend via `#/dev/bridge` → *Phase 2 — services a
 1. **The bridge assumption held.** Four parsers were built on "NUL-delimited UTF-8 survives the trip" before anything tested it. It does — but that was luck of timing, not diligence. Verify the seam before stacking more on it.
 2. **A bad `repoPath` blames git.** Pointing the runner at a non-existent directory surfaces as `SpawnFailed: fork/exec /opt/homebrew/bin/git: no such file or directory` — Go's `exec` reports a missing *working directory* by naming the *binary*. Anyone debugging that message will look in the wrong place. Worth pre-checking the path, or rewriting the message, when the repo picker lands.
 3. **`git show` on a merge prints nothing** — zero bytes, which renders as "this commit changed no files". `DiffService.commit()` passes `--first-parent`; `-m` would emit one raw+patch section per parent, which the parser cannot read.
+
+**Write-side verification** (`DevMutationPanel.tsx`, guarded to paths containing `/scratchpad/` — a dev tool that can rewrite the user's working tree because a field held yesterday's path is not worth the convenience). 7/7: stash push→pop round trip, conflicted merge, conflicted paths read back from `status()`, `merge --abort`, blame, remote and stash listing.
+
+4. **Exit code 1 does not mean "conflict".** Measured on git 2.47, `git merge` fails four different ways:
+
+   | Case | Exit | Message |
+   |---|---|---|
+   | Genuine conflict | **1** | `CONFLICT (content): …` / `Automatic merge failed` |
+   | Unknown ref | **1** | `merge: X - not something we can merge` |
+   | Dirty working tree | 2 | `error: Your local changes … would be overwritten` |
+   | `--ff-only`, diverged | 128 | `hint: Diverging branches can't be fast-forwarded` |
+
+   The first draft of `IntegrationService` classified any exit 1 as `conflicted`, so `git merge nosuchbranch` would have reported a conflict for a merge that never started — opening a conflict-resolution flow over a working tree with nothing conflicted in it. A conflict now requires the exit code **and** git saying so. This is precisely what the live run existed to catch; the unit tests were happy with the wrong rule because they were written from the same wrong assumption.
 
 ---
 
