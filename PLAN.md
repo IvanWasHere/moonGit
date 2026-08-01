@@ -247,6 +247,24 @@ Verified against the live backend via `#/dev/bridge` → *Phase 2 — services a
   **Deliberately absent**: `branches`, `files`, `commits`, `changes`. The mockup had those because it had no git; here they'd be a stale mirror. The SHA-keyed `commit_cache` / `graph_cache` / FTS index arrive in Phase 7, when there's a measured perf reason.
 - Optimistic updates for stage/unstage (the PRD's responsiveness bar), rolled back on a failed `RunResult`.
 
+### ✅ Phase 3 — schema, persistence and the query layer
+
+Built: `services/db/{migrations,repositories,keyValue}`, `queries/{keys,git,useRepoWatcher}`, `stores/layoutPersistence`, and `app/bootstrap` running migrations before first render. 271 tests.
+
+Verified against the live database via `#/dev/bridge` → *Phase 3 — schema & persistence*, **11/11**: migration applied (`user_version=1`), all seven tables present, **no git state mirrored**, `ON CONFLICT` de-duplicating a repository path, favourite/last-opened round trip, JSON preferences round trip, missing key falling back, corrupted JSON falling back rather than throwing, layout persisted from a real resizer drag, probe rows cleaned up.
+
+**Design notes:**
+
+- **Invalidation is driven by the watcher's reason codes, not blanket refetch.** Saving a file invalidates status and the working-tree diff; it does not re-read the ref list or re-walk history. Two mappings are non-obvious and are tested: `refs` also invalidates **status** (ahead/behind lives in `# branch.ab`) and the **stash list** (the stash *is* `refs/stash`). `head` invalidates the repository whole, since a checkout moves everything at once.
+- **Query keys lead with `repoPath`**, so switching repositories cannot show another's data for even a frame, and closing one drops its cache in a single call.
+- **The services' `Result` is converted into Query's error channel** by `GitQueryError`. That is not an escape from the no-throw discipline — Query catches it and hands it back as a typed `error`.
+- **Layout saves are gated on the load completing and debounced 400ms.** Without the gate, the mockup defaults would overwrite the user's saved layout on every launch; without the debounce, a resize drag writes on every mouse move.
+- **Deviation from §6's table list**: `favorites` is an `is_favorite` column on `repositories` rather than its own table. A join table buys nothing until something other than a repository can be favourited; if branches become favouritable, that is the migration that adds it.
+
+**Not done**: optimistic stage/unstage (needs Phase 5's mutations to exist first), and the remaining PRD stores — `App`, `Repository`, `Settings`, `Theme`, `Window` — whose shape is still better decided by the components that will consume them.
+
+**Tooling note for future sessions**: the browser automation's `left_click_drag` does not emit document-level `mousemove`, so it cannot drive the resizers. Driving them needs an explicit `mousedown` → `document.mousemove` → `mouseup` sequence via the JS tool. The resizer itself is correct — `620/1373 = 45.157%`, matching the mockup's maths exactly.
+
 ---
 
 ## 7. Phase 4 — Mithril → React port *(~2.5 days)*

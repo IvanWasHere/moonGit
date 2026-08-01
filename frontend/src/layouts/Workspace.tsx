@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { MenuBar } from '@/components/MenuBar';
 import { ToastContainer } from '@/components/ToastContainer';
 import { activeBranchFor, files, repos } from '@/fixtures/workspace';
+import { useLayoutPersistence } from '@/stores/layoutPersistence';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { fileName } from '@/utils/format';
 import styles from './Workspace.module.css';
@@ -23,6 +24,8 @@ export function Workspace({
   const selectedRepoId = useWorkspaceStore((state) => state.selectedRepoId);
   const selectedFileId = useWorkspaceStore((state) => state.selectedFileId);
   const selectRepo = useWorkspaceStore((state) => state.selectRepo);
+
+  useLayoutPersistence();
 
   // The mockup selected the first repository as soon as the list loaded
   // (L515–521); without it every panel opens on an empty state.
