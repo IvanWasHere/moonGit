@@ -10,3 +10,4 @@ export * from './errors';
 export * from './commands';
 export * from './RepoLock';
 export * from './GitRunner';
+export * from './parsers';
