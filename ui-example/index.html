@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Git Manager — VS Code Extension</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/mithril@2.2.2/mithril.js"></script>
+<script src="https://unpkg.com/dexie@3.2.7/dist/dexie.js"></script>
+<style>
+  :root {
+    --bg-darkest: #0d1117;
+    --bg-dark: #111820;
+    --bg-panel: #151b23;
+    --bg-input: #1a2230;
+    --bg-hover: #1c2a3a;
+    --bg-active: #1f3148;
+    --bg-selected: #1a3550;
+    --border: #253040;
+    --border-light: #2d3f54;
+    --text-primary: #e2e8f0;
+    --text-secondary: #8b9ab5;
+    --text-muted: #556580;
+    --accent: #e8a838;
+    --accent-dim: rgba(232,168,56,0.12);
+    --accent-glow: rgba(232,168,56,0.25);
+    --green: #3fb950;
+    --green-dim: rgba(63,185,80,0.12);
+    --red: #f85149;
+    --red-dim: rgba(248,81,73,0.12);
+    --blue: #58a6ff;
+    --blue-dim: rgba(88,166,255,0.12);
+    --purple: #bc8cff;
+    --purple-dim: rgba(188,140,255,0.12);
+    --cyan: #56d4dd;
+    --orange: #f0883e;
+    --radius: 6px;
+    --font-ui: 'Space Grotesk', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg-darkest); color: var(--text-primary); font-family: var(--font-ui); font-size: 13px; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  #app { display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; }
+
+  .menubar {
+    display: flex; align-items: stretch; height: 60px; min-height: 60px;
+    background: var(--bg-dark); border-bottom: 1px solid var(--border);
+    padding: 0 4px; gap: 0; user-select: none; z-index: 100;
+    background-image: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%);
+  }
+  .menu-section { display: flex; align-items: stretch; gap: 2px; padding: 4px 6px; }
+  .menu-section.left { flex: 1; justify-content: flex-start; }
+  .menu-section.center { flex: 1.2; justify-content: center; }
+  .menu-section.right { flex: 1; justify-content: flex-end; }
+  .menu-sep { width: 1px; background: var(--border); margin: 12px 8px; align-self: stretch; }
+  
+  .menu-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; padding: 6px 10px;
+    border-radius: var(--radius); border: none; background: transparent;
+    color: var(--text-secondary); font-family: var(--font-ui); font-size: 10px;
+    font-weight: 500; cursor: pointer; transition: all 0.15s ease;
+    white-space: nowrap; position: relative; line-height: 1;
+  }
+  .menu-btn i { font-size: 15px; width: auto; text-align: center; line-height: 1; }
+  .menu-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .menu-btn:active { background: var(--bg-active); transform: scale(0.95); }
+  .menu-btn.active { background: var(--accent-dim); color: var(--accent); }
+  .menu-btn.active::after {
+    content: ''; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+    width: 16px; height: 2px; background: var(--accent); border-radius: 1px;
+  }
+  .menu-btn.danger:hover { background: var(--red-dim); color: var(--red); }
+  .menu-btn.danger:active { background: rgba(248,81,73,0.2); color: var(--red); }
+  .menu-btn .badge {
+    font-size: 8px; background: var(--accent); color: var(--bg-darkest);
+    padding: 0 4px; border-radius: 6px; font-weight: 700; position: absolute; top: 4px; right: 4px;
+  }
+
+  .content { flex: 1; display: flex; overflow: hidden; position: relative; }
+
+  .panel {
+    display: flex; flex-direction: column; overflow: hidden; min-width: 120px; min-height: 60px;
+  }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px; height: 34px; min-height: 34px;
+    background: var(--bg-panel); border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--text-muted); user-select: none;
+  }
+  .panel-header .count {
+    font-size: 10px; background: var(--bg-input); color: var(--text-secondary);
+    padding: 1px 7px; border-radius: 8px; font-weight: 500; letter-spacing: 0;
+  }
+  .panel-header .actions { display: flex; gap: 4px; }
+  .panel-header .actions button {
+    background: none; border: none; color: var(--text-muted); cursor: pointer;
+    width: 22px; height: 22px; border-radius: 4px; display: flex; align-items: center;
+    justify-content: center; font-size: 11px; transition: all 0.15s;
+  }
+  .panel-header .actions button:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .panel-body {
+    flex: 1; overflow-y: auto; overflow-x: hidden; background: var(--bg-darkest);
+  }
+
+  .resizer-v {
+    width: 5px; min-width: 5px; cursor: col-resize; background: var(--border);
+    position: relative; z-index: 10; transition: background 0.2s; flex-shrink: 0;
+  }
+  .resizer-v:hover, .resizer-v.active { background: var(--accent); }
+  .resizer-v::after {
+    content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 3px; height: 24px; border-radius: 2px;
+    background: var(--text-muted); opacity: 0; transition: opacity 0.2s;
+  }
+  .resizer-v:hover::after, .resizer-v.active::after { opacity: 0.5; background: var(--bg-darkest); }
+
+  .resizer-h {
+    height: 5px; min-height: 5px; cursor: row-resize; background: var(--border);
+    position: relative; z-index: 10; transition: background 0.2s; flex-shrink: 0;
+  }
+  .resizer-h:hover, .resizer-h.active { background: var(--accent); }
+  .resizer-h::after {
+    content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 24px; height: 3px; border-radius: 2px;
+    background: var(--text-muted); opacity: 0; transition: opacity 0.2s;
+  }
+  .resizer-h:hover::after, .resizer-h.active::after { opacity: 0.5; background: var(--bg-darkest); }
+
+  .list-item {
+    display: flex; align-items: center; gap: 8px; padding: 5px 12px;
+    cursor: pointer; transition: background 0.1s; border-left: 2px solid transparent; font-size: 12.5px;
+  }
+  .list-item:hover { background: var(--bg-hover); }
+  .list-item.selected { background: var(--bg-selected); border-left-color: var(--accent); }
+  .list-item i.icon { width: 16px; text-align: center; font-size: 12px; flex-shrink: 0; }
+  .list-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .list-item .meta { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+  .list-item .tag {
+    font-size: 9px; padding: 1px 6px; border-radius: 3px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0;
+  }
+  .tag-green { background: var(--green-dim); color: var(--green); }
+  .tag-red { background: var(--red-dim); color: var(--red); }
+  .tag-blue { background: var(--blue-dim); color: var(--blue); }
+  .tag-purple { background: var(--purple-dim); color: var(--purple); }
+  .tag-accent { background: var(--accent-dim); color: var(--accent); }
+
+  .file-item {
+    display: flex; align-items: center; gap: 8px; padding: 4px 12px;
+    cursor: pointer; transition: background 0.1s; font-size: 12px; font-family: var(--font-mono);
+  }
+  .file-item:hover { background: var(--bg-hover); }
+  .file-item.selected { background: var(--bg-selected); }
+  .file-item .status {
+    font-size: 10px; width: 16px; height: 16px; display: flex; align-items: center;
+    justify-content: center; border-radius: 3px; font-weight: 700; flex-shrink: 0;
+  }
+  .status-added { background: var(--green-dim); color: var(--green); }
+  .status-modified { background: var(--blue-dim); color: var(--blue); }
+  .status-deleted { background: var(--red-dim); color: var(--red); }
+  .status-untracked { background: var(--accent-dim); color: var(--accent); }
+  .file-item .path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+  .file-item .filename { color: var(--text-primary); }
+
+  .journal-entry {
+    padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s;
+  }
+  .journal-entry:hover { background: var(--bg-hover); }
+  .journal-entry .j-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .journal-entry .j-hash {
+    font-family: var(--font-mono); font-size: 11px; color: var(--accent);
+    background: var(--accent-dim); padding: 1px 6px; border-radius: 3px;
+  }
+  .journal-entry .j-author { font-size: 11px; color: var(--text-muted); }
+  .journal-entry .j-time { font-size: 10px; color: var(--text-muted); margin-left: auto; }
+  .journal-entry .j-msg { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
+
+  .diff-file { border-bottom: 1px solid var(--border); }
+  .diff-file-header {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+    background: var(--bg-panel); font-size: 12px; font-family: var(--font-mono); color: var(--text-secondary);
+  }
+  .diff-line {
+    display: flex; font-family: var(--font-mono); font-size: 12px; line-height: 1.65;
+    padding: 0 12px; border-left: 3px solid transparent;
+  }
+  .diff-line .ln { width: 40px; text-align: right; color: var(--text-muted); padding-right: 12px; flex-shrink: 0; user-select: none; }
+  .diff-line .code { flex: 1; white-space: pre; }
+  .diff-line.add { background: rgba(63,185,80,0.06); border-left-color: var(--green); }
+  .diff-line.add .code { color: var(--green); }
+  .diff-line.remove { background: rgba(248,81,73,0.06); border-left-color: var(--red); }
+  .diff-line.remove .code { color: var(--red); }
+  .diff-line.context .code { color: var(--text-muted); }
+
+  .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .toast {
+    padding: 10px 16px; border-radius: var(--radius); font-size: 12px; font-weight: 500;
+    display: flex; align-items: center; gap: 8px; min-width: 240px;
+    animation: toastIn 0.3s ease; box-shadow: 0 4px 20px rgba(0,0,0,0.4); pointer-events: auto;
+  }
+  .toast-success { background: #1a3a2a; color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+  .toast-error { background: #3a1a1a; color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+  .toast-info { background: #1a2a3a; color: var(--blue); border: 1px solid rgba(88,166,255,0.3); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; color: var(--text-muted); gap: 8px; padding: 20px; text-align: center;
+  }
+  .empty-state i { font-size: 28px; opacity: 0.4; }
+  .empty-state p { font-size: 12px; line-height: 1.5; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px;
+    border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--bg-input); color: var(--text-secondary); font-family: var(--font-ui);
+    font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-light); }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); color: var(--bg-darkest); border-color: var(--accent); font-weight: 600; }
+  .btn-primary:hover { background: #f0b44a; border-color: #f0b44a; color: var(--bg-darkest); }
+  .btn-danger { border-color: var(--red); color: var(--red); }
+  .btn-danger:hover { background: var(--red-dim); }
+  .btn-sm { padding: 3px 8px; font-size: 11px; }
+
+  @media (max-width: 900px) {
+    .menu-btn span { display: none; }
+    .menu-btn { padding: 0 8px; }
+    .menubar { height: 44px; min-height: 44px; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ==========================================
+// DATABASE SETUP (Dexie.js)
+// ==========================================
+const db = new Dexie('GitManagerDB');
+db.version(1).stores({
+  repositories: '++id, name, path, status, lastSync',
+  branches: '++id, repoId, name, type, isActive, lastCommit, ahead, behind',
+  files: '++id, repoId, branchId, path, status, staged, size, modified',
+  commits: '++id, repoId, branchId, hash, message, author, date, fileCount',
+  changes: '++id, fileId, type, lineFrom, lineTo, content'
+});
+
+db.on('populate', async (tx) => {
+  const r1Id = await tx.repositories.add({ name: 'frontend-app', path: '/workspace/frontend-app', status: 'clean', lastSync: Date.now() - 300000 });
+  const r2Id = await tx.repositories.add({ name: 'api-service', path: '/workspace/api-service', status: 'dirty', lastSync: Date.now() - 1200000 });
+  const r3Id = await tx.repositories.add({ name: 'shared-libs', path: '/workspace/shared-libs', status: 'clean', lastSync: Date.now() - 7200000 });
+
+  await tx.branches.bulkAdd([
+    { repoId: r1Id, name: 'main', type: 'main', isActive: true, lastCommit: 'a3f8c21', ahead: 0, behind: 0 },
+    { repoId: r1Id, name: 'feature/auth-flow', type: 'feature', isActive: false, lastCommit: 'b7d2e14', ahead: 3, behind: 1 },
+    { repoId: r1Id, name: 'feature/dashboard-v2', type: 'feature', isActive: false, lastCommit: 'c1a9f03', ahead: 7, behind: 2 },
+    { repoId: r1Id, name: 'fix/memory-leak', type: 'fix', isActive: false, lastCommit: 'e4b7d82', ahead: 1, behind: 0 },
+    { repoId: r1Id, name: 'release/2.4.0', type: 'release', isActive: false, lastCommit: 'f9c1a56', ahead: 0, behind: 5 },
+    { repoId: r1Id, name: 'develop', type: 'develop', isActive: false, lastCommit: 'd2e8b91', ahead: 12, behind: 3 },
+  ]);
+  await tx.branches.bulkAdd([
+    { repoId: r2Id, name: 'main', type: 'main', isActive: true, lastCommit: 'x7k3m91', ahead: 0, behind: 4 },
+    { repoId: r2Id, name: 'feature/rate-limiter', type: 'feature', isActive: false, lastCommit: 'y2p8n44', ahead: 5, behind: 1 },
+    { repoId: r2Id, name: 'hotfix/db-connection', type: 'hotfix', isActive: false, lastCommit: 'z9q1w67', ahead: 2, behind: 0 },
+  ]);
+  await tx.branches.bulkAdd([
+    { repoId: r3Id, name: 'main', type: 'main', isActive: true, lastCommit: 'm4r7t22', ahead: 0, behind: 0 },
+    { repoId: r3Id, name: 'feature/utils-extensions', type: 'feature', isActive: false, lastCommit: 'n8v2x55', ahead: 2, behind: 1 },
+  ]);
+
+  const files1 = [
+    { repoId: r1Id, branchId: 1, path: 'src/components/Header.tsx', status: 'modified', staged: true, size: 3400, modified: Date.now() - 60000 },
+    { repoId: r1Id, branchId: 1, path: 'src/components/Sidebar.tsx', status: 'modified', staged: true, size: 5200, modified: Date.now() - 120000 },
+    { repoId: r1Id, branchId: 1, path: 'src/hooks/useAuth.ts', status: 'added', staged: true, size: 1800, modified: Date.now() - 300000 },
+    { repoId: r1Id, branchId: 1, path: 'src/pages/Dashboard.tsx', status: 'modified', staged: false, size: 8900, modified: Date.now() - 180000 },
+    { repoId: r1Id, branchId: 1, path: 'src/styles/theme.css', status: 'modified', staged: false, size: 2400, modified: Date.now() - 400000 },
+    { repoId: r1Id, branchId: 1, path: 'src/utils/helpers.ts', status: 'deleted', staged: false, size: 0, modified: Date.now() - 500000 },
+    { repoId: r1Id, branchId: 1, path: 'package.json', status: 'modified', staged: false, size: 1200, modified: Date.now() - 600000 },
+    { repoId: r1Id, branchId: 1, path: 'tsconfig.json', status: 'untracked', staged: false, size: 600, modified: Date.now() - 700000 },
+  ];
+  const fileIds = await tx.files.bulkAdd(files1, { allKeys: true });
+
+  await tx.files.bulkAdd([
+    { repoId: r2Id, branchId: 7, path: 'src/middleware/rateLimiter.ts', status: 'added', staged: true, size: 2100, modified: Date.now() - 90000 },
+    { repoId: r2Id, branchId: 7, path: 'src/routes/users.ts', status: 'modified', staged: false, size: 4500, modified: Date.now() - 200000 },
+    { repoId: r2Id, branchId: 7, path: 'src/config/database.ts', status: 'modified', staged: true, size: 1800, modified: Date.now() - 150000 },
+    { repoId: r2Id, branchId: 7, path: 'tests/integration/api.test.ts', status: 'added', staged: false, size: 3200, modified: Date.now() - 350000 },
+  ]);
+
+  await tx.commits.bulkAdd([
+    { repoId: r1Id, branchId: 1, hash: 'a3f8c21', message: 'Refactor header component with responsive layout', author: 'Alex Chen', date: Date.now() - 3600000, fileCount: 3 },
+    { repoId: r1Id, branchId: 1, hash: 'b7d2e14', message: 'Implement OAuth2 callback handler', author: 'Sarah Kim', date: Date.now() - 7200000, fileCount: 5 },
+    { repoId: r1Id, branchId: 1, hash: 'c1a9f03', message: 'Add dark mode theme variables', author: 'Alex Chen', date: Date.now() - 14400000, fileCount: 2 },
+    { repoId: r1Id, branchId: 1, hash: 'd2e8b91', message: 'Fix router guard redirect loop', author: 'Mike Torres', date: Date.now() - 28800000, fileCount: 1 },
+    { repoId: r1Id, branchId: 1, hash: 'e4b7d82', message: 'Update dependencies and fix audit warnings', author: 'Sarah Kim', date: Date.now() - 43200000, fileCount: 4 },
+    { repoId: r1Id, branchId: 1, hash: 'f9c1a56', message: 'Initial project setup with Vite and React', author: 'Alex Chen', date: Date.now() - 86400000, fileCount: 18 },
+    { repoId: r1Id, branchId: 2, hash: 'g3h5i78', message: 'WIP: auth flow with token refresh', author: 'Alex Chen', date: Date.now() - 1800000, fileCount: 7 },
+    { repoId: r1Id, branchId: 3, hash: 'h6j8k01', message: 'Dashboard chart components with real-time data', author: 'Mike Torres', date: Date.now() - 5400000, fileCount: 9 },
+  ]);
+
+  await tx.changes.bulkAdd([
+    { fileId: fileIds[0], type: 'context', lineFrom: 12, lineTo: 12, content: '  return (' },
+    { fileId: fileIds[0], type: 'context', lineFrom: 13, lineTo: 13, content: '    <header className="header">' },
+    { fileId: fileIds[0], type: 'remove', lineFrom: 14, lineTo: 14, content: '      <div className="header-inner">' },
+    { fileId: fileIds[0], type: 'add', lineFrom: 14, lineTo: 14, content: '      <div className="header-inner flex items-center justify-between w-full px-6">' },
+    { fileId: fileIds[0], type: 'context', lineFrom: 15, lineTo: 15, content: '        <Logo />' },
+    { fileId: fileIds[0], type: 'remove', lineFrom: 16, lineTo: 16, content: '        <nav className="nav-links">' },
+    { fileId: fileIds[0], type: 'add', lineFrom: 16, lineTo: 16, content: '        <nav className="nav-links hidden md:flex items-center gap-4">' },
+    { fileId: fileIds[0], type: 'context', lineFrom: 17, lineTo: 17, content: '          {links.map(link => (' },
+    { fileId: fileIds[0], type: 'add', lineFrom: 18, lineTo: 18, content: '            <NavLink key={link.id} {...link} active={currentPath === link.href} />' },
+    { fileId: fileIds[0], type: 'remove', lineFrom: 18, lineTo: 18, content: '            <a key={link.id} href={link.href}>{link.label}</a>' },
+    { fileId: fileIds[0], type: 'context', lineFrom: 19, lineTo: 19, content: '          ))}' },
+    { fileId: fileIds[0], type: 'add', lineFrom: 20, lineTo: 20, content: '          <ThemeToggle />' },
+    { fileId: fileIds[0], type: 'add', lineFrom: 21, lineTo: 21, content: '          <MobileMenuToggle onClick={toggleMobile} />' },
+    { fileId: fileIds[0], type: 'context', lineFrom: 22, lineTo: 22, content: '        </nav>' },
+    { fileId: fileIds[0], type: 'context', lineFrom: 23, lineTo: 23, content: '      </div>' },
+  ]);
+  await tx.changes.bulkAdd([
+    { fileId: fileIds[1], type: 'context', lineFrom: 1, lineTo: 1, content: 'import React from "react";' },
+    { fileId: fileIds[1], type: 'add', lineFrom: 2, lineTo: 2, content: 'import { useLocation } from "react-router-dom";' },
+    { fileId: fileIds[1], type: 'context', lineFrom: 2, lineTo: 3, content: '' },
+    { fileId: fileIds[1], type: 'context', lineFrom: 3, lineTo: 4, content: 'interface SidebarProps {' },
+    { fileId: fileIds[1], type: 'remove', lineFrom: 5, lineTo: 5, content: '  collapsed: boolean;' },
+    { fileId: fileIds[1], type: 'add', lineFrom: 5, lineTo: 5, content: '  collapsed: boolean;' },
+    { fileId: fileIds[1], type: 'add', lineFrom: 6, lineTo: 6, content: '  activeRoute?: string;' },
+    { fileId: fileIds[1], type: 'context', lineFrom: 6, lineTo: 7, content: '}' },
+  ]);
+});
+
+// ==========================================
+// APPLICATION STATE
+// ==========================================
+const state = {
+  view: 'main',
+  selectedRepo: null,
+  selectedBranch: null,
+  selectedFile: null,
+  selectedCommit: null,
+  commitMessage: '',
+  main: {
+    leftW: 30,
+    reposH: 35,
+    rightFilesH: 35,
+    rightChangesH: 35
+  },
+  review: {
+    topH: 55, bottomH: 45,
+    topReposW: 20, topFilesW: 50, topMsgW: 30,
+    bottomLeftW: 50, bottomRightW: 50,
+  },
+  toasts: [],
+};
+
+// ==========================================
+// TOAST SYSTEM
+// ==========================================
+function showToast(message, type) {
+  type = type || 'info';
+  const id = Date.now() + Math.random();
+  state.toasts.push({ id: id, message: message, type: type });
+  m.redraw();
+  setTimeout(function() {
+    state.toasts = state.toasts.filter(function(t) { return t.id !== id; });
+    m.redraw();
+  }, 3000);
+}
+
+// ==========================================
+// DRAGGABLE RESIZER COMPONENT
+// ==========================================
+function createResizer(type, getContainer, getProp, setProp, minPct, maxPct) {
+  return {
+    oncreate: function(vnode) {
+      const el = vnode.dom;
+      const onMove = function(e) {
+        el.classList.add('active');
+        const container = getContainer();
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        let pct = type === 'v' ? ((e.clientX - rect.left) / rect.width) * 100 : ((e.clientY - rect.top) / rect.height) * 100;
+        pct = Math.max(minPct, Math.min(maxPct, pct));
+        setProp(pct);
+        m.redraw();
+      };
+      const onUp = function() {
+        el.classList.remove('active');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+      el.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        document.body.style.cursor = type === 'v' ? 'col-resize' : 'row-resize';
+        document.body.style.userSelect = 'none';
+      });
+    },
+    view: function() {
+      return m('.resizer-' + type);
+    }
+  };
+}
+
+// ==========================================
+// HELPERS
+// ==========================================
+function timeAgo(ts) {
+  var diff = Date.now() - ts;
+  var mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  var hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  return Math.floor(hrs / 24) + 'd ago';
+}
+
+function statusBadge(status) {
+  var map = {
+    modified: { cls: 'status-modified', label: 'M' },
+    added: { cls: 'status-added', label: 'A' },
+    deleted: { cls: 'status-deleted', label: 'D' },
+    untracked: { cls: 'status-untracked', label: 'U' }
+  };
+  var s = map[status] || map.modified;
+  return m('.status.' + s.cls, s.label);
+}
+
+function branchTag(type) {
+  var map = { main: 'tag-green', feature: 'tag-blue', fix: 'tag-red', release: 'tag-purple', hotfix: 'tag-red', develop: 'tag-accent' };
+  return m('.tag.' + (map[type] || 'tag-blue'), type);
+}
+
+function fName(path) { var p = path.split('/'); return p[p.length - 1]; }
+function fPath(path) { var p = path.split('/'); return p.length > 1 ? p.slice(0, -1).join('/') + '/' : ''; }
+
+// ==========================================
+// MENU BAR
+// ==========================================
+var MenuBar = {
+  view: function() {
+    return m('.menubar', [
+      m('.menu-section.left', [
+        m('button.menu-btn', { onclick: function() { showToast('Pulling latest changes...', 'info'); } }, [ m('i.fa-solid.fa-arrow-down'), m('span', 'Pull') ]),
+        m('button.menu-btn', { onclick: function() { showToast('Syncing with remote...', 'info'); } }, [ m('i.fa-solid.fa-arrows-rotate'), m('span', 'Sync') ]),
+        m('button.menu-btn', { onclick: function() { showToast('Pushed 3 commits to origin', 'success'); } }, [ m('i.fa-solid.fa-arrow-up'), m('span', 'Push') ]),
+        m('.menu-sep'),
+        m('button.menu-btn', { onclick: function() { showToast('Git-flow: select an action', 'info'); } }, [ m('i.fa-solid.fa-code-branch'), m('span', 'Git-flow') ]),
+        m('button.menu-btn', { onclick: function() { showToast('Merge branch into current', 'info'); } }, [ m('i.fa-solid.fa-code-merge'), m('span', 'Merge') ]),
+        m('button.menu-btn.btn-primary', { onclick: function() {
+          if (!state.commitMessage.trim()) { showToast('Please enter a commit message', 'error'); return; }
+          showToast('Commit created: ' + state.commitMessage.substring(0, 40) + '...', 'success');
+          state.commitMessage = '';
+        }}, [ m('i.fa-solid.fa-check'), m('span', 'Commit') ])
+      ]),
+      m('.menu-section.center', [
+        m('button.menu-btn', { onclick: function() {
+          if (state.selectedFile) {
+            db.files.update(state.selectedFile.id, { staged: true }).then(function() { showToast('Staged: ' + fName(state.selectedFile.path), 'success'); m.redraw(); });
+          } else { showToast('Select a file to stage', 'error'); }
+        }}, [ m('i.fa-solid.fa-plus'), m('span', 'Stage') ]),
+        m('button.menu-btn', { onclick: function() { showToast('Index editor opened', 'info'); } }, [ m('i.fa-solid.fa-pen-to-square'), m('span', 'Index Editor') ]),
+        m('button.menu-btn', { onclick: function() {
+          if (state.selectedFile) {
+            db.files.update(state.selectedFile.id, { staged: false }).then(function() { showToast('Unstaged: ' + fName(state.selectedFile.path), 'info'); m.redraw(); });
+          } else { showToast('Select a file to unstage', 'error'); }
+        }}, [ m('i.fa-solid.fa-minus'), m('span', 'Unstage') ]),
+        m('.menu-sep'),
+        m('button.menu-btn', { onclick: function() { showToast('File removed from index', 'info'); } }, [ m('i.fa-solid.fa-xmark'), m('span', 'Remove') ]),
+        m('button.menu-btn', { onclick: function() { showToast('Operation aborted', 'error'); } }, [ m('i.fa-solid.fa-ban'), m('span', 'Abort') ]),
+        m('button.menu-btn.danger', { onclick: function() {
+          state.selectedFile ? showToast('Discarded changes: ' + fName(state.selectedFile.path), 'error') : showToast('Select changes to discard', 'error');
+        }}, [ m('i.fa-solid.fa-rotate-left'), m('span', 'Discard') ]),
+        m('button.menu-btn.danger', { onclick: function() {
+          if (state.selectedFile) {
+            db.files.delete(state.selectedFile.id).then(function() { state.selectedFile = null; showToast('File deleted', 'error'); m.redraw(); });
+          } else { showToast('Select a file to delete', 'error'); }
+        }}, [ m('i.fa-solid.fa-trash'), m('span', 'Delete') ])
+      ]),
+      m('.menu-section.right', [
+        m('button.menu-btn', { onclick: function() { showToast('Log view loaded', 'info'); } }, [ m('i.fa-solid.fa-clock-rotate-left'), m('span', 'Log') ]),
+        m('button.menu-btn', { onclick: function() { showToast('Blame annotations loaded', 'info'); } }, [ m('i.fa-solid.fa-user-pen'), m('span', 'Blame') ]),
+        m('button.menu-btn', { onclick: function() { showToast('Investigate mode active', 'info'); } }, [ m('i.fa-solid.fa-magnifying-glass-chart'), m('span', 'Investigate') ]),
+        m('.menu-sep'),
+        m('button.menu-btn' + (state.view === 'main' ? '.active' : ''), { onclick: function() { state.view = 'main'; m.redraw(); } }, [ m('i.fa-solid.fa-columns'), m('span', 'Main View') ]),
+        m('button.menu-btn' + (state.view === 'review' ? '.active' : ''), { onclick: function() { state.view = 'review'; m.redraw(); } }, [ m('i.fa-solid.fa-code-compare'), m('span', 'Review View') ])
+      ])
+    ]);
+  }
+};
+
+// ==========================================
+// DATA COMPONENTS
+// ==========================================
+var RepoList = {
+  oninit: function() { this.repos = []; this.load(); },
+  load: function() {
+    var self = this;
+    db.repositories.toArray().then(function(repos) {
+      self.repos = repos;
+      if (repos.length > 0 && !state.selectedRepo) {
+        state.selectedRepo = repos[0];
+        db.branches.where('repoId').equals(repos[0].id).toArray().then(function(branches) {
+          state.selectedBranch = branches.find(function(b) { return b.isActive; }) || branches[0];
+          m.redraw();
+        });
+      }
+      m.redraw();
+    });
+  },
+  view: function() {
+    var self = this;
+    return m('.panel-body', self.repos.map(function(repo) {
+      return m('.list-item' + (state.selectedRepo && state.selectedRepo.id === repo.id ? '.selected' : ''), {
+        onclick: function() {
+          state.selectedRepo = repo; state.selectedFile = null; state.selectedCommit = null;
+          db.branches.where('repoId').equals(repo.id).toArray().then(function(branches) {
+            state.selectedBranch = branches.find(function(b) { return b.isActive; }) || branches[0];
+            m.redraw();
+          });
+        }
+      }, [
+        m('i.icon.fa-solid.fa-folder', { style: { color: 'var(--accent)' } }),
+        m('.name', repo.name),
+        repo.status === 'dirty' ? m('.tag.tag-red', 'dirty') : m('.tag.tag-green', 'clean')
+      ]);
+    }));
+  }
+};
+
+var BranchList = {
+  oninit: function() { this.branches = []; this.load(); },
+  load: function() {
+    var self = this;
+    if (!state.selectedRepo) return;
+    db.branches.where('repoId').equals(state.selectedRepo.id).toArray().then(function(branches) {
+      self.branches = branches;
+      if (!state.selectedBranch && branches.length > 0) {
+        state.selectedBranch = branches.find(function(b) { return b.isActive; }) || branches[0];
+      }
+      m.redraw();
+    });
+  },
+  onupdate: function() { this.load(); },
+  view: function() {
+    var self = this;
+    if (!state.selectedRepo) return m('.panel-body', m('.empty-state', [ m('i.fa-solid.fa-code-branch'), m('p', 'Select a repository to view branches') ]));
+    return m('.panel-body', self.branches.map(function(branch) {
+      return m('.list-item' + (state.selectedBranch && state.selectedBranch.id === branch.id ? '.selected' : ''), {
+        onclick: function() { state.selectedBranch = branch; state.selectedFile = null; m.redraw(); }
+      }, [
+        m('i.icon.fa-solid.fa-code-branch', { style: { color: branch.isActive ? 'var(--green)' : 'var(--text-muted)' } }),
+        m('.name', branch.name), branchTag(branch.type),
+        (branch.ahead > 0 || branch.behind > 0) ? m('.meta', [
+          branch.ahead > 0 ? m('span', { style: { color: 'var(--green)' } }, '+' + branch.ahead) : null,
+          branch.behind > 0 ? m('span', { style: { color: 'var(--red)' } }, '-' + branch.behind) : null
+        ]) : null
+      ]);
+    }));
+  }
+};
+
+var FileList = {
+  oninit: function() { this.files = []; this.load(); },
+  load: function() {
+    var self = this;
+    if (!state.selectedRepo || !state.selectedBranch) return;
+    db.files.where({ repoId: state.selectedRepo.id, branchId: state.selectedBranch.id }).toArray().then(function(files) {
+      self.files = files;
+      m.redraw();
+    });
+  },
+  onupdate: function() { this.load(); },
+  view: function() {
+    var self = this;
+    if (!state.selectedRepo) return m('.panel-body', m('.empty-state', [ m('i.fa-solid.fa-file-code'), m('p', 'Select a repository and branch') ]));
+    var staged = self.files.filter(function(f) { return f.staged; });
+    var unstaged = self.files.filter(function(f) { return !f.staged; });
+    var children = [];
+    if (staged.length > 0) {
+      children.push(m('.list-item', { style: { background: 'var(--bg-panel)', cursor: 'default', fontSize: '10px', fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '6px 12px', borderTop: '1px solid var(--border)' } }, [ m('i.icon', ''), m('.name', 'Staged Changes (' + staged.length + ')'), m('.meta', '') ]));
+      staged.forEach(function(f) {
+        children.push(m('.file-item' + (state.selectedFile && state.selectedFile.id === f.id ? '.selected' : ''), { onclick: function() { state.selectedFile = f; m.redraw(); } }, [ statusBadge(f.status), m('.path', [ m('span.filename', fName(f.path)), fPath(f.path) ? m('span', { style: { color: 'var(--text-muted)' } }, fPath(f.path)) : null ]) ]));
+      });
+    }
+    if (unstaged.length > 0) {
+      children.push(m('.list-item', { style: { background: 'var(--bg-panel)', cursor: 'default', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', padding: '6px 12px', borderTop: '1px solid var(--border)' } }, [ m('i.icon', ''), m('.name', 'Changes (' + unstaged.length + ')'), m('.meta', '') ]));
+      unstaged.forEach(function(f) {
+        children.push(m('.file-item' + (state.selectedFile && state.selectedFile.id === f.id ? '.selected' : ''), { onclick: function() { state.selectedFile = f; m.redraw(); } }, [ statusBadge(f.status), m('.path', [ m('span.filename', fName(f.path)), fPath(f.path) ? m('span', { style: { color: 'var(--text-muted)' } }, fPath(f.path)) : null ]) ]));
+      });
+    }
+    if (self.files.length === 0) children.push(m('.empty-state', [ m('i.fa-solid.fa-check-circle'), m('p', 'No changes in working directory') ]));
+    return m('.panel-body', children);
+  }
+};
+
+var ChangesView = {
+  oninit: function() { this.changes = []; this.load(); },
+  load: function() {
+    var self = this;
+    if (!state.selectedFile) { self.changes = []; return; }
+    db.changes.where('fileId').equals(state.selectedFile.id).toArray().then(function(changes) {
+      self.changes = changes;
+      m.redraw();
+    });
+  },
+  onupdate: function() { this.load(); },
+  view: function() {
+    var self = this;
+    if (!state.selectedFile) return m('.panel-body', m('.empty-state', [ m('i.fa-solid.fa-diff'), m('p', 'Select a file to view changes') ]));
+    if (self.changes.length === 0) return m('.panel-body', m('.empty-state', [ m('i.fa-solid.fa-file-circle-check'), m('p', 'No diff data available for this file') ]));
+    return m('.panel-body', [ m('.diff-file', [
+      m('.diff-file-header', [ m('i.fa-solid.fa-file-code', { style: { color: 'var(--accent)' } }), m('span', state.selectedFile.path), statusBadge(state.selectedFile.status) ]),
+      self.changes.map(function(c) { return m('.diff-line.' + c.type, [ m('.ln', c.lineFrom), m('.code', c.content) ]); })
+    ]) ]);
+  }
+};
+
+var JournalView = {
+  oninit: function() { this.commits = []; this.load(); },
+  load: function() {
+    var self = this;
+    if (!state.selectedRepo) return;
+    db.commits.where('repoId').equals(state.selectedRepo.id).toArray().then(function(commits) {
+      commits.sort(function(a, b) { return b.date - a.date; });
+      self.commits = commits;
+      m.redraw();
+    });
+  },
+  onupdate: function() { this.load(); },
+  view: function() {
+    var self = this;
+    if (!state.selectedRepo) return m('.panel-body', m('.empty-state', [ m('i.fa-solid.fa-scroll'), m('p', 'Select a repository to view journal') ]));
+    if (self.commits.length === 0) return m('.panel-body', m('.empty-state', [ m('i.fa-solid.fa-scroll'), m('p', 'No commits in journal') ]));
+    return m('.panel-body', self.commits.map(function(c) {
+      return m('.journal-entry', {
+        onclick: function() { state.selectedCommit = c; m.redraw(); },
+        style: state.selectedCommit && state.selectedCommit.id === c.id ? { background: 'var(--bg-selected)' } : {}
+      }, [
+        m('.j-head', [ m('.j-hash', c.hash), m('.j-author', c.author), m('.j-time', timeAgo(c.date)) ]),
+        m('.j-msg', c.message)
+      ]);
+    }));
+  }
+};
+
+var OriginBranchView = {
+  oninit: function() { this.branches = []; this.load(); },
+  load: function() {
+    var self = this;
+    if (!state.selectedRepo) return;
+    db.branches.where('repoId').equals(state.selectedRepo.id).toArray().then(function(branches) {
+      self.branches = branches;
+      m.redraw();
+    });
+  },
+  onupdate: function() { this.load(); },
+  view: function() {
+    var self = this;
+    if (!state.selectedRepo) return m('.panel-body', m('.empty-state', [ m('i.fa-solid.fa-code-branch'), m('p', 'No repository selected') ]));
+    return m('.panel-body', self.branches.map(function(b) {
+      return m('.list-item', { style: { borderLeftColor: b.isActive ? 'var(--green)' : 'transparent' } }, [
+        m('i.icon.fa-solid.fa-code-branch', { style: { color: b.isActive ? 'var(--green)' : 'var(--text-muted)' } }),
+        m('.name', b.name), branchTag(b.type), m('.meta', b.lastCommit),
+        (b.ahead > 0 || b.behind > 0) ? m('.meta', [
+          b.ahead > 0 ? m('span', { style: { color: 'var(--green)' } }, '+' + b.ahead) : null,
+          b.behind > 0 ? m('span', { style: { color: 'var(--red)' } }, '-' + b.behind) : null
+        ].filter(Boolean)) : m('.meta', 'synced')
+      ]);
+    }));
+  }
+};
+
+var CommitMessagesView = {
+  oninit: function() { this.commits = []; this.load(); },
+  load: function() {
+    var self = this;
+    if (!state.selectedRepo) return;
+    db.commits.where('repoId').equals(state.selectedRepo.id).toArray().then(function(commits) {
+      commits.sort(function(a, b) { return b.date - a.date; });
+      self.commits = commits;
+      m.redraw();
+    });
+  },
+  onupdate: function() { this.load(); },
+  view: function() {
+    var self = this;
+    if (!state.selectedRepo) return m('.panel-body', m('.empty-state', [ m('i.fa-solid.fa-message'), m('p', 'No commits') ]));
+    return m('.panel-body', self.commits.map(function(c) {
+      return m('.journal-entry', [
+        m('.j-head', [ m('.j-hash', c.hash), m('.j-time', timeAgo(c.date)) ]),
+        m('.j-msg', c.message),
+        m('div', { style: { marginTop: 4, fontSize: 11, color: 'var(--text-muted)' } }, [ m('i.fa-solid.fa-user', { style: { marginRight: 4 } }), c.author, m('span', { style: { marginLeft: 8 } }, c.fileCount + ' files') ])
+      ]);
+    }));
+  }
+};
+
+// ==========================================
+// MAIN VIEW LAYOUT
+// ==========================================
+var MainView = {
+  view: function() {
+    var ml = state.main.leftW;
+    var rl = state.main.reposH;
+    var rf = state.main.rightFilesH;
+    var rc = state.main.rightChangesH;
+
+    return m('.content', { id: 'main-container' }, [
+      m('.panel', { id: 'main-left-sidebar', style: { width: ml + '%' } }, [
+        m('.panel', { style: { height: rl + '%' } }, [
+          m('.panel-header', [ m('span', 'Repositories'), m('.count', '3'), m('.actions', [ m('button', { title: 'Add Repository' }, m('i.fa-solid.fa-plus')), m('button', { title: 'Refresh' }, m('i.fa-solid.fa-arrows-rotate')) ]) ]),
+          m(RepoList)
+        ]),
+        m(createResizer('h', function() { return document.getElementById('main-left-sidebar'); }, function() { return state.main.reposH; }, function(v) { state.main.reposH = v; }, 10, 90)),
+        m('.panel', { style: { flex: 1 } }, [
+          m('.panel-header', [ m('span', 'Branches'), m('.actions', [ m('button', { title: 'New Branch', onclick: function() { showToast('Create new branch', 'info'); } }, m('i.fa-solid.fa-plus')), m('button', { title: 'Fetch', onclick: function() { showToast('Fetching from remote...', 'info'); } }, m('i.fa-solid.fa-arrow-down')) ]) ]),
+          m(BranchList)
+        ])
+      ]),
+
+      m(createResizer('v', function() { return document.getElementById('main-container'); }, function() { return state.main.leftW; }, function(v) { state.main.leftW = v; }, 12, 55)),
+
+      m('.panel', { id: 'main-right-area', style: { flex: 1, display: 'flex', flexDirection: 'column' } }, [
+        m('.panel', { style: { height: rf + '%' } }, [
+          m('.panel-header', [ m('span', 'Files'), m('.actions', [ m('button', { title: 'Stage All', onclick: function() {
+            if (!state.selectedRepo || !state.selectedBranch) return;
+            db.files.where({ repoId: state.selectedRepo.id, branchId: state.selectedBranch.id }).toArray().then(function(files) {
+              Promise.all(files.map(function(f) { return db.files.update(f.id, { staged: true }); })).then(function() { showToast('All files staged', 'success'); m.redraw(); });
+            });
+          }}, m('i.fa-solid.fa-plus')), m('button', { title: 'Collapse All' }, m('i.fa-solid.fa-compress')) ]) ]),
+          m(FileList)
+        ]),
+        m(createResizer('h', function() { return document.getElementById('main-right-area'); }, function() { return state.main.rightFilesH; }, function(v) { state.main.rightFilesH = v; }, 8, 85)),
+        m('.panel', { style: { height: rc + '%' } }, [
+          m('.panel-header', [ m('span', 'Changes'), state.selectedFile ? m('.count', state.selectedFile.path) : null, m('.actions', [ m('button.btn-sm.btn', { onclick: function() { showToast('Diff copied to clipboard', 'success'); } }, 'Copy Diff') ]) ]),
+          m(ChangesView)
+        ]),
+        m(createResizer('h', function() { return document.getElementById('main-right-area'); }, function() { return state.main.rightFilesH + state.main.rightChangesH; }, function(v) { state.main.rightChangesH = v - state.main.rightFilesH; }, 10, 92)),
+        m('.panel', { style: { flex: 1 } }, [
+          m('.panel-header', [ m('span', 'Journal'), m('.actions', [ m('button', { title: 'Search' }, m('i.fa-solid.fa-search')), m('button', { title: 'Filter' }, m('i.fa-solid.fa-filter')) ]) ]),
+          m(JournalView)
+        ])
+      ])
+    ]);
+  }
+};
+
+// ==========================================
+// REVIEW VIEW LAYOUT
+// ==========================================
+var ReviewView = {
+  view: function() {
+    var rv = state.review;
+    return m('.content', { id: 'review-container', style: { flexDirection: 'column' } }, [
+      m('.panel', { id: 'review-top', style: { height: rv.topH + '%', display: 'flex', flexDirection: 'row' } }, [
+        m('.panel', { style: { width: rv.topReposW + '%' } }, [ m('.panel-header', [ m('span', 'Repositories'), m('.count', '3') ]), m(RepoList) ]),
+        m(createResizer('v', function() { return document.getElementById('review-top'); }, function() { return rv.topReposW; }, function(v) { rv.topReposW = v; rv.topFilesW = 100 - v - rv.topMsgW; }, 10, 40)),
+        m('.panel', { style: { width: rv.topFilesW + '%' } }, [ m('.panel-header', [ m('span', 'Files'), m('.actions', [ m('button', { title: 'Stage All' }, m('i.fa-solid.fa-plus')) ]) ]), m(FileList) ]),
+        m(createResizer('v', function() { return document.getElementById('review-top'); }, function() { return rv.topReposW + rv.topFilesW; }, function(v) { rv.topFilesW = v - rv.topReposW; rv.topMsgW = 100 - v; }, 25, 80)),
+        m('.panel', { style: { width: rv.topMsgW + '%' } }, [ m('.panel-header', [ m('span', 'Commit Messages'), m('.actions', [ m('button', { title: 'New Commit' }, m('i.fa-solid.fa-pen')) ]) ]), m(CommitMessagesView) ])
+      ]),
+      m(createResizer('h', function() { return document.getElementById('review-container'); }, function() { return rv.topH; }, function(v) { rv.topH = v; rv.bottomH = 100 - v; }, 15, 85)),
+      m('.panel', { id: 'review-bottom', style: { height: rv.bottomH + '%', display: 'flex', flexDirection: 'row' } }, [
+        m('.panel', { style: { width: rv.bottomLeftW + '%' } }, [ m('.panel-header', [ m('span', 'Origin Branch'), m('.actions', [ m('button', { title: 'Compare' }, m('i.fa-solid.fa-code-compare')) ]) ]), m(OriginBranchView) ]),
+        m(createResizer('v', function() { return document.getElementById('review-bottom'); }, function() { return rv.bottomLeftW; }, function(v) { rv.bottomLeftW = v; rv.bottomRightW = 100 - v; }, 15, 85)),
+        m('.panel', { style: { width: rv.bottomRightW + '%' } }, [ m('.panel-header', [ m('span', 'Changes'), m('.actions', [ m('button.btn-sm.btn', { onclick: function() { showToast('Diff copied', 'success'); } }, 'Copy Diff') ]) ]), m(ChangesView) ])
+      ])
+    ]);
+  }
+};
+
+// ==========================================
+// ROOT APP
+// ==========================================
+var App = {
+  view: function() {
+    return [
+      m(MenuBar),
+      state.view === 'main' ? m(MainView) : m(ReviewView),
+      m('.toast-container', state.toasts.map(function(t) {
+        return m('.toast.toast-' + t.type, [
+          m('i.fa-solid ' + (t.type === 'success' ? 'fa-check-circle' : t.type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle')),
+          m('span', t.message)
+        ]);
+      }))
+    ];
+  }
+};
+
+// ==========================================
+// INIT
+// ==========================================
+db.open().then(function() {
+  m.mount(document.getElementById('app'), App);
+}).catch(function(err) {
+  console.error('DB init error:', err);
+  m.mount(document.getElementById('app'), App);
+});
+</script>
+</body>
+</html>
