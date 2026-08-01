@@ -21,6 +21,23 @@
  */
 
 /**
+ * The canonical status query.
+ *
+ * `--untracked-files=all` lists files inside untracked directories rather than
+ * collapsing them to `dir/`, which the Files panel needs in order to stage one
+ * of them. Ignored files are *not* requested: they are only ever shown on
+ * demand, and listing them on a repository with a large `node_modules` costs
+ * more than everything else in this command put together.
+ */
+export const STATUS_ARGS: readonly string[] = [
+  'status',
+  '--porcelain=v2',
+  '-z',
+  '--branch',
+  '--untracked-files=all',
+];
+
+/**
  * A porcelain v2 status letter. `.` is "unchanged in this half of the pair";
  * `?` and `!` are moonGit's stand-ins for untracked and ignored, which git
  * reports as their own record types rather than as XY codes.

@@ -11,3 +11,8 @@ export * from './commands';
 export * from './RepoLock';
 export * from './GitRunner';
 export * from './parsers';
+export * from './boundary';
+export * from './RepositoryService';
+export * from './BranchService';
+export * from './CommitService';
+export * from './DiffService';

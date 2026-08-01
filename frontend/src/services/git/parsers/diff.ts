@@ -32,8 +32,7 @@
  * `--no-ext-diff` and `--no-textconv` keep a configured external differ or
  * textconv filter from replacing the output with something unparseable.
  */
-export const DIFF_BASE_ARGS: readonly string[] = [
-  'diff',
+export const DIFF_OUTPUT_ARGS: readonly string[] = [
   '--raw',
   '-z',
   '--patch',
@@ -45,6 +44,15 @@ export const DIFF_BASE_ARGS: readonly string[] = [
   '--abbrev=64',
   '-U3',
 ];
+
+/**
+ * The same flags as a complete `git diff` invocation.
+ *
+ * Kept separate from `DIFF_OUTPUT_ARGS` because `git show` produces this
+ * identical two-section layout and is the only way to diff a *root* commit —
+ * `git diff <root>^ <root>` has no parent to name.
+ */
+export const DIFF_BASE_ARGS: readonly string[] = ['diff', ...DIFF_OUTPUT_ARGS];
 
 export type FileChangeKind =
   'added' | 'copied' | 'deleted' | 'modified' | 'renamed' | 'typeChanged' | 'unmerged' | 'unknown';

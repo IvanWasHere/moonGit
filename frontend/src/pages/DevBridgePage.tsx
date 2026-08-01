@@ -14,6 +14,7 @@ import {
   type RepoChangeEvent,
   type WatchInfo,
 } from '@/services/wails';
+import { DevServicesPanel } from './DevServicesPanel';
 import styles from './DevBridgePage.module.css';
 
 /**
@@ -250,6 +251,8 @@ export function DevBridgePage() {
             </div>
           </div>
         </section>
+
+        <DevServicesPanel repoPath={repoPath} />
       </div>
     </div>
   );

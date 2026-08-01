@@ -200,6 +200,29 @@ This is where the product actually lives.
 
 **Exit criteria**: full test suite over parser fixtures (including pathological filenames, merge commits, binary diffs, renames, submodule entries) with no UI written yet.
 
+### ✅ Phase 2 partially verified — runner, four parsers, four services
+
+Built: `GitRunner` (+ `RepoLock`, `errors`, `commands`), parsers for **status, refs, log, diff**, and `RepositoryService` / `BranchService` / `CommitService` / `DiffService`. 193 unit tests. Still to do: stash, blame, graph, and the remaining services.
+
+**Fixtures are generated, not written.** Every parser fixture was captured by running the real command against purpose-built repositories and escaping the bytes into a TS module. Each fixture re-exports the exact format string or arg list it was captured with, and a test asserts the parser still matches it — a format and parser that disagree don't crash, they shift every field by one.
+
+Verified against the live backend via `#/dev/bridge` → *Phase 2 — services against real git* (`DevServicesPanel.tsx`):
+
+| Criterion | Result |
+|---|---|
+| Bridge preserves path bytes | `newline⏎in⇥name.txt` → code points include **000a** and **0009** intact through Go → JSON → webview |
+| Bridge preserves UTF-8 | `Ivan Marinković` → **0107** (ć) intact |
+| Incremental log parser | **2001 commits in 8 batches** — 7 real chunk boundaries crossed, every record's oid guard passed |
+| status / refs / diff | test-repo1: 10 entries (4 staged), 7 branches with upstream ahead counts, 4-file working-tree diff |
+| Error boundary | non-repo path → `NotARepository`, not an exception |
+| Conflicts & submodules | `conflict.txt [conflict]`, `sub [submodule]` detected in a live worktree |
+
+**Three findings worth carrying forward:**
+
+1. **The bridge assumption held.** Four parsers were built on "NUL-delimited UTF-8 survives the trip" before anything tested it. It does — but that was luck of timing, not diligence. Verify the seam before stacking more on it.
+2. **A bad `repoPath` blames git.** Pointing the runner at a non-existent directory surfaces as `SpawnFailed: fork/exec /opt/homebrew/bin/git: no such file or directory` — Go's `exec` reports a missing *working directory* by naming the *binary*. Anyone debugging that message will look in the wrong place. Worth pre-checking the path, or rewriting the message, when the repo picker lands.
+3. **`git show` on a merge prints nothing** — zero bytes, which renders as "this commit changed no files". `DiffService.commit()` passes `--first-parent`; `-m` would emit one raw+patch section per parent, which the parser cannot read.
+
 ---
 
 ## 6. Phase 3 — State & persistence *(~1 day)*
