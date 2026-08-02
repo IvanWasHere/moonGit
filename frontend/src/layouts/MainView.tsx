@@ -5,6 +5,7 @@ import { Panel, PanelAction, PanelHeader } from '@/components/Panel';
 import { Resizer } from '@/components/Resizer';
 import { BranchList } from '@/features/branches/BranchList';
 import { DiffPane } from '@/features/diff/DiffPane';
+import { useCopyDiff } from '@/features/diff/useCopyDiff';
 import { JournalView } from '@/features/history/JournalView';
 import { RepoList } from '@/features/repositories/RepoList';
 import { CommitBox } from '@/features/working-tree/CommitBox';
@@ -32,6 +33,7 @@ export function MainView() {
   const setMain = useWorkspaceStore((state) => state.setMain);
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
   const commitOpen = useWorkspaceStore((state) => state.commitOpen);
+  const copyDiff = useCopyDiff();
 
   return (
     <div className={styles.content} ref={containerRef}>
@@ -131,7 +133,7 @@ export function MainView() {
             title="Changes"
             {...(selectedFile !== null && { count: selectedFile.path })}
             actions={
-              <Button size="sm" onClick={() => showToast('Diff copied to clipboard', 'success')}>
+              <Button size="sm" disabled={!copyDiff.enabled} onClick={copyDiff.copy}>
                 Copy Diff
               </Button>
             }

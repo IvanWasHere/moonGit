@@ -472,6 +472,21 @@ The plan named Monaco. Monaco is an *editor*, and its `DiffEditor` recomputes di
 
 The panes show dimensions and byte size beside each version, because that is usually where the answer is — an asset re-exported at half resolution looks identical until the numbers are side by side — and sit on a checkerboard so a transparent PNG does not read as a white one.
 
+### ✅ Three menubar buttons that were pretending
+
+**Remove** and **Delete** now run the file context menu's implementations rather than growing their own. Both need a confirmation, both split on tracked versus untracked, and both already existed a few files away — a second copy would have been a second place for those rules to drift. The label doubles as the dialog's wording, so it is passed in rather than hard-coded.
+
+- **Remove** — `git rm --cached`: untracks the file, leaves it on disk.
+- **Delete** — `git rm -f` for a tracked file, `fsapi.DeletePath` for an untracked one git has never heard of.
+
+**Copy Diff** copies a real patch. `DiffFile` holds hunks rather than the bytes git printed, so the text is rebuilt with `buildPatch` — cheaper than retaining a second copy of every diff on the chance somebody presses a button, and already proven against real git by `patchApply.test.ts`. The button reads the *same query key* the diff pane fetched, so it costs a cache lookup rather than a git call, and it is disabled when no file is selected instead of toasting a lie.
+
+Verified live: the copied text was a well-formed unified diff that `git apply --cached --check` accepted forward and `--reverse --check` accepted backward. Only git's `index <old>..<new>` line is missing, since the abbreviated hashes it wants are not what the raw section carries.
+
+**Not exercised interactively**: the Remove and Delete confirmations, which are native windows the browser automation cannot answer — the same limitation Discard and Abort have. Both commands were run directly and behaved correctly: `rm --cached` left the file on disk as untracked, `rm -f` took it from the index and the disk.
+
+Four menubar stubs remain — Git-flow, Log, Blame, Investigate — of which two (Git-flow, Investigate) are still undefined by the PRD (§14).
+
 ### ✅ The Index Editor — hunk and line staging
 
 Staging part of a file, from the diff pane where the hunks already are. Each hunk header carries a **Stage hunk** / **Unstage hunk** button; clicking changed lines selects them and a bar offers **Stage selected**. Selecting a whole hunk is the same operation with all its lines selected, so there is one mechanism rather than two.

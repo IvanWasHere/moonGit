@@ -5,6 +5,7 @@ import { Panel, PanelAction, PanelHeader } from '@/components/Panel';
 import { Resizer } from '@/components/Resizer';
 import { RemoteBranchList } from '@/features/branches/RemoteBranchList';
 import { DiffPane } from '@/features/diff/DiffPane';
+import { useCopyDiff } from '@/features/diff/useCopyDiff';
 import { CommitMessagesView } from '@/features/history/CommitMessagesView';
 import { RepoList } from '@/features/repositories/RepoList';
 import { FileList } from '@/features/working-tree/FileList';
@@ -28,6 +29,7 @@ export function ReviewView() {
 
   const review = useWorkspaceStore((state) => state.review);
   const setReview = useWorkspaceStore((state) => state.setReview);
+  const copyDiff = useCopyDiff();
 
   return (
     <div className={`${styles.content} ${styles.vertical}`} ref={containerRef}>
@@ -118,7 +120,7 @@ export function ReviewView() {
           <PanelHeader
             title="Changes"
             actions={
-              <Button size="sm" onClick={() => showToast('Diff copied', 'success')}>
+              <Button size="sm" disabled={!copyDiff.enabled} onClick={copyDiff.copy}>
                 Copy Diff
               </Button>
             }

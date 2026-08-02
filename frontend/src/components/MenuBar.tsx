@@ -14,6 +14,7 @@ import { isConflicted } from '@/services/git';
 import { showMessage } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useFileMenuActions } from '@/features/working-tree/useFileMenuActions';
 import { fileName } from '@/utils/format';
 import { Icons, type LucideIcon } from './icons';
 import styles from './MenuBar.module.css';
@@ -71,6 +72,7 @@ export function MenuBar({
   const pull = usePull(repoPath);
   const push = usePush(repoPath);
   const abortMerge = useAbortMerge(repoPath);
+  const runFileAction = useFileMenuActions(repoPath);
 
   const entry = status?.entries.find((candidate) => candidate.path === selectedFile?.path);
   const needsSelection = () => showToast('Select a file first', 'error');
@@ -111,6 +113,23 @@ export function MenuBar({
         onError: reportError,
       });
     })();
+  };
+
+  /**
+   * Remove and Delete run the context menu's implementations rather than their
+   * own.
+   *
+   * Both need a confirmation, both have a tracked/untracked split, and both
+   * already exist a few files away — a second copy here would be a second
+   * place for those rules to drift. The label doubles as the dialog's wording,
+   * which is why it is passed rather than hard-coded.
+   */
+  const runOnSelected = (action: 'remove' | 'delete', label: string) => {
+    if (entry === undefined) {
+      needsSelection();
+      return;
+    }
+    runFileAction(entry, { kind: 'item', action, label, destructive: true });
   };
 
   const doDiscard = () => {
@@ -252,7 +271,8 @@ export function MenuBar({
       kind: 'button',
       label: 'Remove',
       icon: Icons.Remove,
-      run: () => showToast('Remove arrives in Phase 6', 'info'),
+      // Untracks the file and leaves it on disk — `git rm --cached`.
+      run: () => runOnSelected('remove', 'Remove from Repository'),
     },
     {
       kind: 'button',
@@ -274,7 +294,7 @@ export function MenuBar({
       label: 'Delete',
       icon: Icons.Delete,
       tone: 'danger',
-      run: () => showToast('Delete arrives in Phase 6', 'info'),
+      run: () => runOnSelected('delete', 'Delete from Disk'),
     },
   ];
 
