@@ -78,6 +78,8 @@ interface WorkspaceState {
   readonly commitMessage: string;
   /** The commit composer is opened on demand, not always on screen. */
   readonly commitOpen: boolean;
+  /** The three-way merge tool, which is modal over the whole workspace. */
+  readonly mergeOpen: boolean;
   readonly diffView: DiffViewMode;
   readonly main: MainLayout;
   readonly review: ReviewLayout;
@@ -90,6 +92,8 @@ interface WorkspaceState {
   openCommit: () => void;
   closeCommit: () => void;
   toggleCommit: () => void;
+  openMerge: () => void;
+  closeMerge: () => void;
   setDiffView: (mode: DiffViewMode) => void;
   setMain: (patch: Partial<MainLayout>) => void;
   setReview: (patch: Partial<ReviewLayout>) => void;
@@ -104,6 +108,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   selectedCommit: null,
   commitMessage: '',
   commitOpen: false,
+  mergeOpen: false,
   // Inline by default: it is the mockup's layout, and the Changes pane is
   // narrow enough at its default size that split would truncate both halves.
   diffView: 'inline',
@@ -128,6 +133,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       selectedCommit: null,
       commitMessage: '',
       commitOpen: false,
+      mergeOpen: false,
     });
   },
 
@@ -140,6 +146,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   // losing it because the panel was collapsed would be its own bug.
   closeCommit: () => set({ commitOpen: false }),
   toggleCommit: () => set((state) => ({ commitOpen: !state.commitOpen })),
+
+  openMerge: () => set({ mergeOpen: true }),
+  closeMerge: () => set({ mergeOpen: false }),
 
   setDiffView: (diffView) => set({ diffView }),
 

@@ -417,7 +417,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 
 1. **Diff viewer**: side-by-side, inline, syntax highlighting (~~Monaco~~ **Shiki** — see below), word diff, image diff, large-file guard
 2. **Commit graph**: lane layout, branch colors, merge visualization
-3. **Merge**: wizard, conflict detection, conflict viewer, resolution helper
+3. **Merge**: wizard, conflict detection, ~~conflict viewer, resolution helper~~ ✅ (below)
 4. **Rebase**: interactive, continue/skip/abort, squash/edit
 5. **Cherry-pick**, **Stash**, **Tags**
 6. **Search**: commits / files / branches / tags / messages / authors
@@ -471,6 +471,40 @@ The plan named Monaco. Monaco is an *editor*, and its `DiffEditor` recomputes di
 `RunBase64` was added to `gitexec` — Run with stdout base64-encoded. **The reason is not what it first looked like:** a Go string holds arbitrary bytes, so `Run` does not damage binary output. The damage happens where results are marshalled to JSON for the bridge, and `encoding/json` replaces invalid UTF-8 with U+FFFD silently. A PNG read through the ordinary path arrives corrupted with no error anywhere. The first version of the test asserted the wrong layer and failed, which is how the real culprit was found; it now asserts a JSON round trip, and `GitRunner` refuses base64 on a bridge that cannot do it rather than downgrading to text.
 
 The panes show dimensions and byte size beside each version, because that is usually where the answer is — an asset re-exported at half resolution looks identical until the numbers are side by side — and sit on a checkerboard so a transparent PNG does not read as a white one.
+
+### ✅ Phase 6.3 (part) — the three-way merge tool
+
+**Merge/diff tooling is built in, not delegated to an external tool** — this settles the §14 question. The escape hatch is the user's own editor rather than a configured diff tool.
+
+A modal over the workspace, three columns, **result in the middle** so each side is adjacent to what it would produce. Opened from the Merge button, `Branch ▸ Merge`, or a `Resolve` button that appears on conflicted rows in the Files panel.
+
+**Every region where the sides differ is a decision, not only the conflicts.** The regions git resolved on its own arrive with a side already chosen and can be overridden; conflicts arrive with nothing chosen, and `Save & mark resolved` stays disabled until each has an answer.
+
+**Git does the diffing.** Both sides are diffed against the merge base with `git diff -U0 <baseOid> <sideOid>`, so the hunks share a coordinate system and can be laid over one another: edits touching the same base lines are a conflict, edits that do not are independent. Writing our own line differ would have meant a second opinion about a merge git has already performed. `-U0` is essential — with context the hunks grow until they touch and two independent edits merge into one region.
+
+**The three sides come from the index, never from the markers.** `status --porcelain=v2` reports an unmerged path with its three stage hashes (1 base, 2 ours, 3 theirs), each an ordinary blob. The `<<<<<<<` markers in the working file are git's *rendering* of the conflict; a user who already edited that file would have broken them, and the stages cannot be broken by accident.
+
+Verified live on a scratch repo whose conflict had one genuine clash and two auto-resolved regions:
+
+| | Result |
+|---|---|
+| Regions | 1 conflict (`retries`/`timeout`), 2 `auto: theirs`, shared text as context — matching git exactly |
+| Empty side | Ours showed `(nothing)` for a line only theirs added |
+| Override | Forced an auto-resolved region back to ours; the label said `overridden` |
+| Save | File on disk byte-exact, no markers, staged, and `git commit` completed the merge |
+| Guard | `Save & mark resolved` disabled while the conflict was undecided |
+
+**Decisions worth keeping:**
+
+- **A conflict has no default.** Undecided regions contribute nothing to the result rather than something plausible — the middle column shows a gap where the decision belongs. Silently defaulting is how a merge tool loses somebody's work.
+- **After an external edit, the file wins.** "Edit in editor" writes the resolution so far *first* (opening a file still full of markers would throw away the work already done), then opens it and reads it back. From then on region choices stop driving the result and a banner says so — two sources of truth for one file is worse than either.
+- **`agreed` is not `conflict`.** Both sides making the identical change is not a decision, and marking it as one would bury the real conflicts.
+- **Edits that merely touch are one region.** A deletion of base lines 3–4 and an insertion at line 4 cannot be applied independently, so they group — which is what diff3 does.
+- **The label says what git did; the highlighted button says what is chosen.** When they disagree the label says `overridden`, because "auto: theirs" over a result showing ours reads as a bug.
+
+**A layering bug the live run caught**: the modal rendered at `z-index: 100` and lost to the top menu (200) and the menubar (100), so its own header and column titles were painted over and appeared to be missing off the top of the window. Now 1000, still below the toasts at 9999 — which report what the modal does.
+
+**Not built here**: starting a merge. That needs a branch picker, and the Merge button says so rather than opening an empty resolver.
 
 ### ✅ Files panel — a Status column instead of sections
 
@@ -622,5 +656,5 @@ Three places where this plan knowingly diverges — worth a second look before P
 
 - **Light theme** — the mockup is dark-only, and the PRD wants light/dark/system plus custom accent. The token structure makes this mechanical, but someone has to choose the light palette. *Needed by Phase 8.*
 - **Git-flow / Index Editor / Investigate** — three menubar buttons in the mockup that only fire toasts, and the PRD never defines them. *Needed by Phase 6.*
-- **Merge/diff tool integration** — external tools (Kaleidoscope, Beyond Compare) or built-in only? *Needed by Phase 6.*
+- ~~**Merge/diff tool integration**~~ — **resolved: built in.** A three-way modal with per-region choices; the escape hatch is the user's own editor, not a configured external differ. See §9.3 above.
 - **Code signing identity + notarization credentials.** *Needed by Phase 8.*

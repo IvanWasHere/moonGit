@@ -8,7 +8,13 @@
 import { mapParsed } from './boundary';
 import type { GitError } from './errors';
 import { getGitRunner, type ExecOptions, type GitRunner } from './GitRunner';
-import { DIFF_BASE_ARGS, DIFF_OUTPUT_ARGS, parseDiff, type DiffFile } from './parsers';
+import {
+  DIFF_BASE_ARGS,
+  DIFF_OUTPUT_ARGS,
+  diffOutputArgs,
+  parseDiff,
+  type DiffFile,
+} from './parsers';
 import type { ReadOptions } from './RepositoryService';
 import type { Result } from './result';
 
@@ -63,6 +69,26 @@ export class DiffService {
       options.paths,
     );
     return this.run(args, options);
+  }
+
+  /**
+   * Diff two objects directly, by id — the merge viewer's primitive.
+   *
+   * Git diffs blobs as happily as it diffs paths, and the output keeps the
+   * same raw-plus-patch shape, so this parses with everything else. It matters
+   * for the three-way merge view because the hunks come back numbered against
+   * the *base* blob, which is what lets ours' edits and theirs' edits be laid
+   * over one another and compared.
+   *
+   * `context: 0` is the useful setting there: with context lines the hunks
+   * grow to touch each other and two independent edits look like one region.
+   */
+  blobs(
+    from: string,
+    to: string,
+    options: DiffOptions & { readonly context?: number } = {},
+  ): Promise<Result<DiffFile[], GitError>> {
+    return this.run(['diff', ...diffOutputArgs(options.context ?? 3), from, to], options);
   }
 
   /** Difference between any two revisions — a branch against its upstream, say. */

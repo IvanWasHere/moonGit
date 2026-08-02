@@ -32,18 +32,24 @@
  * `--no-ext-diff` and `--no-textconv` keep a configured external differ or
  * textconv filter from replacing the output with something unparseable.
  */
-export const DIFF_OUTPUT_ARGS: readonly string[] = [
-  '--raw',
-  '-z',
-  '--patch',
-  '--no-color',
-  '--no-ext-diff',
-  '--no-textconv',
-  '--find-renames',
-  // Clamped to the repository's hash length, so this is also correct for SHA-256.
-  '--abbrev=64',
-  '-U3',
-];
+export const DIFF_CONTEXT_DEFAULT = 3;
+
+export function diffOutputArgs(context: number = DIFF_CONTEXT_DEFAULT): string[] {
+  return [
+    '--raw',
+    '-z',
+    '--patch',
+    '--no-color',
+    '--no-ext-diff',
+    '--no-textconv',
+    '--find-renames',
+    // Clamped to the repository's hash length, so this is also correct for SHA-256.
+    '--abbrev=64',
+    `-U${context}`,
+  ];
+}
+
+export const DIFF_OUTPUT_ARGS: readonly string[] = diffOutputArgs();
 
 /**
  * The same flags as a complete `git diff` invocation.

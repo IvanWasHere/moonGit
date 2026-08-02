@@ -3,7 +3,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { PanelBody } from '@/components/Panel';
 import { useStatus } from '@/queries/git';
-import { type StatusEntry } from '@/services/git';
+import { isConflicted, type StatusEntry } from '@/services/git';
 import { useWorkspaceStore, type FileSide } from '@/stores/workspaceStore';
 import { fileDir, fileName } from '@/utils/format';
 import {
@@ -90,6 +90,7 @@ export function FileList() {
 function FileRow({ entry }: { readonly entry: StatusEntry }) {
   const selected = useWorkspaceStore((state) => state.selectedFile);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
+  const openMerge = useWorkspaceStore((state) => state.openMerge);
 
   const path = displayPath(entry);
   const dir = fileDir(path);
@@ -123,6 +124,21 @@ function FileRow({ entry }: { readonly entry: StatusEntry }) {
         {dir !== '' && <span className={styles.dir}>{dir}</span>}
       </div>
       {entry.submodule !== undefined && <span className={styles.dir}>submodule</span>}
+      {/* A conflict needs somewhere to go. The badge alone says "this is
+          broken" without saying what to do about it. */}
+      {isConflicted(entry) && (
+        <button
+          type="button"
+          className={styles.resolve}
+          title="Resolve this conflict"
+          onClick={(event) => {
+            event.stopPropagation();
+            openMerge();
+          }}
+        >
+          Resolve
+        </button>
+      )}
     </div>
   );
 }

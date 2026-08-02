@@ -3,7 +3,7 @@ import { useRemotes, useStatus } from '@/queries/git';
 import { useFetch, usePull, usePush, useStage, useUnstage } from '@/queries/mutations';
 import { pushTarget } from '@/queries/pushTarget';
 import { useOpenRepository } from '@/queries/repositories';
-import { stashService } from '@/services/git';
+import { isConflicted, stashService } from '@/services/git';
 import { openExternal } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -25,6 +25,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
   const openCommit = useWorkspaceStore((state) => state.openCommit);
+  const openMerge = useWorkspaceStore((state) => state.openMerge);
 
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
@@ -39,6 +40,15 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const soon = (feature: string) => () => showToast(`${feature} arrives in Phase 6`, 'info');
   const reportError = (error: Error) => showToast(error.message, 'error');
   const needsFile = () => showToast('Select a file first', 'error');
+
+  /** Resolving conflicts; starting a merge needs the wizard (§9.3), which is not built. */
+  const openMergeTool = () => {
+    if ((status?.entries ?? []).filter(isConflicted).length === 0) {
+      showToast('No conflicts to resolve — starting a merge arrives with the wizard', 'info');
+      return;
+    }
+    openMerge();
+  };
 
   const doPush = () => {
     const resolved = pushTarget(status, remotes ?? []);
@@ -123,7 +133,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
     'branch.checkout': soon('Branch checkout'),
     'branch.create': soon('Branch create'),
     'branch.rename': soon('Branch rename'),
-    'branch.merge': soon('Merge'),
+    'branch.merge': openMergeTool,
     'branch.rebase': soon('Rebase'),
     'branch.cherryPick': soon('Cherry pick'),
     'branch.reset': soon('Reset'),

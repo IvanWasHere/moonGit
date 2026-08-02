@@ -1,0 +1,301 @@
+/* The three-way merge tool. No mockup equivalent — built from the same tokens
+   as everything else (PLAN.md §9.3). */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  /* Above every piece of app chrome — the menubar is 100 and the top menu 200,
+     and at 100 this modal rendered *under* both, losing its own header off the
+     top of the window. Below the toasts (9999), which report what it does. */
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 24px;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-width: 1600px;
+  background: var(--bg-darkest);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.title {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.count {
+  color: var(--text-muted);
+}
+
+.close {
+  margin-left: auto;
+  display: flex;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text-primary);
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.split {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* The conflicted files. A merge is rarely one file, and losing your place
+   between them is how a half-resolved file gets committed. */
+.files {
+  width: 240px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg-dark);
+}
+
+.fileRow {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileRow:hover {
+  background: var(--bg-hover);
+}
+
+.fileActive {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Result in the middle so each side is adjacent to what it would produce. */
+.columnHeads {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.columnHeads > div {
+  padding: 6px 12px;
+}
+
+.colOurs {
+  color: var(--blue);
+}
+
+.colResult {
+  color: var(--accent);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+.colTheirs {
+  color: var(--green);
+}
+
+.regions {
+  flex: 1;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Text neither side touched: context, one column wide, not a decision. */
+.identical {
+  padding: 2px 12px;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+.region {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+.conflictRegion {
+  border-left: 3px solid var(--red);
+}
+
+.regionBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 12px;
+  background: var(--bg-dark);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+}
+
+.kind {
+  flex: 1;
+}
+
+.overridden {
+  color: var(--accent);
+}
+
+.buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.choice {
+  padding: 1px 7px;
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.choice:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.chosen {
+  background: var(--bg-active);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.cell {
+  padding: 2px 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.ours {
+  background: rgba(88, 166, 255, 0.07);
+  color: var(--text-primary);
+}
+
+.result {
+  background: rgba(232, 168, 56, 0.07);
+  color: var(--text-primary);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+.theirs {
+  background: rgba(63, 185, 80, 0.07);
+  color: var(--text-primary);
+}
+
+.line {
+  min-height: 1.6em;
+}
+
+.undecided {
+  color: var(--red);
+  font-style: italic;
+}
+
+/* An empty side means "this side removed these lines", which is a real answer
+   and needs saying — a blank cell reads as a rendering failure. */
+.nothing {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Shown once the file has been edited outside the region model. */
+.detached {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-active);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.detachedText {
+  margin: 0;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+}
+
+.status {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}

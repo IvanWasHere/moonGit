@@ -92,3 +92,21 @@
 .dir {
   color: var(--text-muted);
 }
+
+/* Conflicted rows only: a badge says something is wrong, this says what to do
+   about it. */
+.resolve {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border: 1px solid var(--red);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--red);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.resolve:hover {
+  background: var(--red-dim);
+}

@@ -6,6 +6,7 @@ import { MenuBar } from '@/components/MenuBar';
 import { TopMenu } from '@/components/menu/TopMenu';
 import { useMenuActions } from '@/components/menu/useMenuActions';
 import { ToastContainer } from '@/components/ToastContainer';
+import { MergeModal } from '@/features/merge/MergeModal';
 import { useRepository } from '@/queries/repositories';
 import { useRepoWatcher } from '@/queries/useRepoWatcher';
 import { useLayoutPersistence } from '@/stores/layoutPersistence';
@@ -35,6 +36,8 @@ export function Workspace({
   const { data: repository, isPending } = useRepository(valid ? repoId : null);
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
+  const mergeOpen = useWorkspaceStore((state) => state.mergeOpen);
+  const closeMerge = useWorkspaceStore((state) => state.closeMerge);
   const openRepo = useWorkspaceStore((state) => state.openRepo);
 
   useEffect(() => {
@@ -66,6 +69,7 @@ export function Workspace({
       ) : (
         children
       )}
+      {mergeOpen && <MergeModal onClose={closeMerge} />}
       <ToastContainer />
     </div>
   );

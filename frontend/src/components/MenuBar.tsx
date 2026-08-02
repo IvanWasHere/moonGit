@@ -2,6 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useRemotes, useStatus } from '@/queries/git';
 import { useDiscard, useFetch, usePull, usePush, useStage, useUnstage } from '@/queries/mutations';
 import { pushTarget } from '@/queries/pushTarget';
+import { isConflicted } from '@/services/git';
 import { showMessage } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -50,6 +51,7 @@ export function MenuBar({
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
   const toggleCommit = useWorkspaceStore((state) => state.toggleCommit);
+  const openMerge = useWorkspaceStore((state) => state.openMerge);
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
 
@@ -63,6 +65,22 @@ export function MenuBar({
   const entry = status?.entries.find((candidate) => candidate.path === selectedFile?.path);
   const needsSelection = () => showToast('Select a file first', 'error');
   const reportError = (error: Error) => showToast(error.message, 'error');
+
+  /**
+   * The Merge button resolves conflicts; it does not start a merge.
+   *
+   * Starting one needs a branch picker, which is the other half of §9.3 and is
+   * not built. Saying so beats opening an empty resolver and letting the user
+   * conclude the tool is broken.
+   */
+  const openMergeTool = () => {
+    const conflicts = (status?.entries ?? []).filter(isConflicted);
+    if (conflicts.length === 0) {
+      showToast('No conflicts to resolve — starting a merge arrives with the wizard', 'info');
+      return;
+    }
+    openMerge();
+  };
 
   const doDiscard = () => {
     if (selectedFile === null || entry === undefined) {
@@ -164,7 +182,7 @@ export function MenuBar({
       kind: 'button',
       label: 'Merge',
       icon: Icons.Merge,
-      run: () => showToast('Merge UI arrives in Phase 6', 'info'),
+      run: openMergeTool,
     },
   ];
 
