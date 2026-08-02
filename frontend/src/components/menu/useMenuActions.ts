@@ -26,6 +26,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
   const openCommit = useWorkspaceStore((state) => state.openCommit);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
+  const openMergeWizard = useWorkspaceStore((state) => state.openMergeWizard);
 
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
@@ -41,13 +42,10 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const reportError = (error: Error) => showToast(error.message, 'error');
   const needsFile = () => showToast('Select a file first', 'error');
 
-  /** Resolving conflicts; starting a merge needs the wizard (§9.3), which is not built. */
+  /** Conflicts on the floor mean the resolver; otherwise the branch picker. */
   const openMergeTool = () => {
-    if ((status?.entries ?? []).filter(isConflicted).length === 0) {
-      showToast('No conflicts to resolve — starting a merge arrives with the wizard', 'info');
-      return;
-    }
-    openMerge();
+    if ((status?.entries ?? []).some(isConflicted)) openMerge();
+    else openMergeWizard();
   };
 
   const doPush = () => {

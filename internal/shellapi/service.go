@@ -41,6 +41,58 @@ func (s *Service) OpenExternal(rawURL string) error {
 	}
 }
 
+// OpenPath opens a local file or directory with the OS default handler.
+//
+// Deliberately separate from OpenExternal, which refuses every scheme but
+// http/https/mailto precisely so a hostile remote URL cannot become a local
+// `open`. This one takes a *path* rather than a URL, and the caller is the
+// file list — paths that came from `git status`, not from repository content
+// that names its own target.
+//
+// The path must exist. Handing `open` a missing file on macOS produces a
+// dialog the app has no control over, which is a worse failure than an error
+// the UI can show.
+func (s *Service) OpenPath(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		return err
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", path).Start()
+	case "windows":
+		return exec.Command("cmd", "/c", "start", "", path).Start()
+	default:
+		return exec.Command("xdg-open", path).Start()
+	}
+}
+
+// OpenTerminal opens a terminal with its working directory set to dir.
+//
+// dir must be a directory: `open -a Terminal <file>` on macOS opens the file
+// *in* Terminal as a script, which is not what "open terminal here" means and
+// would be a surprising thing to do to somebody's shell script.
+func (s *Service) OpenTerminal(dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("not a directory: %s", dir)
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", "-a", "Terminal", dir).Start()
+	case "windows":
+		return exec.Command("cmd", "/c", "start", "cmd", "/K", "cd /d "+dir).Start()
+	default:
+		// No portable answer on Linux; x-terminal-emulator is the Debian
+		// alternatives entry and the closest thing to a convention.
+		cmd := exec.Command("x-terminal-emulator")
+		cmd.Dir = dir
+		return cmd.Start()
+	}
+}
+
 // RevealInFinder shows a path in the OS file manager with it selected.
 func (s *Service) RevealInFinder(path string) error {
 	if _, err := os.Stat(path); err != nil {

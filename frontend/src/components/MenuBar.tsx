@@ -1,6 +1,14 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRemotes, useStatus } from '@/queries/git';
-import { useDiscard, useFetch, usePull, usePush, useStage, useUnstage } from '@/queries/mutations';
+import {
+  useAbortMerge,
+  useDiscard,
+  useFetch,
+  usePull,
+  usePush,
+  useStage,
+  useUnstage,
+} from '@/queries/mutations';
 import { pushTarget } from '@/queries/pushTarget';
 import { isConflicted } from '@/services/git';
 import { showMessage } from '@/services/wails';
@@ -52,6 +60,7 @@ export function MenuBar({
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
   const toggleCommit = useWorkspaceStore((state) => state.toggleCommit);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
+  const openMergeWizard = useWorkspaceStore((state) => state.openMergeWizard);
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
 
@@ -61,25 +70,47 @@ export function MenuBar({
   const fetch = useFetch(repoPath);
   const pull = usePull(repoPath);
   const push = usePush(repoPath);
+  const abortMerge = useAbortMerge(repoPath);
 
   const entry = status?.entries.find((candidate) => candidate.path === selectedFile?.path);
   const needsSelection = () => showToast('Select a file first', 'error');
   const reportError = (error: Error) => showToast(error.message, 'error');
 
   /**
-   * The Merge button resolves conflicts; it does not start a merge.
+   * One button, two jobs, chosen by the state the repository is actually in.
    *
-   * Starting one needs a branch picker, which is the other half of §9.3 and is
-   * not built. Saying so beats opening an empty resolver and letting the user
-   * conclude the tool is broken.
+   * With conflicts on the floor the only useful thing to offer is the
+   * resolver; offering a branch picker there would invite starting a second
+   * merge on top of an unfinished one, which git refuses anyway.
    */
   const openMergeTool = () => {
-    const conflicts = (status?.entries ?? []).filter(isConflicted);
-    if (conflicts.length === 0) {
-      showToast('No conflicts to resolve — starting a merge arrives with the wizard', 'info');
-      return;
-    }
-    openMerge();
+    if ((status?.entries ?? []).some(isConflicted)) openMerge();
+    else openMergeWizard();
+  };
+
+  /**
+   * Abort whatever merge is in progress.
+   *
+   * No check for whether there is one: git answers that itself, and its
+   * message is better than a guess of ours would be.
+   */
+  const doAbort = () => {
+    void (async () => {
+      const choice = await showMessage({
+        kind: 'warning',
+        title: 'Abort the merge?',
+        message: 'Throw away the merge and every conflict resolution made so far?',
+        buttons: ['Cancel', 'Abort'],
+        defaultButton: 'Cancel',
+        cancelButton: 'Cancel',
+      });
+      if (choice !== 'Abort') return;
+
+      abortMerge.mutate(undefined, {
+        onSuccess: () => showToast('Merge aborted', 'info'),
+        onError: reportError,
+      });
+    })();
   };
 
   const doDiscard = () => {
@@ -222,7 +253,8 @@ export function MenuBar({
       kind: 'button',
       label: 'Abort',
       icon: Icons.Abort,
-      run: () => showToast('Abort arrives with the conflict UI in Phase 6', 'info'),
+      busy: abortMerge.isPending,
+      run: doAbort,
     },
     {
       kind: 'button',

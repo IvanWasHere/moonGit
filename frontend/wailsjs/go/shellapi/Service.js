@@ -6,6 +6,14 @@ export function OpenExternal(arg1) {
   return window['go']['shellapi']['Service']['OpenExternal'](arg1);
 }
 
+export function OpenPath(arg1) {
+  return window['go']['shellapi']['Service']['OpenPath'](arg1);
+}
+
+export function OpenTerminal(arg1) {
+  return window['go']['shellapi']['Service']['OpenTerminal'](arg1);
+}
+
 export function RevealInFinder(arg1) {
   return window['go']['shellapi']['Service']['RevealInFinder'](arg1);
 }

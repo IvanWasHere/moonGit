@@ -1,4 +1,5 @@
 import {
+  DeletePath,
   Exists,
   HomeDir,
   ListDir,
@@ -21,6 +22,11 @@ export function readFileBase64(path: string): Promise<FileContent> {
 /** Writes atomically via a temp file + rename, so a crash cannot truncate. */
 export function writeFile(path: string, contents: string): Promise<void> {
   return WriteFile(path, contents);
+}
+
+/** Removes a file or an empty directory. Never recursive — see the Go side. */
+export function deletePath(path: string): Promise<void> {
+  return DeletePath(path);
 }
 
 export function statPath(path: string): Promise<FileInfo> {

@@ -7,6 +7,7 @@ import { TopMenu } from '@/components/menu/TopMenu';
 import { useMenuActions } from '@/components/menu/useMenuActions';
 import { ToastContainer } from '@/components/ToastContainer';
 import { MergeModal } from '@/features/merge/MergeModal';
+import { MergeWizard } from '@/features/merge/MergeWizard';
 import { useRepository } from '@/queries/repositories';
 import { useRepoWatcher } from '@/queries/useRepoWatcher';
 import { useLayoutPersistence } from '@/stores/layoutPersistence';
@@ -38,6 +39,8 @@ export function Workspace({
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
   const mergeOpen = useWorkspaceStore((state) => state.mergeOpen);
   const closeMerge = useWorkspaceStore((state) => state.closeMerge);
+  const mergeWizardOpen = useWorkspaceStore((state) => state.mergeWizardOpen);
+  const closeMergeWizard = useWorkspaceStore((state) => state.closeMergeWizard);
   const openRepo = useWorkspaceStore((state) => state.openRepo);
 
   useEffect(() => {
@@ -70,6 +73,7 @@ export function Workspace({
         children
       )}
       {mergeOpen && <MergeModal onClose={closeMerge} />}
+      {mergeWizardOpen && <MergeWizard onClose={closeMergeWizard} />}
       <ToastContainer />
     </div>
   );

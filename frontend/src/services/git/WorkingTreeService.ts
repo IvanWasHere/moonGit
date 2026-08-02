@@ -120,6 +120,56 @@ export class WorkingTreeService {
     if (paths.length === 0) return Promise.resolve(ok(undefined));
     return this.run(['rm', '--cached', '--quiet', '--', ...paths], options);
   }
+
+  /** Stop tracking a file *and* delete it from the working tree. */
+  removeFromDisk(
+    paths: readonly string[],
+    options: ReadOptions = {},
+  ): Promise<Result<void, GitError>> {
+    if (paths.length === 0) return Promise.resolve(ok(undefined));
+    // `-f` because a file with staged or unstaged changes is exactly the one a
+    // user reaches for this on, and git refuses those without it.
+    return this.run(['rm', '-f', '--quiet', '--', ...paths], options);
+  }
+
+  /**
+   * Throw away *both* halves of a file's changes — index and working tree.
+   *
+   * Distinct from `discard`, which restores the working tree only and leaves
+   * anything staged alone. This is the "put it back the way HEAD has it"
+   * action, and on a staged-and-modified file the two give different results.
+   */
+  revert(paths: readonly string[], options: ReadOptions = {}): Promise<Result<void, GitError>> {
+    if (paths.length === 0) return Promise.resolve(ok(undefined));
+    return this.run(
+      ['restore', '--source=HEAD', '--staged', '--worktree', '--', ...paths],
+      options,
+    );
+  }
+
+  /**
+   * Resolve a conflict by taking one side of it whole.
+   *
+   * `checkout --ours/--theirs` writes that stage over the working-tree file but
+   * leaves the path *unmerged* — so the `add` is not an optional extra, it is
+   * what marks the conflict resolved. Without it the file still reads as
+   * conflicted and the merge cannot be committed.
+   */
+  async resolveUsing(
+    paths: readonly string[],
+    side: 'ours' | 'theirs',
+    options: ReadOptions = {},
+  ): Promise<Result<void, GitError>> {
+    if (paths.length === 0) return ok(undefined);
+    const taken = await this.run(['checkout', `--${side}`, '--', ...paths], options);
+    if (!taken.ok) return taken;
+    return this.run(['add', '--', ...paths], options);
+  }
+
+  /** Rename or move a tracked file, keeping its history. */
+  move(from: string, to: string, options: ReadOptions = {}): Promise<Result<void, GitError>> {
+    return this.run(['mv', '--', from, to], options);
+  }
 }
 
 const services = new Map<string, WorkingTreeService>();

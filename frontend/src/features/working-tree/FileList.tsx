@@ -1,4 +1,11 @@
+import { useState } from 'react';
 import { StatusBadge } from '@/components/Badges';
+import {
+  ContextMenu,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextSubmenu,
+} from '@/components/ContextMenu';
 import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { PanelBody } from '@/components/Panel';
@@ -13,6 +20,8 @@ import {
   sortEntries,
   type DisplayStatus,
 } from './statusDisplay';
+import { fileMenuFor, type FileMenuItem } from './fileMenu';
+import { useFileMenuActions } from './useFileMenuActions';
 import styles from './FileList.module.css';
 
 /**
@@ -34,6 +43,11 @@ import styles from './FileList.module.css';
 export function FileList() {
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const { data: status, isPending, error } = useStatus(repoPath);
+
+  // The open menu, and where. Held here rather than per row so only one can be
+  // open at a time without every row having to know about the others.
+  const [menu, setMenu] = useState<{ entry: StatusEntry; x: number; y: number } | null>(null);
+  const openMenu = (entry: StatusEntry, x: number, y: number) => setMenu({ entry, x, y });
 
   if (repoPath === null) {
     return (
@@ -81,13 +95,90 @@ export function FileList() {
         <div>File</div>
       </div>
       {files.map((entry) => (
-        <FileRow key={entry.path} entry={entry} />
+        <FileRow key={entry.path} entry={entry} onContextMenu={openMenu} />
       ))}
+      {menu !== null && (
+        <FileContextMenu
+          entry={menu.entry}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          repoPath={repoPath}
+        />
+      )}
     </PanelBody>
   );
 }
 
-function FileRow({ entry }: { readonly entry: StatusEntry }) {
+/**
+ * The right-click menu for one file.
+ *
+ * Its contents come from `fileMenu.ts`, which decides them from git status
+ * alone — so what a conflicted file offers versus an untracked one is a tested
+ * property rather than a branch buried in this render.
+ */
+function FileContextMenu({
+  entry,
+  x,
+  y,
+  onClose,
+  repoPath,
+}: {
+  readonly entry: StatusEntry;
+  readonly x: number;
+  readonly y: number;
+  readonly onClose: () => void;
+  readonly repoPath: string;
+}) {
+  const run = useFileMenuActions(repoPath);
+  const entries = fileMenuFor(entry);
+
+  const choose = (menuItem: FileMenuItem) => {
+    onClose();
+    run(entry, menuItem);
+  };
+
+  return (
+    <ContextMenu x={x} y={y} onClose={onClose}>
+      {entries.map((menuEntry, index) => {
+        if (menuEntry.kind === 'separator') {
+          return <ContextMenuSeparator key={`sep-${index}`} />;
+        }
+        if (menuEntry.kind === 'submenu') {
+          return (
+            <ContextSubmenu key={menuEntry.label} label={menuEntry.label}>
+              {menuEntry.items.map((child) => (
+                <ContextMenuItem
+                  key={child.action}
+                  label={child.label}
+                  onSelect={() => choose(child)}
+                />
+              ))}
+            </ContextSubmenu>
+          );
+        }
+        return (
+          <ContextMenuItem
+            key={menuEntry.action}
+            label={menuEntry.label}
+            {...(menuEntry.disabled !== undefined && { disabled: menuEntry.disabled })}
+            {...(menuEntry.hint !== undefined && { hint: menuEntry.hint })}
+            {...(menuEntry.destructive !== undefined && { destructive: menuEntry.destructive })}
+            onSelect={() => choose(menuEntry)}
+          />
+        );
+      })}
+    </ContextMenu>
+  );
+}
+
+function FileRow({
+  entry,
+  onContextMenu,
+}: {
+  readonly entry: StatusEntry;
+  readonly onContextMenu: (entry: StatusEntry, x: number, y: number) => void;
+}) {
   const selected = useWorkspaceStore((state) => state.selectedFile);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
@@ -101,6 +192,13 @@ function FileRow({ entry }: { readonly entry: StatusEntry }) {
     <div
       className={`${styles.file} ${isSelected ? styles.selected : ''}`}
       onClick={() => selectFile({ path: entry.path, side: defaultSide(entry) })}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        // Select as well as open: every action in the menu is about this file,
+        // and leaving the diff pane showing a different one is disorienting.
+        selectFile({ path: entry.path, side: defaultSide(entry) });
+        onContextMenu(entry, event.clientX, event.clientY);
+      }}
       title={path}
     >
       <div className={styles.statusCell}>

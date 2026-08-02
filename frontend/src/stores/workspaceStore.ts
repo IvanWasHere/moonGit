@@ -80,7 +80,18 @@ interface WorkspaceState {
   readonly commitOpen: boolean;
   /** The three-way merge tool, which is modal over the whole workspace. */
   readonly mergeOpen: boolean;
+  /** The branch picker that starts a merge. Separate: one begins the operation,
+   *  the other cleans up after it, and both can be reached independently. */
+  readonly mergeWizardOpen: boolean;
   readonly diffView: DiffViewMode;
+  /**
+   * Restrict the Journal to one file's history ("File Log"), or null for all.
+   *
+   * A path rather than a boolean, because the filter *is* the path — and like
+   * every other selection here it survives a refetch, which a row index would
+   * not.
+   */
+  readonly logPath: string | null;
   readonly main: MainLayout;
   readonly review: ReviewLayout;
 
@@ -94,7 +105,10 @@ interface WorkspaceState {
   toggleCommit: () => void;
   openMerge: () => void;
   closeMerge: () => void;
+  openMergeWizard: () => void;
+  closeMergeWizard: () => void;
   setDiffView: (mode: DiffViewMode) => void;
+  setLogPath: (path: string | null) => void;
   setMain: (patch: Partial<MainLayout>) => void;
   setReview: (patch: Partial<ReviewLayout>) => void;
   resetLayout: () => void;
@@ -109,9 +123,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   commitMessage: '',
   commitOpen: false,
   mergeOpen: false,
+  mergeWizardOpen: false,
   // Inline by default: it is the mockup's layout, and the Changes pane is
   // narrow enough at its default size that split would truncate both halves.
   diffView: 'inline',
+  logPath: null,
   main: MAIN_DEFAULTS,
   review: REVIEW_DEFAULTS,
 
@@ -134,6 +150,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       commitMessage: '',
       commitOpen: false,
       mergeOpen: false,
+      mergeWizardOpen: false,
+      logPath: null,
     });
   },
 
@@ -149,8 +167,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   openMerge: () => set({ mergeOpen: true }),
   closeMerge: () => set({ mergeOpen: false }),
+  openMergeWizard: () => set({ mergeWizardOpen: true }),
+  closeMergeWizard: () => set({ mergeWizardOpen: false }),
 
   setDiffView: (diffView) => set({ diffView }),
+
+  setLogPath: (logPath) => set({ logPath }),
 
   setMain: (patch) => set((state) => ({ main: { ...state.main, ...patch } })),
   setReview: (patch) => set((state) => ({ review: { ...state.review, ...patch } })),

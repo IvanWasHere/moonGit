@@ -19,7 +19,16 @@ export function JournalView() {
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const selectedCommit = useWorkspaceStore((state) => state.selectedCommit);
   const selectCommit = useWorkspaceStore((state) => state.selectCommit);
-  const { data: commits, isPending, error } = useLog(repoPath, { maxCount: PAGE_SIZE });
+  const logPath = useWorkspaceStore((state) => state.logPath);
+  const setLogPath = useWorkspaceStore((state) => state.setLogPath);
+  const {
+    data: commits,
+    isPending,
+    error,
+  } = useLog(repoPath, {
+    maxCount: PAGE_SIZE,
+    ...(logPath !== null && { paths: [logPath] }),
+  });
 
   if (repoPath === null) {
     return (
@@ -42,16 +51,34 @@ export function JournalView() {
       </PanelBody>
     );
   }
+  // The filter has to be visible and reversible. A journal quietly showing one
+  // file's history reads as a repository with almost no commits in it.
+  const banner =
+    logPath === null ? null : (
+      <div className={styles.filterBar}>
+        <Icons.Filter size={11} />
+        <span className={styles.filterPath}>{logPath}</span>
+        <button type="button" className={styles.filterClear} onClick={() => setLogPath(null)}>
+          Show all
+        </button>
+      </div>
+    );
+
   if (commits.length === 0) {
     return (
       <PanelBody>
-        <EmptyState icon={Icons.Journal} message="No commits yet" />
+        {banner}
+        <EmptyState
+          icon={Icons.Journal}
+          message={logPath === null ? 'No commits yet' : 'No commits touched this file'}
+        />
       </PanelBody>
     );
   }
 
   return (
     <PanelBody>
+      {banner}
       {commits.map((commit) => (
         <div
           key={commit.oid}

@@ -4,6 +4,10 @@ import {context} from '../models';
 
 export function OpenExternal(arg1:string):Promise<void>;
 
+export function OpenPath(arg1:string):Promise<void>;
+
+export function OpenTerminal(arg1:string):Promise<void>;
+
 export function RevealInFinder(arg1:string):Promise<void>;
 
 export function Startup(arg1:context.Context):Promise<void>;

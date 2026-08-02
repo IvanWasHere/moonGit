@@ -3,11 +3,13 @@ import {
   branchService,
   commitService,
   isStaged,
+  mergeService,
   remoteService,
   workingTreeService,
   type CommitOutcome,
   type DiscardTarget,
   type GitError,
+  type IntegrationOutcome,
   type PushOutcome,
   type RepoStatus,
   type Result,
@@ -274,6 +276,54 @@ export function usePull(repoPath: string | null) {
           ...(variables?.rebase !== undefined && { rebase: variables.rebase }),
         }),
       );
+    },
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+// --- merge ------------------------------------------------------------------
+
+export interface MergeVariables {
+  /** The ref being merged *into* the current branch. */
+  readonly ref: string;
+  readonly noFastForward?: boolean;
+  readonly fastForwardOnly?: boolean;
+  readonly squash?: boolean;
+  readonly message?: string;
+}
+
+/**
+ * Merge a ref into the current branch.
+ *
+ * A conflict is **not** an error here, and that is the whole reason this is a
+ * mutation returning an outcome rather than one that throws: a conflicted
+ * merge leaves the repository in a state the user has to be shown and helped
+ * out of. `IntegrationService` already draws that line — only a bad ref, a
+ * dirty tree or a refused fast-forward come back as errors.
+ */
+export function useMerge(repoPath: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation<IntegrationOutcome, GitQueryError, MergeVariables>({
+    mutationFn: async ({ ref, ...options }) =>
+      unwrap(await mergeService(repoPath ?? '').merge(ref, options)),
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+/**
+ * Throw away a conflicted merge.
+ *
+ * No check for whether a merge is in progress: git answers that itself
+ * ("fatal: There is no merge to abort"), and a check of our own would be a
+ * second, staler opinion about the same question.
+ */
+export function useAbortMerge(repoPath: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, GitQueryError, void>({
+    mutationFn: async () => {
+      unwrap(await mergeService(repoPath ?? '').abort());
     },
     onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
   });

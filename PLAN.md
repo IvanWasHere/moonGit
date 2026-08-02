@@ -417,7 +417,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 
 1. **Diff viewer**: side-by-side, inline, syntax highlighting (~~Monaco~~ **Shiki** — see below), word diff, image diff, large-file guard
 2. **Commit graph**: lane layout, branch colors, merge visualization
-3. **Merge**: wizard, conflict detection, ~~conflict viewer, resolution helper~~ ✅ (below)
+3. ~~**Merge**: wizard, conflict detection, conflict viewer, resolution helper~~ ✅ (below)
 4. **Rebase**: interactive, continue/skip/abort, squash/edit
 5. **Cherry-pick**, **Stash**, **Tags**
 6. **Search**: commits / files / branches / tags / messages / authors
@@ -471,6 +471,82 @@ The plan named Monaco. Monaco is an *editor*, and its `DiffEditor` recomputes di
 `RunBase64` was added to `gitexec` — Run with stdout base64-encoded. **The reason is not what it first looked like:** a Go string holds arbitrary bytes, so `Run` does not damage binary output. The damage happens where results are marshalled to JSON for the bridge, and `encoding/json` replaces invalid UTF-8 with U+FFFD silently. A PNG read through the ordinary path arrives corrupted with no error anywhere. The first version of the test asserted the wrong layer and failed, which is how the real culprit was found; it now asserts a JSON round trip, and `GitRunner` refuses base64 on a bridge that cannot do it rather than downgrading to text.
 
 The panes show dimensions and byte size beside each version, because that is usually where the answer is — an asset re-exported at half resolution looks identical until the numbers are side by side — and sit on a checkerboard so a transparent PNG does not read as a white one.
+
+### ✅ File context menu
+
+Right-click on any row in the Files panel. **What appears is decided by git status**, in `features/working-tree/fileMenu.ts` — pure, and tested the way `menuConfig.ts` is, because the interesting part of a context menu is *which items are in it*.
+
+The rule: an item is present when it would do something. "Unstage" on a file with nothing staged is an invitation to a no-op; "Revert to HEAD" on a staged addition names a version that does not exist. So the four states get four menus:
+
+| | |
+|---|---|
+| **Modified** | the full set — open, stage, discard, revert, ignore, remove, rename, delete, file log, copy paths |
+| **Untracked** | staging is called **Add**, as git calls it; no unstage, revert, remove, rename or file log, none of which mean anything without a tracked history |
+| **Staged** | adds Unstage and Commit Selected |
+| **Conflicted** | its own menu entirely — the four ways out of the conflict first, and **no staging or discarding at all**. Staging a file with conflict markers still in it is the mistake this prevents, and "discard the changes" is meaningless when there are two sides of them |
+
+**Unbuilt features are absent, not greyed** — a disabled row says "this exists and you cannot have it", which is right for something blocked by state and wrong for something we have not written. The one exception is `Stage Hunk` / `Stage Selected Lines`, shown disabled and labelled *Index Editor*, because their absence from a file menu would read as an oversight rather than as a feature that has not landed.
+
+**Destructive actions are data, not special cases.** The menu model marks them; one gate in `useFileMenuActions` confirms every one through a native dialog. Adding a destructive item cannot forget its confirmation.
+
+New plumbing this needed: `shellapi.OpenPath` and `OpenTerminal`, `fsapi.DeletePath` (deliberately non-recursive — a recursive delete reachable from the frontend is one wrong path away from removing a working tree), `WorkingTreeService.removeFromDisk` / `revert` / `resolveUsing` / `move`, and clipboard access through the Wails runtime rather than `navigator.clipboard`, which needs a secure context the webview does not grant.
+
+Verified live against a repository holding a modified, a staged, an untracked and a conflicted file:
+
+| | Result |
+|---|---|
+| Menu shape | Modified and untracked menus matched the model exactly, including `Add` rather than `Stage` |
+| Submenu | `Ignore by Name` / `Ignore *.ts` / `Edit .gitignore`, with the extension read from the file |
+| Ignore | `Ignore *.log` wrote `*.log` to a `.gitignore` that did not exist, and the file left the list |
+| File Log | Journal filtered to `src/app.ts` with a sticky bar and "Show all" |
+| Copy Relative Path | `src/app.ts` on the system clipboard, confirmed with `pbpaste` |
+
+**Three bugs the live run caught, two of them mine from earlier work:**
+
+1. **`OpenExternal` refuses file paths** — by design, so a hostile remote URL cannot become a local `open`. Which means the merge tool's "Edit in editor", shipped in the previous session, **never worked**: it passed a path to a function that only accepts http/https/mailto. Fixed by adding `OpenPath` and pointing both callers at it. The security property is intact — the new call takes a path, and its callers pass paths from `git status`, not strings from repository content.
+2. **The submenu rendered as an empty sliver.** The parent menu needs `overflow-y: auto` to scroll, and CSS computes `overflow-x: visible` to `auto` the moment the other axis is not visible — so the submenu was clipped at the parent's right edge. Portalled it, like the parent, which is the same fix for a sharper version of the same problem.
+3. **Every menu item was unclickable.** The dismiss listener is on `window` in the capture phase, so it ran before the event reached any React handler and the menu unmounted on mousedown — no click ever landed. `stopPropagation` inside the menu cannot fix that because it is already too late. The menu surfaces now carry a `data-context-menu` attribute and the listener tests `closest()` instead, which also covers submenus in their own portals.
+
+**Left out, and why:**
+
+- **Stage Hunk / Stage Selected Lines** — this is the Index Editor (a menubar button in its own right). It needs patch construction and `git apply --cached`, not a menu entry.
+- **Open With, Open in External Compare Tool, Open in External Editor** — all three name a *configured* tool, and there is no settings surface yet (§9.8). `Open` uses the OS default handler, which for a source file is usually the user's editor anyway.
+- **Annotate (Blame)** and **Compare Against HEAD** — both need a view that does not exist; Blame is its own menubar button. `File Log` is the one History item that could be real today, so it is.
+- **Properties** — a file-info panel of its own, overlapping what a future file view will show.
+
+### ✅ Phase 6.3 — the merge wizard
+
+The other half of §9.3: picking what to merge, and **seeing what it would do before it does it**.
+
+`git merge` says whether it fast-forwarded or made a commit *after* the fact, and by then a merge bubble is in the history. Two commit counts answer it in advance — `HEAD..<ref>` for what is coming in, `<ref>..HEAD` for what we have that the ref does not:
+
+| incoming | outgoing | shape |
+|---|---|---|
+| 0 | any | already up to date; Merge is disabled |
+| >0 | 0 | fast-forward — linear, no merge commit |
+| >0 | >0 | diverged — a merge commit is needed |
+
+`--ff-only` is **disabled, not offered**, on a diverged pair. Offering it produces git's `hint: Diverging branches can't be fast-forwarded` and exit 128 — an error for a choice the UI should never have allowed. Dimmed rather than hidden, because "you cannot fast-forward this" is information and a control that vanishes leaves the user hunting for it.
+
+**One Merge button, routed by state.** Conflicts on the floor open the resolver; a clean tree opens the wizard. Offering a branch picker mid-conflict would invite starting a second merge on top of an unfinished one, which git refuses anyway. A conflicted result closes the wizard and opens the resolver on it, which is the only useful next step.
+
+**`Abort` is now real** — `merge --abort`, behind a native confirm. It does not check whether a merge is in progress first: git answers that itself (`fatal: There is no merge to abort (MERGE_HEAD missing)`), and a check of ours would be a second, staler opinion about the same question.
+
+Verified live on a repo with one fast-forwardable branch and one diverged:
+
+| | Result |
+|---|---|
+| Fast-forward preview | "2 commits would move onto **main** with no merge commit" — matching `rev-list --count` exactly; both commits listed |
+| Diverged preview | "Merge commit. …1 commit to bring into **main**, which also has commits **feature/diverged** does not" |
+| `--ff-only` | Enabled for the fast-forwardable branch, greyed with "Not possible: the branches have diverged" for the other |
+| Message field | Disabled on a fast-forward, which writes no commit |
+| Conflicted merge | Wizard closed, resolver opened on `config.ts` with the single conflict |
+| Fast-forward run | Linear history, **one parent, no merge commit**, `main` == `feature/ahead` |
+| Abort | Restored `main` and cleared `MERGE_HEAD`; the watcher returned the UI to clean unprompted |
+
+**The outgoing side deliberately has no number.** Its query asks for one commit, because all it has to answer is "any?" — so the summary says "which also has commits X does not" rather than naming a count that would be the query's limit, not the repository's truth. The incoming count is capped at 50 and renders as `50+` past it.
+
+**Not exercised interactively**: the abort confirmation (a native window the browser automation cannot answer — the command behind it was run directly), and `--no-ff` / `--squash`, which pass straight to `MergeService` and were verified in Phase 2.
 
 ### ✅ Phase 6.3 (part) — the three-way merge tool
 

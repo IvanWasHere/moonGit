@@ -1,0 +1,285 @@
+/* The merge wizard. Same shell as the resolver (MergeModal.module.css) —
+   including the z-index, which has to clear the top menu at 200. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 40px;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1000px;
+  height: 100%;
+  max-height: 640px;
+  background: var(--bg-darkest);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.title {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.branch {
+  color: var(--green);
+}
+
+.close {
+  margin-left: auto;
+  display: flex;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text-primary);
+}
+
+.split {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --- the picker --- */
+
+.picker {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--bg-dark);
+}
+
+.search {
+  margin: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-darkest);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.branchList {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.branchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.branchRow:hover {
+  background: var(--bg-hover);
+}
+
+.branchActive {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.branchName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.age {
+  color: var(--text-muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* --- the plan --- */
+
+.plan {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* What the merge would actually do — the reason this screen exists, so it is
+   the first thing on it. */
+.summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.summary strong {
+  color: var(--text-primary);
+}
+
+.commits {
+  flex: 1;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.commit {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 14px;
+}
+
+.commit:hover {
+  background: var(--bg-hover);
+}
+
+.oid {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.subject {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.author {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.none {
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* --- options --- */
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-dark);
+}
+
+.toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* Dimmed rather than hidden: "you cannot fast-forward this" is information,
+   and a control that vanishes leaves the user wondering where it went. */
+.toggleDisabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toggleLabel {
+  color: var(--text-primary);
+}
+
+.toggleHint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.message {
+  margin-top: 4px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-darkest);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.message:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.message:disabled {
+  opacity: 0.45;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+}
+
+.status {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}

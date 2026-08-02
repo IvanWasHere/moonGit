@@ -4,7 +4,13 @@ import {
   SelectFile,
   ShowMessage,
 } from '../../../wailsjs/go/dialogs/Service';
-import { OpenExternal, RevealInFinder } from '../../../wailsjs/go/shellapi/Service';
+import {
+  OpenExternal,
+  OpenPath,
+  OpenTerminal,
+  RevealInFinder,
+} from '../../../wailsjs/go/shellapi/Service';
+import { ClipboardSetText } from '../../../wailsjs/runtime/runtime';
 import type { MessageOptions } from './types';
 
 /** Returns '' when the user cancels — a normal outcome, not an error. */
@@ -32,4 +38,31 @@ export function openExternal(url: string): Promise<void> {
 
 export function revealInFinder(path: string): Promise<void> {
   return RevealInFinder(path);
+}
+
+/**
+ * Open a local file or directory with the OS default handler.
+ *
+ * Separate from `openExternal` on purpose: that one refuses every scheme but
+ * http/https/mailto so a hostile remote URL cannot become a local `open`. This
+ * takes a path, and its callers pass paths that came from `git status` rather
+ * than from repository content naming its own target.
+ */
+export function openPath(path: string): Promise<void> {
+  return OpenPath(path);
+}
+
+/** Open a terminal with its working directory set to `dir`. */
+export function openTerminal(dir: string): Promise<void> {
+  return OpenTerminal(dir);
+}
+
+/**
+ * Put text on the system clipboard.
+ *
+ * Through the Wails runtime rather than `navigator.clipboard`, which needs a
+ * secure context and a permission the webview does not grant.
+ */
+export function copyToClipboard(text: string): Promise<boolean> {
+  return ClipboardSetText(text);
 }

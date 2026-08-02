@@ -100,3 +100,45 @@
   max-height: 6em;
   overflow: hidden;
 }
+
+/* The File Log filter. Sticky, because a journal showing one file's history
+   without saying so reads as a repository with almost no commits in it. */
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-active);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.filterPath {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+}
+
+.filterClear {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.filterClear:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}

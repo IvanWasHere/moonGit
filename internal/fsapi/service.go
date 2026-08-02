@@ -149,6 +149,20 @@ func (s *Service) WriteFile(path string, contents string) error {
 	return os.Rename(tmpName, path)
 }
 
+// DeletePath removes a file, or an empty directory.
+//
+// Not recursive, on purpose. A recursive delete reachable from the frontend is
+// one wrong path away from removing a working tree, and nothing in the UI
+// needs it: deleting a tracked file goes through `git rm`, and the one case
+// this serves is an untracked file the user asked to delete. A non-empty
+// directory comes back as an error the UI can show rather than a surprise.
+func (s *Service) DeletePath(path string) error {
+	if _, err := os.Lstat(path); err != nil {
+		return err
+	}
+	return os.Remove(path)
+}
+
 func (s *Service) Stat(path string) (FileInfo, error) {
 	fi, err := os.Stat(path)
 	if err != nil {

@@ -1,0 +1,87 @@
+/* Right-click menus. No mockup equivalent; built from the same tokens as the
+   application menu (menu/TopMenu.module.css) so the two read as one system. */
+
+.menu {
+  position: fixed;
+  z-index: 2000;
+  min-width: 220px;
+  max-height: calc(100vh - 12px);
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  user-select: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.item:hover:not(:disabled) {
+  background: var(--bg-active);
+}
+
+.item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.destructive {
+  color: var(--red);
+}
+
+.destructive:hover:not(:disabled) {
+  background: var(--red-dim);
+}
+
+.label {
+  flex: 1;
+  white-space: nowrap;
+}
+
+/* Why a disabled item is disabled — "Index Editor" rather than nothing, so the
+   greying reads as "not yet" instead of "not for this file". */
+.hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.chevron {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Positioned by the component, in a portal — the parent menu scrolls, and a
+   scrolling parent clips on both axes whatever the CSS says about overflow-x. */
+.submenu {
+  position: fixed;
+  z-index: 2001;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}

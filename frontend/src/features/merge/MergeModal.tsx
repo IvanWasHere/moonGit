@@ -5,7 +5,7 @@ import { Icons } from '@/components/icons';
 import { useStatus } from '@/queries/git';
 import { useStage } from '@/queries/mutations';
 import { isConflicted, type StatusEntry } from '@/services/git';
-import { openExternal, readFile, writeFile } from '@/services/wails';
+import { openPath, readFile, writeFile } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useMergeFile } from './useMergeFile';
@@ -137,11 +137,15 @@ function MergeFileView({
    * The resolution so far is written first — opening a file still full of
    * git's conflict markers, having just spent time on the regions, would throw
    * that work away. After this the file is the source of truth.
+   *
+   * `openPath`, not `openExternal`: the latter refuses every scheme but
+   * http/https/mailto, so it rejected the file path outright. Caught when the
+   * file context menu needed the same call.
    */
   const editExternally = async () => {
     try {
       await writeFile(absolutePath, resultText);
-      await openExternal(absolutePath);
+      await openPath(absolutePath);
       const content = await readFile(absolutePath);
       setDetached(content.text ?? resultText);
       showToast('Opened in your editor — this file now drives the result', 'info');
