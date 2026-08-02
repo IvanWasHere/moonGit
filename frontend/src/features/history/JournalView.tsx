@@ -1,9 +1,12 @@
+import { useMemo } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { PanelBody } from '@/components/Panel';
 import { useLog } from '@/queries/git';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { timeAgo } from '@/utils/format';
+import { CommitGraph } from './CommitGraph';
+import { buildGraph } from './graph';
 import styles from './History.module.css';
 
 /**
@@ -27,8 +30,16 @@ export function JournalView() {
     error,
   } = useLog(repoPath, {
     maxCount: PAGE_SIZE,
+    // Topological, so a branch's commits stay together and the graph's lanes
+    // do not zig-zag between branches that happen to interleave by date.
+    topoOrder: true,
     ...(logPath !== null && { paths: [logPath] }),
   });
+
+  // Lane assignment is cheap for a page of commits — a few hundred rows of an
+  // O(commits × lanes) walk. Whether it needs a Worker is a question for the
+  // full history (PLAN.md §10), and one to answer with a measurement.
+  const graph = useMemo(() => buildGraph(commits ?? []), [commits]);
 
   if (repoPath === null) {
     return (
@@ -79,32 +90,37 @@ export function JournalView() {
   return (
     <PanelBody>
       {banner}
-      {commits.map((commit) => (
+      {commits.map((commit, index) => (
         <div
           key={commit.oid}
           className={`${styles.entry} ${selectedCommit === commit.oid ? styles.selected : ''}`}
           onClick={() => selectCommit(commit.oid)}
         >
-          <div className={styles.head}>
-            <div className={styles.hash}>{commit.shortOid}</div>
-            <div className={styles.author}>{commit.author.name}</div>
-            <div className={styles.time}>{timeAgo(commit.author.date * 1000)}</div>
-          </div>
-          <div className={styles.message}>{commit.subject}</div>
-          {commit.decorations.length > 0 && (
-            <div className={styles.refs}>
-              {commit.decorations.map((decoration) => (
-                <span
-                  key={decoration.name}
-                  className={`${styles.ref} ${decoration.kind === 'tag' ? styles.refTag : ''} ${
-                    decoration.isHead ? styles.refHead : ''
-                  }`}
-                >
-                  {decoration.shortName}
-                </span>
-              ))}
-            </div>
+          {graph.rows[index] !== undefined && (
+            <CommitGraph row={graph.rows[index]} lanes={graph.lanes} />
           )}
+          <div className={styles.entryBody}>
+            <div className={styles.head}>
+              <div className={styles.hash}>{commit.shortOid}</div>
+              <div className={styles.author}>{commit.author.name}</div>
+              <div className={styles.time}>{timeAgo(commit.author.date * 1000)}</div>
+            </div>
+            <div className={styles.message}>{commit.subject}</div>
+            {commit.decorations.length > 0 && (
+              <div className={styles.refs}>
+                {commit.decorations.map((decoration) => (
+                  <span
+                    key={decoration.name}
+                    className={`${styles.ref} ${decoration.kind === 'tag' ? styles.refTag : ''} ${
+                      decoration.isHead ? styles.refHead : ''
+                    }`}
+                  >
+                    {decoration.shortName}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       ))}
     </PanelBody>

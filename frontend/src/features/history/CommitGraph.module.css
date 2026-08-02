@@ -1,0 +1,44 @@
+/* The commit graph column (PLAN.md §9.2). No mockup equivalent — the mockup's
+   journal was a flat list with no topology in it at all. */
+
+.graph {
+  position: relative;
+  flex-shrink: 0;
+  align-self: stretch;
+  /* Drawn behind the row's hover and selection tints rather than over them. */
+  pointer-events: none;
+}
+
+/* Fills the row whatever height it turned out to be; the viewBox scales with
+   it, which is why the strokes are non-scaling and the node is not in here. */
+.lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* A CSS circle rather than an SVG one, so the stretching that lets the lines
+   fit a variable-height row cannot turn it into an ellipse. */
+.node {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  background: var(--bg-darkest);
+  box-sizing: border-box;
+}
+
+/* Filled, so a merge reads differently from an ordinary commit at a glance. */
+.merge {
+  background: currentColor;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  margin-top: -5.5px;
+}

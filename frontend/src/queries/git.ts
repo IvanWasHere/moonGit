@@ -79,6 +79,7 @@ export interface LogParams {
   readonly revisions?: readonly string[];
   readonly paths?: readonly string[];
   readonly firstParent?: boolean;
+  readonly topoOrder?: boolean;
 }
 
 export function useLog(

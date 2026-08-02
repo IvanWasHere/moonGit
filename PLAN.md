@@ -416,7 +416,7 @@ Verified live against the seeded test repos:
 Nothing below exists in the mockup — each needs UI design as well as implementation. Ordered by value:
 
 1. **Diff viewer**: side-by-side, inline, syntax highlighting (~~Monaco~~ **Shiki** — see below), word diff, image diff, large-file guard
-2. **Commit graph**: lane layout, branch colors, merge visualization
+2. ~~**Commit graph**: lane layout, branch colors, merge visualization~~ ✅ (below)
 3. ~~**Merge**: wizard, conflict detection, conflict viewer, resolution helper~~ ✅ (below)
 4. **Rebase**: interactive, continue/skip/abort, squash/edit
 5. **Cherry-pick**, **Stash**, **Tags**
@@ -471,6 +471,34 @@ The plan named Monaco. Monaco is an *editor*, and its `DiffEditor` recomputes di
 `RunBase64` was added to `gitexec` — Run with stdout base64-encoded. **The reason is not what it first looked like:** a Go string holds arbitrary bytes, so `Run` does not damage binary output. The damage happens where results are marshalled to JSON for the bridge, and `encoding/json` replaces invalid UTF-8 with U+FFFD silently. A PNG read through the ordinary path arrives corrupted with no error anywhere. The first version of the test asserted the wrong layer and failed, which is how the real culprit was found; it now asserts a JSON round trip, and `GitRunner` refuses base64 on a bridge that cannot do it rather than downgrading to text.
 
 The panes show dimensions and byte size beside each version, because that is usually where the answer is — an asset re-exported at half resolution looks identical until the numbers are side by side — and sit on a checkerboard so a transparent PNG does not read as a white one.
+
+### ✅ Phase 6.2 — the commit graph
+
+Lanes, colours and merge topology beside every row in the Journal. `features/history/graph.ts` is pure and tested; `CommitGraph.tsx` draws one row.
+
+**The model is a set of lanes**, each holding the object id it is next expecting. Walking newest-first: a commit takes the lane already waiting for it (other lanes waiting for the same id are its other children, and converge); a commit nothing waits for is a tip and opens a lane; its **first parent continues in the same lane**, which is what makes a branch one straight column of one colour; every further parent peels off into its own.
+
+**Lanes are never renumbered.** Compacting after a branch ends would narrow the graph at the cost of every line to its right shifting sideways — and a line that moves for reasons unrelated to its own history is worse than an empty column. Freed slots are reused by later branches instead, with a fresh colour, because a reused lane is a different branch.
+
+**Edges carry a span — `top`, `bottom` or `full`.** The first model only knew "lane at the top, lane at the bottom", which cannot tell a line that stops at the node from one passing through: every branch tip would have rendered with a line running out of the top of it, to a commit that is not there.
+
+**`--topo-order` is now on for the Journal.** Without it `git log` interleaves branches by date and the lanes zig-zag; `git log --graph` turns it on for itself for exactly this reason.
+
+**The SVG stretches and the node does not.** Journal rows are not a fixed height — a commit carrying ref decorations is taller — so the lines live in an SVG with `preserveAspectRatio="none"` that scales to whatever the row turned out to be, with `vector-effect="non-scaling-stroke"` keeping the strokes even. That would also squash a node into an ellipse, so the node is a CSS circle positioned over the top. The alternative, forcing every row to one height, would have meant truncating decorations.
+
+Verified live against a repository with two merges, a reused lane and a shared root:
+
+| | Result |
+|---|---|
+| Merge | Filled node, with the second parent curving off into its own lane |
+| Side branch | Ran alongside in its own colour and converged back at the common ancestor |
+| Lane reuse | The second feature took the freed column and rendered **green** where the first was blue |
+| Tip and root | No line above the newest commit, none below the root |
+| Variable rows | Nodes stayed circular on rows made taller by ref badges |
+
+**Not done here:** the Web Workers §5 deferred alongside lane assignment. Lane assignment is an O(commits × lanes) walk over one page — a few hundred rows — and moving that to a Worker before measuring the full-history case would be speculation. It belongs with the virtualized history in §10, where there is something to measure.
+
+**Scope note:** the graph shows whatever the Journal is showing, which is `HEAD`'s history. Merge topology appears in full, because `git log` walks both parents of a merge — but branches not reachable from HEAD do not. An "all branches" toggle is a small addition when someone wants it.
 
 ### ✅ File context menu
 

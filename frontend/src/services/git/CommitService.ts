@@ -24,6 +24,8 @@ export interface LogOptions extends ReadOptions {
   readonly paths?: readonly string[];
   /** Follow only the first parent, which flattens merge bubbles. */
   readonly firstParent?: boolean;
+  /** Order by topology rather than date — what the commit graph needs. */
+  readonly topoOrder?: boolean;
   /**
    * Called with each batch as it arrives, before the promise resolves.
    *
@@ -37,6 +39,10 @@ function logArgs(options: LogOptions): string[] {
   const args = [...LOG_BASE_ARGS];
   if (options.maxCount !== undefined) args.push(`--max-count=${options.maxCount}`);
   if (options.firstParent === true) args.push('--first-parent');
+  // Keeps a branch's commits together instead of interleaving them by date,
+  // which is what stops the graph's lanes zig-zagging. `git log --graph`
+  // turns this on for itself for the same reason.
+  if (options.topoOrder === true) args.push('--topo-order');
   if (options.revisions !== undefined) args.push(...options.revisions);
   // `--` separates revisions from paths; without it a path that matches a
   // branch name is ambiguous and git refuses the command.
