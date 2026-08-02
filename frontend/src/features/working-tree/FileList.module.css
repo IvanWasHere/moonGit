@@ -1,4 +1,5 @@
-/* Ported from ui-example L158–173. */
+/* Ported from ui-example L158–173, with the status column that replaced the
+   mockup's "Staged Changes" / "Changes" section headers. */
 
 .file {
   display: flex;
@@ -17,6 +18,63 @@
 
 .selected {
   background: var(--bg-selected);
+}
+
+/* The column header. Sticky, because the two badge positions only mean
+   anything if their labels are still on screen when the list is scrolled. */
+.columns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+/* Fixed width so every row's badges line up under the header, and the file
+   names start at the same x whatever the statuses are. */
+.statusCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 52px;
+  flex-shrink: 0;
+}
+
+.sideButton {
+  display: flex;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Which half of the file the diff pane is showing. The row highlight says
+   "this file"; this says "this side of it", which is a different question
+   whenever a file has changes on both. */
+.activeSide {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* An unchanged side, holding its slot so the two positions stay readable. */
+.emptySide {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  background-image: radial-gradient(circle, var(--border-light) 1.5px, transparent 1.5px);
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .path {

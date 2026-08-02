@@ -472,6 +472,16 @@ The plan named Monaco. Monaco is an *editor*, and its `DiffEditor` recomputes di
 
 The panes show dimensions and byte size beside each version, because that is usually where the answer is — an asset re-exported at half resolution looks identical until the numbers are side by side — and sit on a checkerboard so a transparent PNG does not read as a white one.
 
+### ✅ Files panel — a Status column instead of sections
+
+The mockup's "Staged Changes (n)" / "Changes (n)" section headers are gone; the Files panel is one flat, path-sorted list with a **Status** column.
+
+**The column carries two badges, because git's status does.** Porcelain reports an **XY** pair — X for the index, Y for the working tree — and a file staged and then edited again has a different status in each (`AM`: added, then modified). One badge would have to drop one of them, and those two halves are also two different patches. So the column is positional: left is what is going into the commit, right is what is not, and a dot holds the slot of an unchanged side. Blank would let the eye slide the badges left and read an unstaged change as a staged one.
+
+Clicking either badge opens that side's diff and the badge takes an accent ring, so the row highlight says *which file* and the ring says *which half of it*. Clicking the row body takes the working tree when both sides have changes — that is the change still being worked on; the staged half is already decided.
+
+Verified live on `test-repo1` with `Header.tsx` made `MM`: the two badges rendered side by side, the left one opened the staged patch (`@@ -1,12 +1,13 @@`, +4 −3) and the right one the unstaged patch (`@@ -13,3 +13,5 @@`, +2 −0). Restored with `checkout --`; status and HEAD unchanged.
+
 **Two things noticed while verifying, neither in scope here:**
 
 1. **A repository row survives its directory.** `live-scratch` still lists on the dashboard although the path it points at was deleted with an old scratch directory. Opening it will fail on the first git call. The dashboard needs an existence check, or a "missing" state — Phase 6.7.

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseStatus, type StatusEntry } from '@/services/git';
 import { STATUS_EVERYTHING } from '@/services/git/parsers/__fixtures__/status';
 import { branchType } from '@/features/branches/branchType';
-import { displayPath, displayStatus, sortEntries } from './statusDisplay';
+import { defaultSide, displayPath, displayStatus, sidesOf, sortEntries } from './statusDisplay';
 
 const entries = parseStatus(STATUS_EVERYTHING).entries;
 
@@ -42,6 +42,44 @@ describe('displayStatus', () => {
   it('falls back to modified for an unrecognised code', () => {
     const entry = { ...byPath('modifyme.txt'), worktree: 'Z' } as unknown as StatusEntry;
     expect(displayStatus(entry, 'worktree')).toBe('modified');
+  });
+});
+
+describe('sidesOf', () => {
+  /**
+   * The reason the status column carries two badges rather than one. `AM` is
+   * one file with two different truths, and either badge alone is a lie about
+   * the other half — they are also two different patches.
+   */
+  it('reports both halves of a file staged and then edited', () => {
+    expect(sidesOf(byPath('added.txt'))).toEqual({ staged: 'added', worktree: 'modified' });
+  });
+
+  it('leaves the working-tree half empty for a purely staged change', () => {
+    expect(sidesOf(byPath('renamed.txt'))).toEqual({ staged: 'renamed', worktree: null });
+  });
+
+  it('leaves the index half empty for an untracked file', () => {
+    expect(sidesOf(byPath('.gitignore'))).toEqual({ staged: null, worktree: 'untracked' });
+  });
+
+  it('marks a conflict on both halves, since it blocks either', () => {
+    expect(sidesOf(byPath('conflict.txt'))).toEqual({
+      staged: 'conflicted',
+      worktree: 'conflicted',
+    });
+  });
+});
+
+describe('defaultSide', () => {
+  // The unstaged half is the change still being worked on; the staged half is
+  // already decided. Clicking a badge overrides this.
+  it('opens the working tree when a file has changes on both sides', () => {
+    expect(defaultSide(byPath('added.txt'))).toBe('worktree');
+  });
+
+  it('opens the index when that is the only side with a change', () => {
+    expect(defaultSide(byPath('renamed.txt'))).toBe('staged');
   });
 });
 
