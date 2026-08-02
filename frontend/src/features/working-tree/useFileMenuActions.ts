@@ -80,21 +80,28 @@ export function useFileMenuActions(repoPath: string | null) {
       ? undefined
       : void queryClient.invalidateQueries({ queryKey: gitKeys.repo(repoPath) });
 
-  /** Run a service call, reporting either outcome. Never throws. */
+  /**
+   * Run a service call, reporting either outcome. Never throws.
+   *
+   * **Refreshes whichever way it goes**, exactly as the mutation layer's
+   * `onSettled` does, and for the same reason: an error does not mean nothing
+   * happened. `resolveUsing` is two commands — `checkout --ours` then `add` —
+   * and a failure of the second leaves the working tree already rewritten by
+   * the first. Refreshing only on success leaves the panels describing a
+   * repository that no longer exists.
+   */
   const run = async (
     work: () => Promise<{ ok: true } | { ok: false; error: { message: string } }>,
     success: string,
   ) => {
     try {
       const result = await work();
-      if (!result.ok) {
-        showToast(result.error.message, 'error');
-        return;
-      }
-      showToast(success, 'success');
-      refresh();
+      if (result.ok) showToast(success, 'success');
+      else showToast(result.error.message, 'error');
     } catch (cause) {
       report(cause instanceof GitQueryError ? cause : cause);
+    } finally {
+      refresh();
     }
   };
 

@@ -34,6 +34,8 @@ export function MainView() {
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
   const commitOpen = useWorkspaceStore((state) => state.commitOpen);
   const copyDiff = useCopyDiff();
+  const logAll = useWorkspaceStore((state) => state.logAll);
+  const toggleLogAll = useWorkspaceStore((state) => state.toggleLogAll);
 
   return (
     <div className={styles.content} ref={containerRef}>
@@ -155,6 +157,12 @@ export function MainView() {
             title="Journal"
             actions={
               <>
+                <PanelAction
+                  title={logAll ? 'Showing all branches' : 'Showing this branch only'}
+                  onClick={toggleLogAll}
+                >
+                  <Icons.Branch size={11} color={logAll ? 'var(--accent)' : undefined} />
+                </PanelAction>
                 <PanelAction title="Search">
                   <Icons.Search size={11} />
                 </PanelAction>

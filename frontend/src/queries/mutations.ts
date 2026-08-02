@@ -1,10 +1,13 @@
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   branchService,
+  cherryPickService,
   commitService,
   isStaged,
   mergeService,
   remoteService,
+  stashService,
+  tagService,
   workingTreeService,
   type CommitOutcome,
   type DiscardTarget,
@@ -305,6 +308,127 @@ export function useApplyPatch(repoPath: string | null) {
         }),
       );
     },
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+// --- stash ------------------------------------------------------------------
+
+export interface StashPushVariables {
+  readonly message?: string;
+  readonly includeUntracked?: boolean;
+  readonly keepIndex?: boolean;
+}
+
+/**
+ * Stash the working tree.
+ *
+ * Resolves to `false` when there was nothing to stash. Git says "No local
+ * changes to save" and **exits 0**, so without that the UI would report a
+ * successful stash that never appears in the list.
+ */
+export function useStashPush(repoPath: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation<boolean, GitQueryError, StashPushVariables | void>({
+    mutationFn: async (variables) =>
+      unwrap(
+        await stashService(repoPath ?? '').push({
+          ...(variables?.message !== undefined && { message: variables.message }),
+          ...(variables?.includeUntracked !== undefined && {
+            includeUntracked: variables.includeUntracked,
+          }),
+          ...(variables?.keepIndex !== undefined && { keepIndex: variables.keepIndex }),
+        }),
+      ),
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+export type StashAction = 'apply' | 'pop' | 'drop';
+
+/**
+ * Apply, pop or drop one stash.
+ *
+ * One mutation rather than three: they take the same argument, invalidate the
+ * same things, and differ only in the verb — which is data.
+ */
+export function useStashAction(repoPath: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation<void, GitQueryError, { action: StashAction; selector: string }>({
+    mutationFn: async ({ action, selector }) => {
+      const service = stashService(repoPath ?? '');
+      unwrap(
+        await (action === 'apply'
+          ? service.apply(selector)
+          : action === 'pop'
+            ? service.pop(selector)
+            : service.drop(selector)),
+      );
+    },
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+// --- tags -------------------------------------------------------------------
+
+export interface CreateTagVariables {
+  readonly name: string;
+  /** A message makes it annotated — a real object with a tagger and a date. */
+  readonly message?: string;
+  readonly target?: string;
+  readonly force?: boolean;
+}
+
+export function useCreateTag(repoPath: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation<void, GitQueryError, CreateTagVariables>({
+    mutationFn: async ({ name, message, target, force }) => {
+      unwrap(
+        await tagService(repoPath ?? '').create(name, {
+          ...(message !== undefined && message !== '' && { message }),
+          ...(target !== undefined && { target }),
+          ...(force !== undefined && { force }),
+        }),
+      );
+    },
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+export function useDeleteTag(repoPath: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation<void, GitQueryError, { name: string }>({
+    mutationFn: async ({ name }) => {
+      unwrap(await tagService(repoPath ?? '').delete(name));
+    },
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+// --- cherry-pick ------------------------------------------------------------
+
+export interface CherryPickVariables {
+  readonly oids: readonly string[];
+  readonly noCommit?: boolean;
+  readonly recordOrigin?: boolean;
+}
+
+/**
+ * Cherry-pick commits onto the current branch.
+ *
+ * A conflict is an outcome, not an error — the pick stops with unmerged paths
+ * the three-way resolver already knows how to read.
+ */
+export function useCherryPick(repoPath: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation<IntegrationOutcome, GitQueryError, CherryPickVariables>({
+    mutationFn: async ({ oids, noCommit, recordOrigin }) =>
+      unwrap(
+        await cherryPickService(repoPath ?? '').pick(oids, {
+          ...(noCommit !== undefined && { noCommit }),
+          ...(recordOrigin !== undefined && { recordOrigin }),
+        }),
+      ),
     onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
   });
 }

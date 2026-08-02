@@ -12,6 +12,7 @@
  * `ClockArrowLeft`). Verify against node_modules before adding entries.
  */
 import {
+  Archive,
   ArrowDown,
   ArrowUp,
   Ban,
@@ -89,6 +90,8 @@ export const Icons = {
   /** fa-pen */ NewCommit: Pen,
   Tag,
   Favorite: Star,
+  /** The stash stack — git's own metaphor is a shelf, and this is the closest. */
+  Stash: Archive,
 
   // --- diff viewer (no mockup equivalent; the mockup had one view) ---
   /** Unified view — one column, git's own patch order. */ DiffInline: Rows3,

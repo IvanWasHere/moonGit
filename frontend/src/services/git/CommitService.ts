@@ -80,15 +80,30 @@ export class CommitService {
   /**
    * Walk history, streaming.
    *
-   * An empty repository is not an error here: `git log` exits 128 with "does
-   * not have any commits yet", which is the normal state of a fresh `git
-   * init`, so it comes back as an empty list.
+   * **An empty result has to be earned.** Two things can produce one — a
+   * repository with no commits, and a failure that lost git's output — and a
+   * history panel cannot tell them apart, so this does it here.
+   *
+   * Measured against git 2.47, every way `log` can exit 128:
+   *
+   *     fresh `git init`, no revisions   fatal: your current branch 'main'
+   *                                      does not have any commits yet
+   *     fresh `git init`, `--all`        exit 0, no output at all
+   *     a ref pointing at a dead object  fatal: bad object refs/stash
+   *     a revision that does not exist   fatal: ambiguous argument 'x':
+   *                                      unknown revision or path…
+   *
+   * Only the first is an empty history. The last used to be treated as one
+   * too, which meant a branch deleted out from under the merge wizard read as
+   * "already up to date" rather than as the failure it is.
    */
   async list(options: LogOptions = {}): Promise<Result<Commit[], GitError>> {
     const args = logArgs(options);
     const parser = createLogParser();
     const commits: Commit[] = [];
     let parseError: unknown;
+    /** Chunks this side actually received, to check against what Go emitted. */
+    let received = 0;
 
     const streamOptions: StreamOptions = {
       // Records are NUL-terminated, so cutting there never splits a field.
@@ -100,6 +115,7 @@ export class CommitService {
     const result = await this.runner.execStream(
       args,
       (chunk) => {
+        received += 1;
         if (parseError !== undefined) return;
         try {
           const batch = parser.push(chunk);
@@ -121,12 +137,31 @@ export class CommitService {
     if (parseError !== undefined) return err(parseFailure(parseError, context));
 
     if (result.value.exitCode === 128) {
-      // Distinguish "no commits yet" from a real failure; anything else that
-      // exits 128 is a genuine error and keeps its message.
-      if (/does not have any commits yet|unknown revision/i.test(result.value.stderr)) {
-        return ok([]);
-      }
+      // The one 128 that means "no history", not "something went wrong".
+      if (/does not have any commits yet/i.test(result.value.stderr)) return ok([]);
       return err(parseFailure(new Error(result.value.stderr.trim()), context));
+    }
+
+    /*
+     * Every chunk git emitted has to have arrived.
+     *
+     * Chunks travel as events, and an event bus can drop one — in browser dev
+     * mode a reconnecting WebSocket does exactly that. The process still exits
+     * 0, so without this check a log whose output never reached us returns an
+     * empty array and the Journal renders "No commits yet" over a repository
+     * full of commits. Go counts what it sent; this counts what arrived, and
+     * a mismatch is a failure rather than a history.
+     */
+    if (received !== result.value.chunks) {
+      return err(
+        parseFailure(
+          new Error(
+            `git emitted ${result.value.chunks} chunks but ${received} arrived — ` +
+              `${result.value.bytesOut} bytes of output were lost in transit`,
+          ),
+          context,
+        ),
+      );
     }
 
     try {

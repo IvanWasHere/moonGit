@@ -419,7 +419,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 2. ~~**Commit graph**: lane layout, branch colors, merge visualization~~ ✅ (below)
 3. ~~**Merge**: wizard, conflict detection, conflict viewer, resolution helper~~ ✅ (below)
 4. **Rebase**: interactive, continue/skip/abort, squash/edit
-5. **Cherry-pick**, **Stash**, **Tags**
+5. ~~**Cherry-pick**, **Stash**, **Tags**~~ ✅ (below)
 6. **Search**: commits / files / branches / tags / messages / authors
 7. **File explorer**: tree, quick open, reveal in Finder
 8. **Settings**: appearance, git path, SSH, editor, diff/merge tools, keybindings
@@ -471,6 +471,70 @@ The plan named Monaco. Monaco is an *editor*, and its `DiffEditor` recomputes di
 `RunBase64` was added to `gitexec` — Run with stdout base64-encoded. **The reason is not what it first looked like:** a Go string holds arbitrary bytes, so `Run` does not damage binary output. The damage happens where results are marshalled to JSON for the bridge, and `encoding/json` replaces invalid UTF-8 with U+FFFD silently. A PNG read through the ordinary path arrives corrupted with no error anywhere. The first version of the test asserted the wrong layer and failed, which is how the real culprit was found; it now asserts a JSON round trip, and `GitRunner` refuses base64 on a bridge that cannot do it rather than downgrading to text.
 
 The panes show dimensions and byte size beside each version, because that is usually where the answer is — an asset re-exported at half resolution looks identical until the numbers are side by side — and sit on a checkerboard so a transparent PNG does not read as a white one.
+
+### ✅ When an empty history is a lie
+
+Chasing the Journal that briefly read "No commits yet" over a repository full of commits. **The theory first recorded for it was wrong**, and measuring said so: every `git log` exit code was captured against git 2.47 rather than reasoned about.
+
+| situation | exit | stderr |
+|---|---|---|
+| fresh `git init`, no revisions | 128 | `your current branch 'main' does not have any commits yet` |
+| fresh `git init`, `--all` | **0** | *nothing at all* |
+| a ref pointing at a dead object | 128 | `bad object refs/stash` |
+| a revision that does not exist | 128 | `ambiguous argument 'x': unknown revision or path…` |
+
+So the guessed cause — `--all` tripping over a `refs/stash` mid-delete — was already handled: "bad object" never matched the empty-history clause and would have surfaced as an error. Two other things were wrong, though, and one of them is what actually happened.
+
+**1. `unknown revision` was treated as an empty history.** That clause covered a real failure: a ref that is gone. The merge wizard asks for `HEAD..<branch>`, so a branch deleted between the ref list and the log made it report **"already up to date"** for a branch that no longer existed — a wrong answer presented confidently. Now an error.
+
+**2. Nothing checked that git's output arrived.** Chunks travel as *events*, and an event bus can drop one — a reconnecting WebSocket in browser dev mode does exactly that, and the console showed it doing so. The process still exits 0, so a log whose output never reached us returned an empty array and the Journal dutifully rendered "No commits yet". This is what was actually seen.
+
+Go already counted what it sent (`chunks`, `bytesOut`); nothing compared that with what arrived. Now `list` does, and a mismatch is a failure naming both numbers rather than a history. Seven tests cover the table above plus the truncation cases, and each was confirmed to fail with the fix reverted.
+
+**Still on the same footing elsewhere**: `CommitService.get` returns `ok(null)` for *any* exit 128, so a genuine failure reads as "no such commit". Narrower blast radius — it is a single-oid lookup where null is a sensible answer — but the same shape of problem, and worth the same treatment when something needs it.
+
+### ✅ Invalidation that only fired on success
+
+The `Local ▸ Stash` bug — a mutation bypassing React Query, so the panels kept showing changes it had just taken away — turned out to have one sibling, found by auditing every service call made outside `mutations.ts`.
+
+`useFileMenuActions` refreshed **only when the command succeeded**. `resolveUsing` is two commands, `checkout --ours` then `add`: if the second fails the working tree has already been rewritten by the first, and the panels were left describing a repository that no longer existed. It now refreshes in a `finally`, exactly as the mutation layer's `onSettled` does, and for the same reason — an error does not mean nothing happened.
+
+Everything else the audit turned up was either a read inside a query (fine) or the dev panels, which are guarded to scratchpad paths.
+
+### ✅ Phase 6.5 — cherry-pick, stash, tags
+
+`StashService` and `TagService` were built and tested in Phase 2 and had never been rendered. This is the UI for them, plus the one service the trio was missing.
+
+**`CherryPickService`** joins merge and rebase as the third operation whose failure is not a failure: a conflicted pick stops with unmerged paths carrying stages 1, 2 and 3, which is exactly what the three-way resolver already reads. Nothing new was needed to get out of one. Its summary comes from **stderr** — `git merge` prints "Automatic merge failed" to stdout, cherry-pick prints "could not apply" to stderr, a difference `errors.ts` documents and `toOutcome` takes as a parameter rather than guessing.
+
+**A commit context menu** in the Journal is where cherry-pick and tagging live, decided by `commitMenu.ts` the way `fileMenu.ts` decides the file one. Two states suppress items:
+
+- **The checked-out commit** offers no cherry-pick — picking the commit you are sitting on is "nothing to do", and git says so with an error.
+- **A merge** offers none either. Git needs `-m` to say which parent is the mainline, and choosing one on the user's behalf is a guess about intent that can quietly bring in an entire branch.
+
+**The stash panel** says two things git does not. Apply and pop are both offered, apply first, because pop drops the entry once it lands and an abandoned conflicted apply loses it. Dropping confirms, because a dropped stash is unreachable from any ref. Git's auto-generated messages render dimmed and italic against ones the user wrote, and `+untracked` is called out because it changes what popping does to the working tree. "Include untracked" defaults **on**: `git stash` without it silently leaves new files behind, which is how people lose work they thought was saved.
+
+**The tag prompt** is in-app rather than native because there is no native prompt for free text — `ShowMessage` is buttons, `SaveFile` returns a path, and a ref name is neither. A message makes the tag annotated, which is git's rule rather than a UI convention, so the hint says which kind the current input would make instead of offering a checkbox meaning the same thing twice.
+
+#### The Journal needed an "all branches" toggle
+
+Cherry-pick's input is a commit you do **not** have, and the Journal showed only HEAD's history — so the one place the action is offered could never reach anything to pick. The toggle deferred during the graph work turned out to be load-bearing, and is now in the Journal header, off by default.
+
+Verified live on a repository with two branches, three stashes and an uncommitted change:
+
+| | Result |
+|---|---|
+| All branches | Revealed `feature/pickme` and the stash refs, each in its own lane |
+| Cherry-pick | `add a helper worth picking` landed on `main` as a **new oid**, `helper.ts` appeared, and the uncommitted change survived |
+| Stash list | Git's auto-name dimmed and italic, the user's message plain, `+untracked` only on the one made with `-u` |
+| Stash push | New entry at the top, count 2 → 3, field cleared |
+| Pop | Entry gone, `a = 5` back in the working tree |
+| Tag validation | A space turned the field red, disabled Create, and named the rule |
+| Tag creation | `v1.0` as a real **tag object** at the right commit, message intact, decoration appeared in the Journal |
+
+**A pre-existing bug found on the way**: the app menu's `Local ▸ Stash` called the service directly and never invalidated, so a successful stash left the panels still showing the changes it had just taken away. Both it and `Shelve` now open the panel, which is where stashing and restoring both live.
+
+**One thing I could not explain at the time** — since chased down, and the theory recorded here was wrong. See "When an empty history is a lie" below.
 
 ### ✅ Three menubar buttons that were pretending
 

@@ -1,10 +1,14 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { PanelBody } from '@/components/Panel';
 import { useLog } from '@/queries/git';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { timeAgo } from '@/utils/format';
+import { ContextMenu, ContextMenuItem, ContextMenuSeparator } from '@/components/ContextMenu';
+import type { Commit } from '@/services/git';
+import { commitMenuFor } from './commitMenu';
+import { useCommitMenuActions } from './useCommitMenuActions';
 import { CommitGraph } from './CommitGraph';
 import { buildGraph } from './graph';
 import styles from './History.module.css';
@@ -24,6 +28,7 @@ export function JournalView() {
   const selectCommit = useWorkspaceStore((state) => state.selectCommit);
   const logPath = useWorkspaceStore((state) => state.logPath);
   const setLogPath = useWorkspaceStore((state) => state.setLogPath);
+  const logAll = useWorkspaceStore((state) => state.logAll);
   const {
     data: commits,
     isPending,
@@ -33,6 +38,9 @@ export function JournalView() {
     // Topological, so a branch's commits stay together and the graph's lanes
     // do not zig-zag between branches that happen to interleave by date.
     topoOrder: true,
+    // `--all` is a revision as far as git is concerned, so it goes where the
+    // revisions go rather than becoming a flag of its own.
+    ...(logAll && { revisions: ['--all'] }),
     ...(logPath !== null && { paths: [logPath] }),
   });
 
@@ -40,6 +48,10 @@ export function JournalView() {
   // O(commits × lanes) walk. Whether it needs a Worker is a question for the
   // full history (PLAN.md §10), and one to answer with a measurement.
   const graph = useMemo(() => buildGraph(commits ?? []), [commits]);
+
+  // One menu at a time, held here rather than per row.
+  const [menu, setMenu] = useState<{ commit: Commit; x: number; y: number } | null>(null);
+  const runCommitAction = useCommitMenuActions(repoPath);
 
   if (repoPath === null) {
     return (
@@ -95,6 +107,13 @@ export function JournalView() {
           key={commit.oid}
           className={`${styles.entry} ${selectedCommit === commit.oid ? styles.selected : ''}`}
           onClick={() => selectCommit(commit.oid)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            // Select as well as open: every action is about this commit, and
+            // leaving the selection elsewhere is disorienting.
+            selectCommit(commit.oid);
+            setMenu({ commit, x: event.clientX, y: event.clientY });
+          }}
         >
           {graph.rows[index] !== undefined && (
             <CommitGraph row={graph.rows[index]} lanes={graph.lanes} />
@@ -123,6 +142,24 @@ export function JournalView() {
           </div>
         </div>
       ))}
+      {menu !== null && (
+        <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          {commitMenuFor(menu.commit).map((entry, index) =>
+            entry.kind === 'separator' ? (
+              <ContextMenuSeparator key={`sep-${index}`} />
+            ) : (
+              <ContextMenuItem
+                key={entry.action}
+                label={entry.label}
+                onSelect={() => {
+                  setMenu(null);
+                  runCommitAction(menu.commit, entry.action);
+                }}
+              />
+            ),
+          )}
+        </ContextMenu>
+      )}
     </PanelBody>
   );
 }

@@ -83,6 +83,15 @@ interface WorkspaceState {
   /** The branch picker that starts a merge. Separate: one begins the operation,
    *  the other cleans up after it, and both can be reached independently. */
   readonly mergeWizardOpen: boolean;
+  /**
+   * The commit a new tag would point at, or null when the prompt is closed.
+   *
+   * The oid *is* the open state: a tag prompt with no target is meaningless,
+   * so one field carries both rather than a boolean that can disagree with it.
+   */
+  readonly tagPromptOid: string | null;
+  /** Stash stack, modal over the workspace like the merge tools. */
+  readonly stashOpen: boolean;
   readonly diffView: DiffViewMode;
   /**
    * Restrict the Journal to one file's history ("File Log"), or null for all.
@@ -92,6 +101,14 @@ interface WorkspaceState {
    * not.
    */
   readonly logPath: string | null;
+  /**
+   * Show every branch in the Journal, not just HEAD's history.
+   *
+   * Off by default — the Journal is "what am I on" far more often than "what
+   * exists". But cherry-pick needs a commit you do *not* have, so without this
+   * its input is unreachable from the one place it is offered.
+   */
+  readonly logAll: boolean;
   readonly main: MainLayout;
   readonly review: ReviewLayout;
 
@@ -107,8 +124,13 @@ interface WorkspaceState {
   closeMerge: () => void;
   openMergeWizard: () => void;
   closeMergeWizard: () => void;
+  openTagPrompt: (oid: string) => void;
+  closeTagPrompt: () => void;
+  openStash: () => void;
+  closeStash: () => void;
   setDiffView: (mode: DiffViewMode) => void;
   setLogPath: (path: string | null) => void;
+  toggleLogAll: () => void;
   setMain: (patch: Partial<MainLayout>) => void;
   setReview: (patch: Partial<ReviewLayout>) => void;
   resetLayout: () => void;
@@ -124,10 +146,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   commitOpen: false,
   mergeOpen: false,
   mergeWizardOpen: false,
+  tagPromptOid: null,
+  stashOpen: false,
   // Inline by default: it is the mockup's layout, and the Changes pane is
   // narrow enough at its default size that split would truncate both halves.
   diffView: 'inline',
   logPath: null,
+  logAll: false,
   main: MAIN_DEFAULTS,
   review: REVIEW_DEFAULTS,
 
@@ -151,7 +176,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       commitOpen: false,
       mergeOpen: false,
       mergeWizardOpen: false,
+      tagPromptOid: null,
+      stashOpen: false,
       logPath: null,
+      logAll: false,
     });
   },
 
@@ -170,9 +198,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   openMergeWizard: () => set({ mergeWizardOpen: true }),
   closeMergeWizard: () => set({ mergeWizardOpen: false }),
 
+  openTagPrompt: (tagPromptOid) => set({ tagPromptOid }),
+  closeTagPrompt: () => set({ tagPromptOid: null }),
+  openStash: () => set({ stashOpen: true }),
+  closeStash: () => set({ stashOpen: false }),
+
   setDiffView: (diffView) => set({ diffView }),
 
   setLogPath: (logPath) => set({ logPath }),
+  toggleLogAll: () => set((state) => ({ logAll: !state.logAll })),
 
   setMain: (patch) => set((state) => ({ main: { ...state.main, ...patch } })),
   setReview: (patch) => set((state) => ({ review: { ...state.review, ...patch } })),

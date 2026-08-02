@@ -3,7 +3,7 @@ import { useRemotes, useStatus } from '@/queries/git';
 import { useFetch, usePull, usePush, useStage, useUnstage } from '@/queries/mutations';
 import { pushTarget } from '@/queries/pushTarget';
 import { useOpenRepository } from '@/queries/repositories';
-import { isConflicted, stashService } from '@/services/git';
+import { isConflicted } from '@/services/git';
 import { openExternal } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -27,6 +27,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const openCommit = useWorkspaceStore((state) => state.openCommit);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
   const openMergeWizard = useWorkspaceStore((state) => state.openMergeWizard);
+  const openStash = useWorkspaceStore((state) => state.openStash);
 
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
@@ -112,19 +113,12 @@ export function useMenuActions(): (id: MenuItemId) => void {
       selectedFile === null
         ? needsFile()
         : unstage.mutate({ paths: [selectedFile.path] }, { onError: reportError }),
-    'local.stash': () => {
-      if (repoPath === null) return;
-      void stashService(repoPath)
-        .push({ includeUntracked: true })
-        .then((result) => {
-          if (!result.ok) {
-            showToast(result.error.message, 'error');
-            return;
-          }
-          showToast(result.value ? 'Changes stashed' : 'No local changes to stash', 'info');
-        });
-    },
-    'local.shelve': soon('Shelve'),
+    // Both open the stack, which is where stashing and restoring both live.
+    // The previous `local.stash` called the service directly and never
+    // invalidated, so a successful stash left the panels showing the changes
+    // it had just taken away.
+    'local.stash': openStash,
+    'local.shelve': openStash,
     'local.ignore': soon('Ignore'),
 
     // --- Branch -----------------------------------------------------------
@@ -133,7 +127,11 @@ export function useMenuActions(): (id: MenuItemId) => void {
     'branch.rename': soon('Branch rename'),
     'branch.merge': openMergeTool,
     'branch.rebase': soon('Rebase'),
-    'branch.cherryPick': soon('Cherry pick'),
+    // Cherry-picking needs a commit, and the Journal's context menu is where
+    // one is in front of you. This points there rather than being a blinder
+    // second route to the same operation.
+    'branch.cherryPick': () =>
+      showToast('Right-click a commit in the Journal to cherry-pick it', 'info'),
     'branch.reset': soon('Reset'),
     'branch.delete': soon('Branch delete'),
 

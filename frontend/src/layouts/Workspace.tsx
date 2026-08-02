@@ -8,6 +8,8 @@ import { useMenuActions } from '@/components/menu/useMenuActions';
 import { ToastContainer } from '@/components/ToastContainer';
 import { MergeModal } from '@/features/merge/MergeModal';
 import { MergeWizard } from '@/features/merge/MergeWizard';
+import { StashModal } from '@/features/stash/StashModal';
+import { TagPrompt } from '@/features/tags/TagPrompt';
 import { useRepository } from '@/queries/repositories';
 import { useRepoWatcher } from '@/queries/useRepoWatcher';
 import { useLayoutPersistence } from '@/stores/layoutPersistence';
@@ -41,6 +43,10 @@ export function Workspace({
   const closeMerge = useWorkspaceStore((state) => state.closeMerge);
   const mergeWizardOpen = useWorkspaceStore((state) => state.mergeWizardOpen);
   const closeMergeWizard = useWorkspaceStore((state) => state.closeMergeWizard);
+  const stashOpen = useWorkspaceStore((state) => state.stashOpen);
+  const closeStash = useWorkspaceStore((state) => state.closeStash);
+  const tagPromptOid = useWorkspaceStore((state) => state.tagPromptOid);
+  const closeTagPrompt = useWorkspaceStore((state) => state.closeTagPrompt);
   const openRepo = useWorkspaceStore((state) => state.openRepo);
 
   useEffect(() => {
@@ -74,6 +80,8 @@ export function Workspace({
       )}
       {mergeOpen && <MergeModal onClose={closeMerge} />}
       {mergeWizardOpen && <MergeWizard onClose={closeMergeWizard} />}
+      {stashOpen && <StashModal onClose={closeStash} />}
+      {tagPromptOid !== null && <TagPrompt oid={tagPromptOid} onClose={closeTagPrompt} />}
       <ToastContainer />
     </div>
   );

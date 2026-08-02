@@ -214,7 +214,83 @@ export class RebaseService {
   }
 }
 
+export interface CherryPickOptions extends ReadOptions {
+  /** `-n`: apply the change to the working tree and index without committing. */
+  readonly noCommit?: boolean;
+  /**
+   * `-x`: append "(cherry picked from commit …)" to the message.
+   *
+   * Worth offering rather than defaulting: it is the right thing on a public
+   * branch and noise on a private one, and git leaves the choice to the caller.
+   */
+  readonly recordOrigin?: boolean;
+  /** `-m <n>`: which parent to treat as mainline when picking a merge commit. */
+  readonly mainline?: number;
+}
+
+/**
+ * Cherry-pick — the third operation whose failure is not a failure.
+ *
+ * Same shape as merge and rebase because it stops the same way: a conflicted
+ * pick leaves unmerged paths with stages 1, 2 and 3, which is exactly what the
+ * three-way resolver already reads. Nothing new is needed to get out of one.
+ *
+ * The summary comes from **stderr**. `git merge` prints "Automatic merge
+ * failed" to stdout; cherry-pick prints "could not apply …" to stderr, a
+ * difference `errors.ts` documents and that `toOutcome` takes as a parameter
+ * rather than guessing.
+ */
+export class CherryPickService {
+  constructor(private readonly runner: GitRunner) {}
+
+  async pick(
+    oids: readonly string[],
+    options: CherryPickOptions = {},
+  ): Promise<Result<IntegrationOutcome, GitError>> {
+    if (oids.length === 0) return ok({ status: 'upToDate', summary: 'Nothing to pick' });
+
+    const args = ['cherry-pick'];
+    if (options.noCommit === true) args.push('--no-commit');
+    if (options.recordOrigin === true) args.push('-x');
+    if (options.mainline !== undefined) args.push('--mainline', String(options.mainline));
+    args.push(...oids);
+
+    const result = await this.runner.exec(args, {
+      ...toExecOptions(options),
+      okExitCodes: [0, CONFLICT_EXIT],
+    });
+    if (!result.ok) return result;
+    return toOutcome(result.value, args, this.runner.repoPath, 'stderr');
+  }
+
+  async continuePick(options: ReadOptions = {}): Promise<Result<IntegrationOutcome, GitError>> {
+    const args = ['cherry-pick', '--continue'];
+    const result = await this.runner.exec(args, {
+      ...toExecOptions(options),
+      okExitCodes: [0, CONFLICT_EXIT],
+    });
+    if (!result.ok) return result;
+    return toOutcome(result.value, args, this.runner.repoPath, 'stderr');
+  }
+
+  async skip(options: ReadOptions = {}): Promise<Result<IntegrationOutcome, GitError>> {
+    const args = ['cherry-pick', '--skip'];
+    const result = await this.runner.exec(args, {
+      ...toExecOptions(options),
+      okExitCodes: [0, CONFLICT_EXIT],
+    });
+    if (!result.ok) return result;
+    return toOutcome(result.value, args, this.runner.repoPath, 'stderr');
+  }
+
+  async abort(options: ReadOptions = {}): Promise<Result<void, GitError>> {
+    const result = await this.runner.exec(['cherry-pick', '--abort'], toExecOptions(options));
+    return result.ok ? ok(undefined) : result;
+  }
+}
+
 const mergeServices = new Map<string, MergeService>();
+const cherryPickServices = new Map<string, CherryPickService>();
 const rebaseServices = new Map<string, RebaseService>();
 
 export function mergeService(repoPath: string): MergeService {
@@ -235,8 +311,18 @@ export function rebaseService(repoPath: string): RebaseService {
   return service;
 }
 
+export function cherryPickService(repoPath: string): CherryPickService {
+  let service = cherryPickServices.get(repoPath);
+  if (service === undefined) {
+    service = new CherryPickService(getGitRunner(repoPath));
+    cherryPickServices.set(repoPath, service);
+  }
+  return service;
+}
+
 /** Test-only. */
 export function resetIntegrationServices(): void {
   mergeServices.clear();
   rebaseServices.clear();
+  cherryPickServices.clear();
 }
