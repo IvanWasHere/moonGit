@@ -13,7 +13,7 @@
  * output but perform no I/O. Nothing here inspects stdout beyond passing it on.
  */
 
-import { runGit, runGitStream } from '../wails';
+import { runGit, runGitBase64, runGitStream } from '../wails';
 import type { GitDelimiter, GitRunRequest, GitRunResult, GitStreamResult } from '../wails';
 import { isReadOnly } from './commands';
 import { toGitError, type GitError } from './errors';
@@ -29,6 +29,15 @@ import { repoLockFor, type LockMode, type RepoLock } from './RepoLock';
  */
 export interface GitBridge {
   run(request: GitRunRequest): Promise<GitRunResult>;
+  /**
+   * Optional: the same run with stdout base64-encoded, for binary output.
+   *
+   * Optional so a test double can omit it. A double that does is simply never
+   * asked for binary output — `exec` requires it explicitly, and asking a
+   * bridge that cannot for it is an error rather than a silent downgrade to
+   * text, which is how a corrupted image would become invisible.
+   */
+  runBase64?(request: GitRunRequest): Promise<GitRunResult>;
   runStream(
     request: GitRunRequest & { delimiter?: GitDelimiter; chunkSize?: number },
     handlers: { onChunk: (data: string, seq: number) => void; signal?: AbortSignal },
@@ -37,6 +46,7 @@ export interface GitBridge {
 
 const wailsBridge: GitBridge = {
   run: runGit,
+  runBase64: runGitBase64,
   runStream: runGitStream,
 };
 
@@ -72,6 +82,12 @@ export interface ExecOptions {
   /** Override the read/write classification from `commands.ts`. */
   readonly mode?: LockMode;
   readonly signal?: AbortSignal;
+  /**
+   * Ask for stdout base64-encoded. Required for any command whose output is
+   * not text — results cross the bridge as JSON, and JSON silently replaces
+   * invalid UTF-8 with U+FFFD (`internal/gitexec/service.go`).
+   */
+  readonly encoding?: 'utf8' | 'base64';
 }
 
 export interface StreamOptions extends ExecOptions {
@@ -135,7 +151,16 @@ export class GitRunner {
 
       let result: GitRunResult;
       try {
-        result = await this.bridge.run(this.request(args, options));
+        if (options.encoding === 'base64') {
+          if (this.bridge.runBase64 === undefined) {
+            // Falling back to text would return a corrupted image with no sign
+            // of it, which is precisely the failure this option exists to stop.
+            throw new Error('this git bridge cannot return base64 output');
+          }
+          result = await this.bridge.runBase64(this.request(args, options));
+        } else {
+          result = await this.bridge.run(this.request(args, options));
+        }
       } catch (cause) {
         return err(this.spawnFailed(args, cause));
       }

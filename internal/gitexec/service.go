@@ -10,6 +10,7 @@ package gitexec
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -167,6 +168,26 @@ func (s *Service) detectVersion(path string) (string, error) {
 // can grow without bound — log, diff of a large change — use RunStream, or the
 // buffered result will stall the Wails bridge.
 func (s *Service) Run(req RunRequest) (RunResult, error) {
+	return s.run(req, func(b []byte) string { return string(b) })
+}
+
+// RunBase64 is Run with stdout base64-encoded.
+//
+// A Go string holds arbitrary bytes, so Run itself does not damage binary
+// output — the damage happens one layer up, where the result is marshalled to
+// JSON for the bridge. `encoding/json` replaces every byte sequence that is not
+// valid UTF-8 with U+FFFD, silently and without an error anywhere. A PNG read
+// with `git cat-file blob` arrives in the frontend corrupted and unreportable.
+//
+// That is what the diff viewer needs to show the previous version of an image,
+// so it gets an encoding that survives JSON. This stays faithful to the
+// package's rule of knowing no git semantics: still bytes in, bytes out, with
+// only the transport encoding changed.
+func (s *Service) RunBase64(req RunRequest) (RunResult, error) {
+	return s.run(req, base64.StdEncoding.EncodeToString)
+}
+
+func (s *Service) run(req RunRequest, encode func([]byte) string) (RunResult, error) {
 	started := time.Now()
 
 	ctx, cancel := s.contextFor(req.TimeoutMs)
@@ -191,7 +212,8 @@ func (s *Service) Run(req RunRequest) (RunResult, error) {
 	}
 
 	return RunResult{
-		Stdout:     stdout.String(),
+		Stdout: encode(stdout.Bytes()),
+		// Stderr is always text — it is git's diagnostics, never file content.
 		Stderr:     stderr.String(),
 		ExitCode:   code,
 		DurationMs: time.Since(started).Milliseconds(),

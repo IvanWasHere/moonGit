@@ -14,6 +14,10 @@ export function Run(arg1) {
   return window['go']['gitexec']['Service']['Run'](arg1);
 }
 
+export function RunBase64(arg1) {
+  return window['go']['gitexec']['Service']['RunBase64'](arg1);
+}
+
 export function RunStream(arg1, arg2) {
   return window['go']['gitexec']['Service']['RunStream'](arg1, arg2);
 }

@@ -9,6 +9,8 @@ export function Info():Promise<gitexec.GitInfo>;
 
 export function Run(arg1:gitexec.RunRequest):Promise<gitexec.RunResult>;
 
+export function RunBase64(arg1:gitexec.RunRequest):Promise<gitexec.RunResult>;
+
 export function RunStream(arg1:string,arg2:gitexec.StreamRequest):Promise<gitexec.StreamResult>;
 
 export function SetGitPath(arg1:string):Promise<gitexec.GitInfo>;

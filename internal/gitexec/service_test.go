@@ -1,6 +1,9 @@
 package gitexec
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -68,6 +71,68 @@ func TestRunReturnsOutput(t *testing.T) {
 	}
 	if got := strings.TrimSpace(res.Stdout); got != "main" {
 		t.Errorf("branch = %q, want %q", got, "main")
+	}
+}
+
+// The reason RunBase64 exists, asserted at the layer where it actually bites.
+//
+// Run does not corrupt binary output — a Go string is just bytes, and this test
+// originally claimed otherwise and failed, which is how the real culprit was
+// found: `encoding/json`, which the Wails bridge marshals every result through,
+// replaces invalid UTF-8 with U+FFFD without reporting anything. So the check
+// below is a JSON round trip, not a Run/RunBase64 comparison.
+func TestRunBase64PreservesBinaryBytes(t *testing.T) {
+	s := newTestService(t)
+	repo := makeRepo(t, 1)
+
+	// 0xFF 0xFE is a byte order mark and never valid UTF-8; 0x00 would also be
+	// mangled by any string handling that treats it as a terminator.
+	original := []byte{0x89, 'P', 'N', 'G', 0x00, 0xFF, 0xFE, 0x01, 0x02}
+	if err := os.WriteFile(filepath.Join(repo, "logo.png"), original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hash, err := s.Run(RunRequest{RepoPath: repo, Args: []string{"hash-object", "-w", "logo.png"}})
+	if err != nil || hash.ExitCode != 0 {
+		t.Fatalf("hash-object: %v, exit %d, %s", err, hash.ExitCode, hash.Stderr)
+	}
+	oid := strings.TrimSpace(hash.Stdout)
+
+	// Marshal and unmarshal exactly as the bridge does.
+	roundTrip := func(res RunResult) string {
+		t.Helper()
+		encoded, err := json.Marshal(res)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var back RunResult
+		if err := json.Unmarshal(encoded, &back); err != nil {
+			t.Fatal(err)
+		}
+		return back.Stdout
+	}
+
+	res, err := s.RunBase64(RunRequest{RepoPath: repo, Args: []string{"cat-file", "blob", oid}})
+	if err != nil {
+		t.Fatalf("unexpected spawn error: %v", err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(roundTrip(res))
+	if err != nil {
+		t.Fatalf("stdout is not base64 after a JSON round trip: %v", err)
+	}
+	if !bytes.Equal(decoded, original) {
+		t.Errorf("round trip = %v, want %v", decoded, original)
+	}
+
+	// The demonstration that the plain path does not survive the same journey.
+	plain, err := s.Run(RunRequest{RepoPath: repo, Args: []string{"cat-file", "blob", oid}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal([]byte(plain.Stdout), original) == false {
+		t.Fatal("Run itself corrupted the bytes; the premise of this test is wrong")
+	}
+	if bytes.Equal([]byte(roundTrip(plain)), original) {
+		t.Error("JSON preserved the binary bytes; RunBase64 would then be unnecessary")
 	}
 }
 

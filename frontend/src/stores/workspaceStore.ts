@@ -55,6 +55,15 @@ const REVIEW_DEFAULTS: ReviewLayout = {
 /** Which list a selected file came from — the two have separate diffs. */
 export type FileSide = 'staged' | 'worktree';
 
+/**
+ * Inline or side-by-side, for every diff in the app.
+ *
+ * One setting rather than one per panel: the Main and Review views show the
+ * same kind of thing, and a viewer that reverts to inline when the user
+ * switches views reads as having forgotten the preference.
+ */
+export type DiffViewMode = 'inline' | 'split';
+
 export interface FileSelection {
   readonly path: string;
   readonly side: FileSide;
@@ -69,6 +78,7 @@ interface WorkspaceState {
   readonly commitMessage: string;
   /** The commit composer is opened on demand, not always on screen. */
   readonly commitOpen: boolean;
+  readonly diffView: DiffViewMode;
   readonly main: MainLayout;
   readonly review: ReviewLayout;
 
@@ -80,6 +90,7 @@ interface WorkspaceState {
   openCommit: () => void;
   closeCommit: () => void;
   toggleCommit: () => void;
+  setDiffView: (mode: DiffViewMode) => void;
   setMain: (patch: Partial<MainLayout>) => void;
   setReview: (patch: Partial<ReviewLayout>) => void;
   resetLayout: () => void;
@@ -93,6 +104,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   selectedCommit: null,
   commitMessage: '',
   commitOpen: false,
+  // Inline by default: it is the mockup's layout, and the Changes pane is
+  // narrow enough at its default size that split would truncate both halves.
+  diffView: 'inline',
   main: MAIN_DEFAULTS,
   review: REVIEW_DEFAULTS,
 
@@ -126,6 +140,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   // losing it because the panel was collapsed would be its own bug.
   closeCommit: () => set({ commitOpen: false }),
   toggleCommit: () => set((state) => ({ commitOpen: !state.commitOpen })),
+
+  setDiffView: (diffView) => set({ diffView }),
 
   setMain: (patch) => set((state) => ({ main: { ...state.main, ...patch } })),
   setReview: (patch) => set((state) => ({ review: { ...state.review, ...patch } })),

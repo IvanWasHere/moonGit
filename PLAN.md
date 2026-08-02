@@ -415,7 +415,7 @@ Verified live against the seeded test repos:
 
 Nothing below exists in the mockup — each needs UI design as well as implementation. Ordered by value:
 
-1. **Diff viewer**: side-by-side, inline, syntax highlighting (Monaco), word diff, image diff, large-file guard
+1. **Diff viewer**: side-by-side, inline, syntax highlighting (~~Monaco~~ **Shiki** — see below), word diff, image diff, large-file guard
 2. **Commit graph**: lane layout, branch colors, merge visualization
 3. **Merge**: wizard, conflict detection, conflict viewer, resolution helper
 4. **Rebase**: interactive, continue/skip/abort, squash/edit
@@ -427,6 +427,55 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 10. **Repository settings**: ignore rules, git config, hooks, LFS, submodules
 
 Each ships behind the same skeleton: `Loading | Success | Error | Retry`.
+
+### ✅ Phase 6.1 — diff viewer, complete
+
+All six parts of item 1: side-by-side, inline, syntax highlighting, word diff, image diff, large-file guard.
+
+`features/diff/wordDiff.ts` (intra-line LCS) and `features/diff/diffView.ts` (patch → the two view shapes) are pure and tested — including one test that runs a real `git diff` payload through `parseDiff` and out the other side. `DiffPane` renders either shape; the mode lives in `workspaceStore` and persists as a preference in SQLite.
+
+Verified live against `test-repo1`:
+
+| | Result |
+|---|---|
+| Word diff | `<a key={link.id} href={link.href}>` → `<NavLink key={link.id} {...link} …>` marked at `a`/`NavLink` and the changed attributes, not the whole line |
+| Side-by-side | Deletion left, addition right, per-side line numbers, empty half dimmed for a pure add |
+| Wrapping | A long addition wrapped and **its paired deletion row grew with it** — the halves stayed level |
+| Guard | A 2,502-line change refused to render, named the count, offered "Show anyway"; rendering on demand worked |
+| Persistence | Split survived a reload — the preference round-tripped through SQLite |
+| Highlighting | `Header.tsx` coloured by the TSX grammar, with the word-diff marks still legible on top |
+| Image diff | A staged 16×16 PNG against a modified 48×32 one, both rendered with dimensions and byte sizes |
+| Test repo | `README.md` and the test PNG both removed; status and HEAD byte-identical to before |
+
+**Decisions worth keeping:**
+
+- **Split is one CSS grid, not two scrolling columns.** A grid row holds both halves, so a deletion and the addition that replaced it cannot drift apart when one side wraps or grows a scrollbar. It also means split can *wrap* rather than scroll horizontally, which is what a narrow Changes pane needs.
+- **Deletions and additions are paired by position within a change block.** Anything cleverer is also a heuristic; `wordDiff` is what corrects it, by declining pairs that share less than 25% of their characters. A "rewritten line" marked token-by-token reads as a rendering bug.
+- **The word diff trims common prefixes and suffixes before the LCS runs**, so the quadratic part sees a handful of tokens on a normal edit. Lines over 1,000 characters skip it entirely — a minified bundle on one line would otherwise hang the renderer.
+- **`\ No newline at end of file` follows the side of the line it annotates.** Putting it on both would claim the new file also lacks a final newline.
+- **The guard's "show anyway" is keyed by path**, so selecting a different large file re-arms it instead of inheriting the last file's answer.
+- **The threshold (2,000 lines) is a placeholder for virtualization.** It exists because nothing is virtualized yet (§10); once the diff list is, it can be raised or dropped.
+
+#### Syntax highlighting — **Shiki, not Monaco** (deviation from §9.1)
+
+The plan named Monaco. Monaco is an *editor*, and its `DiffEditor` recomputes diffs client-side, which would put a second opinion next to git's hunks — the ones hunk-level staging will need to be authoritative. Using it purely as a tokenizer costs ~2 MB for a job Shiki does with the same TextMate grammars VS Code ships. Monaco stays on the table for the merge conflict editor (§9.3), where an editable surface is the actual requirement.
+
+- **Whole blobs are tokenized, never hunks.** A hunk is a fragment; a tokenizer handed one cannot know it began inside a block comment and will colour the tail of that comment as code. `BlobService` reads the old and new files in full, and the renderer indexes tokens by line number. Confirmed against a file with a comment spanning a hunk boundary.
+- **The two sides come from different places.** Anything git has an object for is `cat-file` and cached forever, because an object id names one sequence of bytes for all time. The working-tree side of an unstaged diff **has no object** — `git diff --raw` prints an all-zero destination id, verified — so it is read off disk, and its query is keyed under the `fileText` prefix so the watcher's existing invalidation reaches it. Without that it would serve tokens for the previous save.
+- **Syntax colour and word-diff marks are merged, not nested.** They partition a line at different points (`retries: 3` is three tokens and two segments), and crossing spans are not expressible in HTML — so both are cut at the union of their boundaries. If the two partitions do not cover the same length, highlighting is dropped for that line: colouring that shifts partway through reads as corruption, plain text just reads as plain.
+- **`github-dark-default` because its background is `#0d1117`** — the same value as the mockup's `--bg-darkest`. The palette the UI was designed around and the one the code is coloured with are the same palette, not two dark themes that nearly agree.
+- **Shiki's core plus the JavaScript regex engine**, so no Oniguruma WASM ships at all. Confirmed in the build: every grammar is its own chunk (`tsx` 176 KB, `go` 47 KB, …), the engine and core are two more, and the main bundle is untouched at 572 KB. Nothing loads until a file of that kind is opened.
+
+#### Image diff, and a Go change it needed
+
+`RunBase64` was added to `gitexec` — Run with stdout base64-encoded. **The reason is not what it first looked like:** a Go string holds arbitrary bytes, so `Run` does not damage binary output. The damage happens where results are marshalled to JSON for the bridge, and `encoding/json` replaces invalid UTF-8 with U+FFFD silently. A PNG read through the ordinary path arrives corrupted with no error anywhere. The first version of the test asserted the wrong layer and failed, which is how the real culprit was found; it now asserts a JSON round trip, and `GitRunner` refuses base64 on a bridge that cannot do it rather than downgrading to text.
+
+The panes show dimensions and byte size beside each version, because that is usually where the answer is — an asset re-exported at half resolution looks identical until the numbers are side by side — and sit on a checkerboard so a transparent PNG does not read as a white one.
+
+**Two things noticed while verifying, neither in scope here:**
+
+1. **A repository row survives its directory.** `live-scratch` still lists on the dashboard although the path it points at was deleted with an old scratch directory. Opening it will fail on the first git call. The dashboard needs an existence check, or a "missing" state — Phase 6.7.
+2. **`Copy Diff` in the Changes header still fires a toast and copies nothing.** `DiffFile` keeps hunks, not the raw patch text, so making it real means either re-running `git diff` or reconstructing the patch.
 
 ---
 
@@ -557,6 +606,7 @@ Three places where this plan knowingly diverges — worth a second look before P
 1. **Wails v2, not v3** (PRD §Tech Stack). Stability over spec-compliance; migration path kept cheap.
 2. **lucide-react, not the mockup's Font Awesome** (PRD §Migration Plan says "preserve where possible"). CDN assets can't ship in an offline app, and a 400 KB webfont for ~30 glyphs isn't worth it. Visually indistinguishable.
 3. **SQLite stores much less than the Dexie mockup did.** The PRD's migration section implies a table-for-table conversion; that would build a stale cache. Git stays the source of truth for git data.
+4. **Shiki, not Monaco, for syntax highlighting** (§9.1, decided in Phase 6). A read-only diff needs a tokenizer, not an editor; Monaco's DiffEditor would also recompute diffs client-side and compete with git's own hunks. Monaco remains a candidate for the merge conflict editor (§9.3).
 
 ### Still open (not blocking — decide by the phase noted)
 

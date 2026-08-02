@@ -1,4 +1,11 @@
-import { Cancel, Info, Run, RunStream, SetGitPath } from '../../../wailsjs/go/gitexec/Service';
+import {
+  Cancel,
+  Info,
+  Run,
+  RunBase64,
+  RunStream,
+  SetGitPath,
+} from '../../../wailsjs/go/gitexec/Service';
 import { onEvent } from './events';
 import type {
   GitChunkEvent,
@@ -12,6 +19,17 @@ import type {
 /** Run git and buffer the whole output. Use only where output is bounded. */
 export function runGit(req: GitRunRequest): Promise<GitRunResult> {
   return Run(req);
+}
+
+/**
+ * Run git with stdout base64-encoded — the only safe way to read binary output.
+ *
+ * Results cross the bridge as JSON, and JSON strings are UTF-8: an image blob
+ * through `runGit` arrives with every invalid byte replaced by U+FFFD and no
+ * error to say so. Asserted in `internal/gitexec/service_test.go`.
+ */
+export function runGitBase64(req: GitRunRequest): Promise<GitRunResult> {
+  return RunBase64(req);
 }
 
 export function gitInfo(): Promise<GitInfo> {

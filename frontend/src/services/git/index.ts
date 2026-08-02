@@ -16,6 +16,7 @@ export * from './RepositoryService';
 export * from './BranchService';
 export * from './CommitService';
 export * from './DiffService';
+export * from './BlobService';
 export * from './StashService';
 export * from './IntegrationService';
 export * from './RemoteService';

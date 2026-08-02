@@ -25,6 +25,13 @@ export const gitKeys = {
     scope: 'worktree' | 'staged' | 'commit',
     params: unknown = {},
   ): QueryKey => [repoPath, 'diff', scope, params],
+  /**
+   * A blob's contents. Content-addressed, so it never goes stale and is never
+   * invalidated — an object id names exactly one sequence of bytes forever.
+   */
+  blob: (repoPath: string, oid: string): QueryKey => [repoPath, 'blob', oid],
+  /** A working-tree file read from disk, for the side git has no object for. */
+  fileText: (repoPath: string, path: string): QueryKey => [repoPath, 'fileText', path],
   stashes: (repoPath: string): QueryKey => [repoPath, 'stash'],
   remotes: (repoPath: string): QueryKey => [repoPath, 'remotes'],
   blame: (repoPath: string, path: string, revision?: string): QueryKey => [
@@ -65,6 +72,8 @@ export function keysToInvalidate(repoPath: string, reasons: readonly ChangeReaso
       case 'worktree':
         add(gitKeys.status(repoPath));
         add(gitKeys.diff(repoPath, 'worktree'));
+        // Files read off disk moved with it; blobs did not, being immutable.
+        add([repoPath, 'fileText']);
         break;
       case 'index':
         add(gitKeys.status(repoPath));

@@ -1,4 +1,5 @@
-/* Ported from ui-example L188–203. */
+/* Ported from ui-example L188–203, extended for the side-by-side view and
+   intra-line marks the mockup had no equivalent for (PLAN.md §9.1). */
 
 .file {
   border-bottom: 1px solid var(--border);
@@ -13,7 +14,75 @@
   font-size: 12px;
   font-family: var(--font-mono);
   color: var(--text-secondary);
+  /* Pinned while the patch scrolls under it: a diff several screens long
+     otherwise leaves the reader with no record of which file they are in. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--border);
 }
+
+.path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.stats {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.statAdd {
+  color: var(--green);
+}
+
+.statRemove {
+  color: var(--red);
+}
+
+/* --- view toggle --- */
+
+.toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.toggleButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toggleButton:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.toggleActive,
+.toggleActive:hover {
+  background: var(--bg-active);
+  color: var(--accent);
+}
+
+/* --- unified view --- */
 
 .line {
   display: flex;
@@ -60,8 +129,157 @@
   color: var(--text-muted);
 }
 
+/* --- side-by-side view ---
+
+   Four columns: a number and its code for each side. One grid rather than two
+   scrolling columns, so a row's two halves are the same row in the layout and
+   cannot drift apart. */
+
+.split {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px minmax(0, 1fr);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+/* The per-hunk wrapper exists for the React key; it must not become a box, or
+   its children stop being grid items. */
+.splitHunk {
+  display: contents;
+}
+
+.splitFull {
+  grid-column: 1 / -1;
+}
+
+/* Split cells carry the state class themselves, so these mirror the
+   descendant rules the unified view uses. */
+.split .lineNumber {
+  padding: 0 8px 0 0;
+  width: auto;
+}
+
+.split .code {
+  padding-right: 10px;
+  border-left: 3px solid transparent;
+}
+
+.code.add {
+  color: var(--green);
+  border-left-color: var(--green);
+}
+
+.code.remove {
+  color: var(--red);
+  border-left-color: var(--red);
+}
+
+.code.context {
+  color: var(--text-muted);
+  background: none;
+}
+
+.lineNumber.context {
+  background: none;
+}
+
+/* Wrapping rather than a horizontal scrollbar: the grid row grows and both
+   halves stay level, which a scrollbar on one side would break. */
+.wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The other side of a pure addition or deletion. Dimmed rather than blank so
+   it reads as "nothing here", not as a rendering gap. */
+.empty {
+  background: var(--bg-dark);
+}
+
+/* --- intra-line marks --- */
+
+/* Only the tokens that moved. The line already carries the red or green
+   background, so this is a second, stronger step on top of it — anything
+   subtler is invisible against the line tint. */
+.word {
+  border-radius: 2px;
+  padding: 1px 0;
+}
+
+.add .word,
+.code.add .word {
+  background: rgba(63, 185, 80, 0.28);
+}
+
+.remove .word,
+.code.remove .word {
+  background: rgba(248, 81, 73, 0.28);
+}
+
 /* Additions to the mockup's diff styles, for states real patches have and
    seeded data did not. */
+
+/* --- image diff --- */
+
+.images {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+}
+
+.imagePane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-darkest);
+}
+
+.imageLabel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+/* A checkerboard, so a transparent PNG does not read as a white one — the
+   single most common thing to get wrong about an image the user is comparing. */
+.image {
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  background-color: var(--bg-dark);
+  background-image:
+    linear-gradient(45deg, var(--bg-panel) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--bg-panel) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--bg-panel) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--bg-panel) 75%);
+  background-size: 12px 12px;
+  background-position:
+    0 0,
+    0 6px,
+    6px -6px,
+    -6px 0;
+}
+
+/* Dimensions and size — where the difference usually is, when an asset was
+   re-exported rather than redrawn. */
+.imageMeta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.imageAbsent {
+  padding: 32px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
 
 /* Binary, conflicted, mode-only: a change that exists but has no lines. */
 .notice {
@@ -69,6 +287,22 @@
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* The large-diff guard (diffView.ts) — a refusal that offers a way through. */
+.guard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 12px;
+}
+
+.guardText {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 46ch;
+  line-height: 1.5;
 }
 
 /* Hunk headers were absent from the mockup, which showed one continuous run
@@ -92,7 +326,8 @@
 }
 
 /* "\ No newline at end of file" — git's own marker, kept visible. */
-.noNewline .code {
+.noNewline .code,
+.code.noNewline {
   color: var(--text-muted);
   font-style: italic;
 }

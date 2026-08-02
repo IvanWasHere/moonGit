@@ -26,6 +26,7 @@
     "react-dom": "^19.1.0",
     "react-hook-form": "^7.84.0",
     "react-router-dom": "^7.18.2",
+    "shiki": "^4.4.1",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },

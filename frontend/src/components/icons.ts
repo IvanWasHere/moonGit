@@ -19,6 +19,7 @@ import {
   CircleAlert,
   CircleCheck,
   ClockArrowLeft,
+  Columns2,
   Columns3,
   FileCheck,
   FileCode,
@@ -36,6 +37,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Rows3,
   ScanSearch,
   ScrollText,
   Search,
@@ -87,6 +89,10 @@ export const Icons = {
   /** fa-pen */ NewCommit: Pen,
   Tag,
   Favorite: Star,
+
+  // --- diff viewer (no mockup equivalent; the mockup had one view) ---
+  /** Unified view — one column, git's own patch order. */ DiffInline: Rows3,
+  /** Side-by-side view — old on the left, new on the right. */ DiffSplit: Columns2,
 
   // --- empty states (ui-example L561, 590, 624–625, 647, 702) ---
   /** fa-scroll */ Journal: ScrollText,
