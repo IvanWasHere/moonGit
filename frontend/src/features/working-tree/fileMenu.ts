@@ -11,12 +11,9 @@
  * no conflict, is an invitation to a no-op or an error; the spec this was built
  * from says as much with its `(if already staged)` and `(if conflicted)` notes.
  *
- * Items whose feature is not built are **absent, not disabled** — with one
- * exception. A disabled row still says "this exists and you cannot have it",
- * which is right for something blocked by state and wrong for something we
- * simply have not written. The exception is the two hunk-level staging items,
- * which are listed as disabled because they are the whole point of the Index
- * Editor and their absence would otherwise look like an oversight.
+ * Items whose feature is not built are **absent, not disabled**: a disabled row
+ * says "this exists and you cannot have it", which is right for something
+ * blocked by state and wrong for something we simply have not written.
  */
 
 import { isConflicted, isStaged, isUnstaged, type StatusEntry } from '@/services/git';
@@ -28,7 +25,6 @@ export type FileMenuAction =
   | 'openTerminal'
   | 'stage'
   | 'unstage'
-  | 'stageLines'
   | 'stageHunk'
   | 'commitSelected'
   | 'discard'
@@ -145,11 +141,9 @@ export function fileMenuFor(entry: StatusEntry): FileMenuEntry[] {
     untracked ? item('stage', 'Add') : item('stage', 'Stage'),
     staged ? item('unstage', 'Unstage') : null,
     staged ? item('commitSelected', 'Commit Selected…') : null,
-    // The Index Editor's whole reason for existing (§9, item 2 of the menubar).
-    untracked ? null : item('stageHunk', 'Stage Hunk', { disabled: true, hint: 'Index Editor' }),
-    untracked
-      ? null
-      : item('stageLines', 'Stage Selected Lines', { disabled: true, hint: 'Index Editor' }),
+    // Hunk and line staging happen in the diff pane, where the hunks are; this
+    // is the signpost to them rather than a second way of doing it.
+    untracked || !unstaged ? null : item('stageHunk', 'Stage Lines or Hunks…'),
     SEPARATOR,
 
     unstaged ? item('discard', 'Discard Changes', { destructive: true }) : null,

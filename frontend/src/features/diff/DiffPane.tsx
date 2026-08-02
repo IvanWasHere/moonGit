@@ -5,8 +5,10 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { PanelBody } from '@/components/Panel';
 import { useStagedDiff, useWorkingTreeDiff } from '@/queries/git';
+import { useApplyPatch } from '@/queries/mutations';
 import { hasRenderableDiff, type DiffFile, type DiffLine } from '@/services/git';
-import { useWorkspaceStore, type DiffViewMode } from '@/stores/workspaceStore';
+import { showToast } from '@/stores/notificationStore';
+import { useWorkspaceStore, type DiffViewMode, type FileSide } from '@/stores/workspaceStore';
 import styles from './DiffPane.module.css';
 import {
   alignFile,
@@ -17,6 +19,7 @@ import {
   type ViewLine,
 } from './diffView';
 import { mergeSpans, type SyntaxToken } from './highlight';
+import { buildPatch, hunkLineKeys, lineKey, type StageDirection } from './patch';
 import { ImageDiff } from './ImageDiff';
 import { useDiffHighlight, type DiffHighlight } from './useDiffHighlight';
 
@@ -75,7 +78,10 @@ export function DiffPane() {
 
   return (
     <PanelBody>
-      <DiffFileView file={file} />
+      {/* Keyed by side as well as path: the two halves of one file are
+          different patches, and a line selection made against one means
+          nothing against the other. */}
+      <DiffFileView key={`${selected.side}:${file.path}`} file={file} side={selected.side} />
     </PanelBody>
   );
 }
@@ -86,10 +92,31 @@ export function DiffPane() {
  */
 const HighlightContext = createContext<DiffHighlight>({ old: null, next: null });
 
-function DiffFileView({ file }: { readonly file: DiffFile }) {
+/**
+ * Line- and hunk-level staging, shared the same way and for the same reason.
+ *
+ * Which direction it runs is decided once, by the side being viewed: the
+ * unstaged half of a file can only be staged, the staged half only unstaged.
+ * Offering both on either would be offering one that cannot work.
+ */
+interface Staging {
+  readonly direction: StageDirection;
+  readonly selected: ReadonlySet<string>;
+  readonly toggle: (key: string) => void;
+  readonly apply: (keys: ReadonlySet<string>) => void;
+  readonly busy: boolean;
+}
+
+const StagingContext = createContext<Staging | null>(null);
+
+function DiffFileView({ file, side }: { readonly file: DiffFile; readonly side: FileSide }) {
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const mode = useWorkspaceStore((state) => state.diffView);
   const setMode = useWorkspaceStore((state) => state.setDiffView);
+  const applyPatch = useApplyPatch(repoPath);
+
+  const [selectedLines, setSelectedLines] = useState<ReadonlySet<string>>(new Set());
+  const direction: StageDirection = side === 'worktree' ? 'stage' : 'unstage';
 
   // The override is keyed by path rather than a boolean, so selecting a
   // different large file re-arms the guard instead of inheriting the last
@@ -100,6 +127,43 @@ function DiffFileView({ file }: { readonly file: DiffFile }) {
   // conflict, or a large one still behind its guard.
   const rendering = hasRenderableDiff(file) && (!isLargeDiff(file) || shown === file.path);
   const highlight = useDiffHighlight(repoPath, rendering ? file : null);
+
+  const staging: Staging = {
+    direction,
+    selected: selectedLines,
+    busy: applyPatch.isPending,
+    toggle: (key) =>
+      setSelectedLines((current) => {
+        const next = new Set(current);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      }),
+    apply: (keys) => {
+      const patch = buildPatch(file, keys, direction);
+      if (patch === null) {
+        showToast('Nothing to apply in that selection', 'info');
+        return;
+      }
+      applyPatch.mutate(
+        { patch, ...(direction === 'unstage' && { reverse: true }) },
+        {
+          onSuccess: () => {
+            setSelectedLines(new Set());
+            showToast(
+              `${keys.size} ${keys.size === 1 ? 'line' : 'lines'} ${
+                direction === 'stage' ? 'staged' : 'unstaged'
+              }`,
+              'success',
+            );
+          },
+          // Git applies all of a patch or none of it, so a refusal leaves the
+          // index untouched — its complaint is the whole story.
+          onError: (error) => showToast(error.message, 'error'),
+        },
+      );
+    },
+  };
 
   return (
     <div className={styles.file}>
@@ -119,14 +183,34 @@ function DiffFileView({ file }: { readonly file: DiffFile }) {
           <ViewModeToggle mode={mode} onChange={setMode} />
         </div>
       </div>
+      {selectedLines.size > 0 && (
+        <div className={styles.selectionBar}>
+          <span className={styles.selectionCount}>
+            {selectedLines.size} {selectedLines.size === 1 ? 'line' : 'lines'} selected
+          </span>
+          <Button size="sm" onClick={() => setSelectedLines(new Set())}>
+            Clear
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={applyPatch.isPending}
+            onClick={() => staging.apply(selectedLines)}
+          >
+            {direction === 'stage' ? 'Stage selected' : 'Unstage selected'}
+          </Button>
+        </div>
+      )}
       <HighlightContext.Provider value={highlight}>
-        <DiffBody
-          file={file}
-          mode={mode}
-          shown={shown === file.path}
-          onShow={() => setShown(file.path)}
-          repoPath={repoPath}
-        />
+        <StagingContext.Provider value={staging}>
+          <DiffBody
+            file={file}
+            mode={mode}
+            shown={shown === file.path}
+            onShow={() => setShown(file.path)}
+            repoPath={repoPath}
+          />
+        </StagingContext.Provider>
       </HighlightContext.Provider>
     </div>
   );
@@ -229,21 +313,11 @@ function DiffBody({
 function InlineView({ hunks }: { readonly hunks: readonly AlignedHunk[] }) {
   return (
     <>
-      {hunks.map(({ hunk, lines }) => (
+      {hunks.map(({ hunk, lines }, hunkIndex) => (
         <div key={`${hunk.oldStart}:${hunk.newStart}`}>
-          <HunkHeader hunk={hunk} />
+          <HunkHeader hunk={hunk} hunkIndex={hunkIndex} />
           {lines.map((view, index) => (
-            <div
-              key={`${hunk.oldStart}:${index}`}
-              className={`${styles.line} ${styles[lineClass(view.line.kind)] ?? ''}`}
-            >
-              <div className={styles.lineNumber}>
-                {view.line.newLineNo ?? view.line.oldLineNo ?? ''}
-              </div>
-              <div className={styles.code}>
-                <Code view={view} />
-              </div>
-            </div>
+            <LineRow key={`${hunk.oldStart}:${index}`} view={view} hunkIndex={hunkIndex} />
           ))}
         </div>
       ))}
@@ -264,13 +338,13 @@ function InlineView({ hunks }: { readonly hunks: readonly AlignedHunk[] }) {
 function SplitView({ hunks }: { readonly hunks: readonly AlignedHunk[] }) {
   return (
     <div className={styles.split}>
-      {hunks.map(({ hunk, rows }) => (
+      {hunks.map(({ hunk, rows }, hunkIndex) => (
         <div key={`${hunk.oldStart}:${hunk.newStart}`} className={styles.splitHunk}>
           <div className={styles.splitFull}>
-            <HunkHeader hunk={hunk} />
+            <HunkHeader hunk={hunk} hunkIndex={hunkIndex} />
           </div>
           {rows.map((row, index) => (
-            <SplitRowCells key={`${hunk.oldStart}:${index}`} row={row} />
+            <SplitRowCells key={`${hunk.oldStart}:${index}`} row={row} hunkIndex={hunkIndex} />
           ))}
         </div>
       ))}
@@ -278,11 +352,11 @@ function SplitView({ hunks }: { readonly hunks: readonly AlignedHunk[] }) {
   );
 }
 
-function SplitRowCells({ row }: { readonly row: SplitRow }) {
+function SplitRowCells({ row, hunkIndex }: { readonly row: SplitRow; readonly hunkIndex: number }) {
   return (
     <>
-      <SplitCell view={row.left} side="left" />
-      <SplitCell view={row.right} side="right" />
+      <SplitCell view={row.left} side="left" hunkIndex={hunkIndex} />
+      <SplitCell view={row.right} side="right" hunkIndex={hunkIndex} />
     </>
   );
 }
@@ -290,10 +364,14 @@ function SplitRowCells({ row }: { readonly row: SplitRow }) {
 function SplitCell({
   view,
   side,
+  hunkIndex,
 }: {
   readonly view: ViewLine | null;
   readonly side: 'left' | 'right';
+  readonly hunkIndex: number;
 }) {
+  const staging = useContext(StagingContext);
+
   if (view === null) {
     return (
       <>
@@ -306,21 +384,83 @@ function SplitCell({
   const number = side === 'left' ? view.line.oldLineNo : view.line.newLineNo;
   const cellClass = styles[lineClass(view.line.kind)] ?? '';
 
+  // Selection keys off the source line, so clicking either half of a replaced
+  // line selects that half — the same lines the unified view would.
+  const changed = view.line.kind === 'addition' || view.line.kind === 'deletion';
+  const key = lineKey(hunkIndex, view.index);
+  const selected = changed && staging?.selected.has(key) === true;
+  const extra = `${changed && staging !== null ? styles.selectable : ''} ${
+    selected ? styles.lineSelected : ''
+  }`;
+  const onClick = changed && staging !== null ? () => staging.toggle(key) : undefined;
+
   return (
     <>
-      <div className={`${styles.lineNumber} ${cellClass}`}>{number ?? ''}</div>
-      <div className={`${styles.code} ${styles.wrap} ${cellClass}`}>
+      <div className={`${styles.lineNumber} ${cellClass} ${extra}`} {...(onClick && { onClick })}>
+        {number ?? ''}
+      </div>
+      <div
+        className={`${styles.code} ${styles.wrap} ${cellClass} ${extra}`}
+        {...(onClick && { onClick })}
+      >
         <Code view={view} />
       </div>
     </>
   );
 }
 
-function HunkHeader({ hunk }: { readonly hunk: AlignedHunk['hunk'] }) {
+function HunkHeader({
+  hunk,
+  hunkIndex,
+}: {
+  readonly hunk: AlignedHunk['hunk'];
+  readonly hunkIndex: number;
+}) {
+  const staging = useContext(StagingContext);
+
   return (
     <div className={styles.hunkHeader}>
-      @@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
+      <span>
+        @@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
+      </span>
       {hunk.header !== '' && <span className={styles.hunkContext}>{hunk.header}</span>}
+      {staging !== null && (
+        <button
+          type="button"
+          className={styles.hunkAction}
+          disabled={staging.busy}
+          onClick={() => staging.apply(new Set(hunkLineKeys(hunk, hunkIndex)))}
+        >
+          {staging.direction === 'stage' ? 'Stage hunk' : 'Unstage hunk'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One line of the unified view, selectable when it is a change.
+ *
+ * Context lines are not selectable because there is nothing to stage about
+ * them — a click on one is much more likely to be a misclick than an intent.
+ */
+function LineRow({ view, hunkIndex }: { readonly view: ViewLine; readonly hunkIndex: number }) {
+  const staging = useContext(StagingContext);
+  const changed = view.line.kind === 'addition' || view.line.kind === 'deletion';
+  const key = lineKey(hunkIndex, view.index);
+  const selected = changed && staging?.selected.has(key) === true;
+
+  return (
+    <div
+      className={`${styles.line} ${styles[lineClass(view.line.kind)] ?? ''} ${
+        changed && staging !== null ? styles.selectable : ''
+      } ${selected ? styles.lineSelected : ''}`}
+      {...(changed && staging !== null && { onClick: () => staging.toggle(key) })}
+    >
+      <div className={styles.lineNumber}>{view.line.newLineNo ?? view.line.oldLineNo ?? ''}</div>
+      <div className={styles.code}>
+        <Code view={view} />
+      </div>
     </div>
   );
 }

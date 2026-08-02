@@ -281,6 +281,34 @@ export function usePull(repoPath: string | null) {
   });
 }
 
+export interface ApplyPatchVariables {
+  readonly patch: string;
+  readonly reverse?: boolean;
+}
+
+/**
+ * Stage or unstage part of a file, by applying a patch to the index.
+ *
+ * **Not optimistic.** Stage and unstage of a whole path can be predicted by
+ * moving a row between two lists; the result of a partial stage is a file that
+ * appears in *both* halves with different contents in each, and guessing that
+ * shape wrongly would show the user an index that does not exist.
+ */
+export function useApplyPatch(repoPath: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, GitQueryError, ApplyPatchVariables>({
+    mutationFn: async ({ patch, reverse }) => {
+      unwrap(
+        await workingTreeService(repoPath ?? '').applyToIndex(patch, {
+          ...(reverse !== undefined && { reverse }),
+        }),
+      );
+    },
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
 // --- merge ------------------------------------------------------------------
 
 export interface MergeVariables {

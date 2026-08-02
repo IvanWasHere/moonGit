@@ -20,6 +20,13 @@ export type DiffViewMode = 'inline' | 'split';
 export interface ViewLine {
   readonly line: DiffLine;
   /**
+   * Position in the source hunk's `lines`, which is **not** this line's
+   * position in the rendered order — a change block is emitted deletions-first
+   * for inline and paired for split. Line-level staging keys off the source
+   * position, because that is what the patch builder addresses.
+   */
+  readonly index: number;
+  /**
    * Intra-line runs, present only when this line was paired with its
    * counterpart and the two were similar enough to be worth refining.
    */
@@ -54,8 +61,8 @@ export function alignHunk(hunk: DiffHunk): AlignedHunk {
   let index = 0;
   let phase: Phase = 'context';
 
-  const pushMarker = (line: DiffLine) => {
-    const view: ViewLine = { line };
+  const pushMarker = (line: DiffLine, at: number) => {
+    const view: ViewLine = { line, index: at };
     lines.push(view);
     if (phase === 'deletion') rows.push({ left: view, right: null });
     else if (phase === 'addition') rows.push({ left: null, right: view });
@@ -67,13 +74,13 @@ export function alignHunk(hunk: DiffHunk): AlignedHunk {
     if (line === undefined) break;
 
     if (line.kind === 'noNewline') {
-      pushMarker(line);
+      pushMarker(line, index);
       index += 1;
       continue;
     }
 
     if (line.kind === 'context') {
-      const view: ViewLine = { line };
+      const view: ViewLine = { line, index };
       lines.push(view);
       rows.push({ left: view, right: view });
       phase = 'context';
@@ -83,25 +90,26 @@ export function alignHunk(hunk: DiffHunk): AlignedHunk {
 
     // A change block: every consecutive deletion and addition, plus any
     // markers among them. Collected whole so the two sides can be paired.
-    const deletions: DiffLine[] = [];
-    const additions: DiffLine[] = [];
-    const leftMarkers: DiffLine[] = [];
-    const rightMarkers: DiffLine[] = [];
+    // Paired with their source positions, which the rendered order loses.
+    const deletions: { line: DiffLine; index: number }[] = [];
+    const additions: { line: DiffLine; index: number }[] = [];
+    const leftMarkers: { line: DiffLine; index: number }[] = [];
+    const rightMarkers: { line: DiffLine; index: number }[] = [];
     let blockPhase: Phase = line.kind === 'deletion' ? 'deletion' : 'addition';
 
     while (index < hunk.lines.length) {
       const current = hunk.lines[index];
       if (current === undefined || current.kind === 'context') break;
       if (current.kind === 'deletion') {
-        deletions.push(current);
+        deletions.push({ line: current, index });
         blockPhase = 'deletion';
       } else if (current.kind === 'addition') {
-        additions.push(current);
+        additions.push({ line: current, index });
         blockPhase = 'addition';
       } else if (blockPhase === 'deletion') {
-        leftMarkers.push(current);
+        leftMarkers.push({ line: current, index });
       } else {
-        rightMarkers.push(current);
+        rightMarkers.push({ line: current, index });
       }
       index += 1;
     }
@@ -114,22 +122,33 @@ export function alignHunk(hunk: DiffHunk): AlignedHunk {
 
     for (const [i, deletion] of deletions.entries()) {
       const addition = i < paired ? additions[i] : undefined;
-      const refined = addition === undefined ? null : wordDiff(deletion.content, addition.content);
+      const refined =
+        addition === undefined ? null : wordDiff(deletion.line.content, addition.line.content);
       leftViews.push(
-        refined === null ? { line: deletion } : { line: deletion, segments: refined.oldSegments },
+        refined === null
+          ? { line: deletion.line, index: deletion.index }
+          : { line: deletion.line, index: deletion.index, segments: refined.oldSegments },
       );
       if (addition !== undefined) {
         rightViews.push(
-          refined === null ? { line: addition } : { line: addition, segments: refined.newSegments },
+          refined === null
+            ? { line: addition.line, index: addition.index }
+            : { line: addition.line, index: addition.index, segments: refined.newSegments },
         );
       }
     }
     for (const addition of additions.slice(paired)) {
-      rightViews.push({ line: addition });
+      rightViews.push({ line: addition.line, index: addition.index });
     }
 
-    const leftMarkerViews = leftMarkers.map((marker): ViewLine => ({ line: marker }));
-    const rightMarkerViews = rightMarkers.map((marker): ViewLine => ({ line: marker }));
+    const leftMarkerViews = leftMarkers.map((marker): ViewLine => ({
+      line: marker.line,
+      index: marker.index,
+    }));
+    const rightMarkerViews = rightMarkers.map((marker): ViewLine => ({
+      line: marker.line,
+      index: marker.index,
+    }));
 
     // Inline keeps git's order: the run of deletions with its marker, then the
     // additions with theirs.

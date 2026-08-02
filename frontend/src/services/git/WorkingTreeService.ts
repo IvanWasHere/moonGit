@@ -166,6 +166,38 @@ export class WorkingTreeService {
     return this.run(['add', '--', ...paths], options);
   }
 
+  /**
+   * Apply a patch to the index and nothing else — hunk- and line-level staging.
+   *
+   * `--cached` is what keeps the working tree untouched: the whole point of
+   * staging a hunk is that the rest of the file's changes stay where they are.
+   * `--reverse` unstages, by taking the change back out of the index.
+   *
+   * The patch goes in on **stdin**, for the reason commit messages do: it is
+   * multi-line text of arbitrary content, and argv is the wrong channel for it.
+   *
+   * Git either applies the whole patch or none of it, so a patch this app built
+   * wrongly leaves the index exactly as it was and surfaces git's complaint —
+   * which is the failure mode to want when the alternative is a half-staged
+   * file nobody asked for.
+   */
+  async applyToIndex(
+    patch: string,
+    options: ReadOptions & { readonly reverse?: boolean } = {},
+  ): Promise<Result<void, GitError>> {
+    const args = ['apply', '--cached', '--whitespace=nowarn'];
+    if (options.reverse === true) args.push('--reverse');
+    args.push('-');
+
+    // Not through `this.run`, which forwards only the abort signal: stdin
+    // would be dropped and git would sit waiting on an empty patch.
+    const result = await this.runner.exec(args, {
+      stdin: patch,
+      ...(options.signal !== undefined && { signal: options.signal }),
+    });
+    return result.ok ? ok(undefined) : result;
+  }
+
   /** Rename or move a tracked file, keeping its history. */
   move(from: string, to: string, options: ReadOptions = {}): Promise<Result<void, GitError>> {
     return this.run(['mv', '--', from, to], options);

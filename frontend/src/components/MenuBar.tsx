@@ -231,7 +231,12 @@ export function MenuBar({
       kind: 'button',
       label: 'Index Editor',
       icon: Icons.IndexEditor,
-      run: () => showToast('Index editor arrives in Phase 6', 'info'),
+      // Partial staging happens in the diff pane, beside the hunks. This
+      // points there rather than being a second, blinder way to do it.
+      run: () =>
+        selectedFile === null
+          ? needsSelection()
+          : showToast('Pick lines, or use "Stage hunk", in the Changes pane', 'info'),
     },
     {
       kind: 'button',

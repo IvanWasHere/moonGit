@@ -305,6 +305,69 @@
   line-height: 1.5;
 }
 
+/* --- staging (the Index Editor) --- */
+
+/* Shown only while lines are selected: a bar that is always there would be
+   chrome, and one that appears is an answer to "now what?". */
+.selectionBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  position: sticky;
+  top: 28px;
+  z-index: 1;
+  background: var(--bg-active);
+  border-bottom: 1px solid var(--border);
+}
+
+.selectionCount {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+/* Only changed lines respond, so a click on context cannot look like a miss. */
+.selectable {
+  cursor: pointer;
+}
+
+.selectable:hover {
+  filter: brightness(1.35);
+}
+
+/* A left marker rather than a background: the line already carries a red or
+   green tint that says what kind of change it is, and overriding that to say
+   "selected" would trade one fact for another. */
+.lineSelected {
+  border-left-color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.hunkAction {
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.hunkAction:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.hunkAction:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Hunk headers were absent from the mockup, which showed one continuous run
    of lines. Real files have gaps, and without a marker the jump in line
    numbers reads as a rendering bug. */
@@ -319,6 +382,7 @@
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   user-select: none;
+  align-items: center;
 }
 
 .hunkContext {

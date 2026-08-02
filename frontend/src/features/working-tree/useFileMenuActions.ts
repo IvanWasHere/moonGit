@@ -302,9 +302,13 @@ export function useFileMenuActions(repoPath: string | null) {
           showToast('Refreshed', 'info');
           return;
 
-        // Present but disabled in the menu; unreachable.
         case 'stageHunk':
-        case 'stageLines':
+          // Selecting the file *is* the entry point: the hunks and their
+          // stage buttons live in the diff pane, and a second mechanism here
+          // would be a worse version of the one that has the diff in front of
+          // it.
+          selectFile({ path: entry.path, side: 'worktree' });
+          showToast('Pick lines or use "Stage hunk" in the Changes pane', 'info');
           return;
       }
     })();

@@ -472,6 +472,43 @@ The plan named Monaco. Monaco is an *editor*, and its `DiffEditor` recomputes di
 
 The panes show dimensions and byte size beside each version, because that is usually where the answer is — an asset re-exported at half resolution looks identical until the numbers are side by side — and sit on a checkerboard so a transparent PNG does not read as a white one.
 
+### ✅ The Index Editor — hunk and line staging
+
+Staging part of a file, from the diff pane where the hunks already are. Each hunk header carries a **Stage hunk** / **Unstage hunk** button; clicking changed lines selects them and a bar offers **Stage selected**. Selecting a whole hunk is the same operation with all its lines selected, so there is one mechanism rather than two.
+
+`features/diff/patch.ts` builds a patch from the selection and `git apply --cached` applies it — `--reverse` to unstage. The patch goes in on **stdin**, for the reason commit messages do.
+
+**Neutralising unselected lines is direction-dependent**, and getting it backwards silently stages the wrong thing:
+
+| | unselected addition | unselected deletion |
+|---|---|---|
+| **stage** (index ← worktree) | dropped — not in the index, not going in | becomes context — it is in the index and stays |
+| **unstage** (index → HEAD, reversed) | becomes context — in the index and stays | dropped — not in the index |
+
+**Line numbers follow the same rule.** Whichever side git matches against the file keeps git's numbers; the other is derived by accumulating the size change of the hunks actually included. Skipping a hunk shifts everything after it.
+
+#### The bug only real git could find
+
+`patchApply.test.ts` runs generated patches through actual git in throwaway repositories — the one test in the frontend suite that shells out, and it earns the exception: a *malformed* patch fails loudly, but a merely **wrong** one applies cleanly and stages something nobody asked for. No fixture can tell those apart.
+
+It found exactly that. Staging one line of a block replacing `a,b` with `A,B` produced a patch git accepted and that left the index reading `b,A,c` instead of `A,b,c`. The cause: emitting lines in git's source order puts the retained context line before the addition.
+
+The fix is in the ordering rule. **The side git matches must keep its original order** — applying forward it checks the old side, so every deletion-slot line appears, as `-` if taken and as context if not, in file order. The *other* side is unconstrained, and that freedom is what makes this correct rather than merely valid: taken lines from it are emitted **beside the first line taken from the anchored side**, not where git happened to put them.
+
+Verified live on a two-hunk file, each step checked against `git show :path`:
+
+| | Result |
+|---|---|
+| Stage hunk 2 only | Staged `version`, left `retries`/`timeout` unstaged; status `MM` |
+| Stage 2 lines | Index took `retries: 10` but kept `timeout: 1000` — and `retries` landed in the right position |
+| Unstage hunk | `retries` reverted in the index, `version` still staged, **working tree untouched** |
+| Split view | Selecting either half of a row stages that line; `timeout` staged, `retries` left behind |
+| Status column | Showed `M M`, matching git's `MM` |
+
+**Failure is safe.** Git applies all of a patch or none, so a patch this app builds wrongly leaves the index exactly as it was and surfaces git's complaint.
+
+**The context menu's two disabled rows are gone**, replaced by one enabled `Stage Lines or Hunks…` that selects the file and points at the diff pane — a second mechanism there would be a worse version of the one that has the diff in front of it.
+
 ### ✅ Phase 6.2 — the commit graph
 
 Lanes, colours and merge topology beside every row in the Journal. `features/history/graph.ts` is pure and tested; `CommitGraph.tsx` draws one row.

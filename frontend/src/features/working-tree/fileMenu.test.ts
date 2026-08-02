@@ -117,15 +117,26 @@ describe('a modified file', () => {
   });
 
   /**
-   * Present but greyed, unlike everything else unbuilt, which is simply
-   * absent — their absence from a file menu would read as an oversight rather
-   * than as a feature that has not landed.
+   * Hunk and line staging live in the diff pane, where the hunks are; this
+   * entry is the signpost to them, and it is enabled now that they exist.
    */
-  it('shows the hunk-level staging items as disabled', () => {
+  it('offers partial staging, enabled', () => {
     const hunk = menuFor('modifyme.txt').find(
       (entry) => entry.kind === 'item' && entry.action === 'stageHunk',
     );
-    expect(hunk).toMatchObject({ disabled: true, hint: 'Index Editor' });
+    expect(hunk).toMatchObject({ label: 'Stage Lines or Hunks…' });
+    expect(hunk).not.toMatchObject({ disabled: true });
+  });
+});
+
+describe('partial staging', () => {
+  /** Nothing unstaged means nothing to stage a piece of. */
+  it('is offered only when there are unstaged changes', () => {
+    expect(actionsFor('modifyme.txt')).toContain('stageHunk');
+    // `renamed.txt` is staged with a clean working tree.
+    expect(actionsFor('renamed.txt')).not.toContain('stageHunk');
+    // An untracked file has no diff to pick hunks out of.
+    expect(actionsFor('.gitignore')).not.toContain('stageHunk');
   });
 });
 
