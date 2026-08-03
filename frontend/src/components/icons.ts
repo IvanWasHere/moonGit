@@ -42,7 +42,6 @@ import {
   RefreshCw,
   RotateCcw,
   Rows3,
-  ScanSearch,
   ScrollText,
   Search,
   SquarePen,
@@ -62,7 +61,6 @@ export const Icons = {
   /** fa-arrow-down */ Pull: ArrowDown,
   /** fa-arrows-rotate */ Sync: RefreshCw,
   /** fa-arrow-up */ Push: ArrowUp,
-  /** fa-code-branch */ GitFlow: GitBranch,
   /** fa-code-merge */ Merge: GitMerge,
   /** fa-check */ Commit: Check,
 
@@ -78,7 +76,6 @@ export const Icons = {
   // --- menubar: right section (ui-example L495–500) ---
   /** fa-clock-rotate-left */ Log: ClockArrowLeft,
   /** fa-user-pen */ Blame: UserPen,
-  /** fa-magnifying-glass-chart */ Investigate: ScanSearch,
   /** fa-columns */ MainView: Columns3,
   /** fa-code-compare */ ReviewView: GitCompare,
 

@@ -118,20 +118,9 @@
   }
 }
 
-/* Commit carries `btn-primary` in the mockup (L464) — the one filled button
-   in the bar. Values from L231–232. */
-.primary {
-  background: var(--accent);
-  color: var(--bg-darkest);
-  border: 1px solid var(--accent);
-  font-weight: 600;
-}
-
-.primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: var(--bg-darkest);
-}
+/* The mockup gave Commit `btn-primary` (L464), the one filled button in the
+   bar. Removed deliberately — see PLAN.md §14. Every menubar button now shares
+   one appearance, so emphasis in this bar means "active view", nothing else. */
 
 /* A command in flight — the network ones can take seconds. */
 .spin {

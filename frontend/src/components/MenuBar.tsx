@@ -40,7 +40,7 @@ interface MenuAction {
   readonly kind: 'button';
   readonly label: string;
   readonly icon: LucideIcon;
-  readonly tone?: 'danger' | 'primary';
+  readonly tone?: 'danger';
   readonly run: () => void;
   readonly busy?: boolean;
 }
@@ -217,16 +217,11 @@ export function MenuBar({
       kind: 'button',
       label: 'Commit',
       icon: Icons.Commit,
-      // The mockup's one filled button (L464). It now opens the composer
-      // rather than committing directly — the message has to be written first.
-      tone: 'primary',
+      // Deliberately *not* the mockup's filled gold button (L464) — see the
+      // deviation note in PLAN.md §14. It opens the composer rather than
+      // committing, so it is a step on the way somewhere like every other
+      // button here, and the emphasis was overstating what it does.
       run: toggleCommit,
-    },
-    {
-      kind: 'button',
-      label: 'Git-flow',
-      icon: Icons.GitFlow,
-      run: () => showToast('Git-flow arrives in Phase 6', 'info'),
     },
     {
       kind: 'button',
@@ -311,12 +306,6 @@ export function MenuBar({
       icon: Icons.Blame,
       run: () => showToast('Blame view arrives in Phase 6', 'info'),
     },
-    {
-      kind: 'button',
-      label: 'Investigate',
-      icon: Icons.Investigate,
-      run: () => showToast('Investigate arrives in Phase 6', 'info'),
-    },
   ];
 
   const render = (entries: readonly MenuEntry[]) =>
@@ -371,7 +360,7 @@ function MenuButton({
   readonly icon: LucideIcon;
   readonly onClick: () => void;
   readonly active?: boolean;
-  readonly tone?: 'danger' | 'primary';
+  readonly tone?: 'danger';
   readonly busy?: boolean;
 }) {
   return (
@@ -379,7 +368,7 @@ function MenuButton({
       type="button"
       className={`${styles.button} ${active === true ? styles.active : ''} ${
         tone === 'danger' ? styles.danger : ''
-      } ${tone === 'primary' ? styles.primary : ''}`}
+      }`}
       onClick={onClick}
       disabled={busy === true}
       title={label}

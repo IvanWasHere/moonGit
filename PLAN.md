@@ -299,7 +299,7 @@ Ported against the Dexie **seed data reshaped as TS fixtures**, so the port is v
 
 **Three differences the comparison caught**, all now fixed:
 
-1. **Commit was not gold.** The mockup gives that one button `menu-btn` *and* `btn-primary` (L464) — the only filled control in the bar. Easy to miss reading the markup, obvious side by side.
+1. **Commit was not gold.** The mockup gives that one button `menu-btn` *and* `btn-primary` (L464) — the only filled control in the bar. Easy to miss reading the markup, obvious side by side. *(Later reverted on purpose — the button opens the composer rather than committing, so the emphasis overstated it. See §14 deviation 5.)*
 2. **`+3 -1` instead of `+3-1`.** A `gap: 4px` on `.meta` that the mockup does not have. Fixed by removing it and giving remote-branch rows two separate `.meta` elements, which is how the mockup spaces `lastCommit` from the counters (L678–682).
 3. **Section headers under-indented by 24px.** The mockup renders an empty `i.icon` in the "Staged Changes (3)" divider (L595, L601) so the label lines up with the filenames beneath it.
 
@@ -1054,9 +1054,16 @@ Three places where this plan knowingly diverges — worth a second look before P
 3. **SQLite stores much less than the Dexie mockup did.** The PRD's migration section implies a table-for-table conversion; that would build a stale cache. Git stays the source of truth for git data.
 4. **Shiki, not Monaco, for syntax highlighting** (§9.1, decided in Phase 6). A read-only diff needs a tokenizer, not an editor; Monaco's DiffEditor would also recompute diffs client-side and compete with git's own hunks. Monaco remains a candidate for the merge conflict editor (§9.3).
 
+5. **The menubar has no filled button, and two fewer buttons.** Three separate departures from the mockup's bar (L454–504), all deliberate:
+
+   - **Commit is styled like every other button.** The mockup gives it `btn-primary` (L464) and Phase 4's screenshot comparison specifically restored that gold — see "Commit was not gold" in §7. It is now reverted on purpose. The button *opens the composer*; it does not commit. Filling the one control that is a step on the way somewhere overstated it, and with the emphasis gone, a highlighted button in that bar now means "active view" and nothing else.
+   - **Git-flow and Investigate are gone**, per §14 above.
+
+   A future session comparing against `ui-example/index.html` will find all three as differences. They are not drift — do not restore them.
+
 ### Still open (not blocking — decide by the phase noted)
 
 - ~~**Light theme**~~ — **resolved: built in Phase 6.8**, ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. Custom accent is still open. See §9's Phase 6.8 entry, including the dark theme's own measured contrast failure now waiting on Phase 8.
-- **Git-flow / Index Editor / Investigate** — three menubar buttons in the mockup that only fire toasts, and the PRD never defines them. *Needed by Phase 6.*
+- ~~**Git-flow / Index Editor / Investigate**~~ — **all three resolved.** Index Editor was built (§9, hunk and line staging). **Git-flow and Investigate were removed**: the PRD never defined either, both only ever fired a toast, and a control that does nothing is worse than an absent one — it costs a click to discover that. Their icons went with them, since an icon with no caller is a mapping to nothing. `icons.test.ts` records the reason.
 - ~~**Merge/diff tool integration**~~ — **resolved: built in.** A three-way modal with per-region choices; the escape hatch is the user's own editor, not a configured external differ. See §9.3 above.
 - **Code signing identity + notarization credentials.** *Needed by Phase 8.*

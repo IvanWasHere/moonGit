@@ -16,13 +16,18 @@ describe('icon registry', () => {
     expect(unresolved).toEqual([]);
   });
 
-  it('covers every icon used by the mockup menubar', () => {
-    // ui-example/index.html L458–500
+  it('covers every icon the menubar renders', () => {
+    /*
+     * Originally the mockup's menubar in full (ui-example L458–500). Two of its
+     * buttons are gone: **Git-flow** and **Investigate** were never defined by
+     * the PRD and only ever fired a toast, so they were removed rather than
+     * left as controls that do nothing (PLAN.md §14). Their icons went with
+     * them — an icon with no caller is a mapping to nothing.
+     */
     const required = [
       'Pull',
       'Sync',
       'Push',
-      'GitFlow',
       'Merge',
       'Commit',
       'Stage',
@@ -34,7 +39,6 @@ describe('icon registry', () => {
       'Delete',
       'Log',
       'Blame',
-      'Investigate',
       'MainView',
       'ReviewView',
     ] as const;
