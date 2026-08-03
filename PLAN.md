@@ -418,7 +418,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 1. **Diff viewer**: side-by-side, inline, syntax highlighting (~~Monaco~~ **Shiki** — see below), word diff, image diff, large-file guard
 2. ~~**Commit graph**: lane layout, branch colors, merge visualization~~ ✅ (below)
 3. ~~**Merge**: wizard, conflict detection, conflict viewer, resolution helper~~ ✅ (below)
-4. **Rebase**: interactive, continue/skip/abort, squash/edit
+4. ~~**Rebase**: interactive, continue/skip/abort, squash/edit~~ ✅ (below)
 5. ~~**Cherry-pick**, **Stash**, **Tags**~~ ✅ (below)
 6. **Search**: commits / files / branches / tags / messages / authors
 7. **File explorer**: tree, quick open, reveal in Finder
@@ -500,6 +500,67 @@ The `Local ▸ Stash` bug — a mutation bypassing React Query, so the panels ke
 `useFileMenuActions` refreshed **only when the command succeeded**. `resolveUsing` is two commands, `checkout --ours` then `add`: if the second fails the working tree has already been rewritten by the first, and the panels were left describing a repository that no longer existed. It now refreshes in a `finally`, exactly as the mutation layer's `onSettled` does, and for the same reason — an error does not mean nothing happened.
 
 Everything else the audit turned up was either a read inside a query (fine) or the dev panels, which are guarded to scratchpad paths.
+
+### ✅ Phase 6.4 — rebase
+
+All four parts of item 4: interactive, continue/skip/abort, squash/edit. A wizard to plan one, a banner to get out of one.
+
+#### Driving `git rebase -i` with no terminal to open
+
+Interactive rebase is defined by an editor: git writes a todo list, opens `$GIT_SEQUENCE_EDITOR` on it, and replays whatever comes back. moonGit has no terminal to host one, so it hands git **a sequence editor that is not an editor** — `GIT_SEQUENCE_EDITOR` is set to `cp '<our file>'`, which overwrites git's todo with one `features/rebase/rebaseTodo.ts` produced. Git carries on as though the user had saved it.
+
+That path has two sharp edges, both handled where they are created rather than where they bite:
+
+- **Git runs the value through `sh -c`**, not `exec`. A repository under a path with a space in it would produce a command that copies the wrong file, or nothing — so the path is single-quoted with the usual `'\''` escape, which is the only form safe for every byte a path may hold.
+- **`GIT_EDITOR=true`** for everything else git might want to open. Commit messages during `squash` are the case that matters: git combines them itself and merely *offers* to edit the result, so a no-op editor accepts its default.
+
+**`reword` is deliberately not offered.** It stops the rebase and opens `GIT_EDITOR` on the message — which, being a no-op, would silently keep the message unchanged. A menu item that claims to rename a commit and doesn't is worse than no menu item. `edit` gives the same power honestly: the rebase stops and the commit composer can amend the message along with anything else.
+
+**The list is shown oldest-first, git's apply order** — not the Journal's newest-first. "Fold into the commit above" means the opposite of what it says if the list is reversed, and `todoFromCommits` reverses the log rather than leaving the two orders to be reconciled by eye.
+
+**`todoProblem` refuses a list git would refuse**, before anything is rewritten. The rule that actually bites: the first surviving commit cannot `squash` or `fixup`, because there is no commit above it — git stops with `cannot 'squash' without a previous commit` *after* it has begun rewriting history, which is a far worse place to learn it than a disabled button. Dropping everything is caught for the same reason.
+
+**Dropped commits stay in the list, struck through.** Removing the row would make the change unreviewable and un-undoable in one motion.
+
+#### The banner, and why continue and skip are not symmetrical
+
+A stopped rebase is the one state where the app's ordinary affordances are all slightly wrong: HEAD is detached partway through a replay, and committing would not do what it looks like. So it gets a bar across the top of the workspace reading the step out of `.git/rebase-merge` (`msgnum` / `end`), with the three ways out.
+
+**Skip and abort confirm; continue does not.** Skip throws the current commit's changes away entirely and abort unwinds the whole operation — continue is the intended path. The banner also does not claim to know *why* the rebase stopped: nothing on disk distinguishes a stop for an `edit` line from a conflict that has since been resolved, since both leave a clean tree partway through, so it says "Nothing left to resolve — continue when ready" rather than naming the wrong one.
+
+**A conflict is not a failure**, the same as merge and cherry-pick: exit 1 with unmerged paths is an outcome, and `okExitCodes: [0, 1]` lets it through to `toOutcome`. Continuing into another conflict re-opens the resolver rather than reporting success.
+
+#### The resolver had to learn it was mid-rebase
+
+**Git swaps what "ours" means during a rebase**, and the three-way tool was labelling the columns `Ours (current branch)` / `Theirs (incoming)` — correct for a merge and backwards here. Mid-rebase, *ours* is the branch being replayed **onto** and *theirs* is the commit being applied. The labels now read `Ours (the new base)` and `Theirs (commit being replayed)` when `.git/rebase-merge` exists. Nothing else changed: stages 1/2/3 are already whatever git put in the index, so only the words were wrong — which is the dangerous kind of wrong, since the user picks a side by reading them.
+
+#### Two unmount bugs, the same shape
+
+The wizard was supposed to close and hand off to the resolver on a conflict. It did not, twice, and both times because **React Query's `mutate()` callbacks do not fire if the component that called it has unmounted** — the mutation completes, the cache updates, and the `onSuccess` that was going to close the wizard simply never runs.
+
+1. The plan component re-read the current branch, and a rebase detaches HEAD — so it unmounted the moment the rebase started. Fixed by capturing `{upstream, branch}` together up front.
+2. Less obvious: the component is keyed on the commit range so it remounts when the range changes, and the range changes as commits are replayed. `useRebase` lived inside that boundary. Lifting the hook to the parent and passing it down fixed it — the observer now outlives the thing it is rendering.
+
+The lesson generalises: **a mutation's callbacks belong above every `key` that its own side effects can change.**
+
+Verified live end to end, twice, against a scratch repo with a feature branch of three commits over a main that had moved:
+
+| | Result |
+|---|---|
+| Interactive plan | Four commits oldest-first; `fixup` on "fix beta typo" folded it into "add beta" |
+| Guard | `Squash` on the first row disabled Rebase and named the rule |
+| Conflict handoff | Wizard closed on its own; resolver opened on `f.txt` with the single conflict |
+| Rebase-aware labels | Ours showed `MAIN AGAIN`, theirs `FEATURE` — with the new wording |
+| Resolve → Continue | Chose theirs, saved and staged (`UU` → `M.`), continued; `Rebase finished` |
+| Result | Linear history onto `main`, three new oids, `f.txt` = the chosen side, clean tree, HEAD back on `feature` |
+| Skip | Discarded the replayed commit and left the base version in place — exactly what it warns it will do |
+| Fixup | 4 commits became 3, `b.txt` = `beta fixed`, the folded message gone |
+
+**A guard fired in the wild while doing this.** The chunk-count check added in "When an empty history is a lie" caught a genuine dropped event mid-rebase and rendered *"git emitted 1 chunks but 0 arrived — 604 bytes of output were lost in transit"* where the Journal would previously have shown "No commits yet". The failure it was written for is real and happens.
+
+**A toast ate a click.** The toast stack is fixed to the bottom-right corner at `z-index: 9999` — the same corner every modal puts its primary action in — and toasts were clickable so they could be dismissed. A rebase toast landed over `Save & mark resolved` and swallowed the press; the only symptom was a button that appeared to do nothing. Toasts are now non-interactive and rely on their three-second expiry. Click-to-dismiss on a three-second toast is worth less than never stealing a click.
+
+**Not exercised interactively**: the skip and abort confirmations are native windows the automation cannot answer — the same limitation Discard, Remove, Delete and merge Abort have. The commands behind them were run directly.
 
 ### ✅ Phase 6.5 — cherry-pick, stash, tags
 

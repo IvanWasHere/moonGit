@@ -5,6 +5,7 @@ import {
   commitService,
   isStaged,
   mergeService,
+  rebaseService,
   remoteService,
   stashService,
   tagService,
@@ -17,6 +18,7 @@ import {
   type RepoStatus,
   type Result,
 } from '@/services/git';
+import { deletePath } from '@/services/wails';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { GitQueryError } from './git';
 import { gitKeys } from './keys';
@@ -429,6 +431,69 @@ export function useCherryPick(repoPath: string | null) {
           ...(recordOrigin !== undefined && { recordOrigin }),
         }),
       ),
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+// --- rebase -----------------------------------------------------------------
+
+export interface RebaseVariables {
+  readonly upstream: string;
+  readonly autostash?: boolean;
+  readonly onto?: string;
+  /** Present for an interactive rebase: the todo file git's editor will copy. */
+  readonly todoPath?: string;
+}
+
+/**
+ * Start a rebase, interactive or not.
+ *
+ * A stop — for a conflict, or for an `edit` line — comes back as `conflicted`.
+ * The rebase is paused either way and the same continue/skip/abort gets out of
+ * it, so the caller has one case to handle rather than two.
+ */
+export function useRebase(repoPath: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation<IntegrationOutcome, GitQueryError, RebaseVariables>({
+    mutationFn: async ({ upstream, autostash, onto, todoPath }) => {
+      const service = rebaseService(repoPath ?? '');
+      const options = {
+        ...(autostash !== undefined && { autostash }),
+        ...(onto !== undefined && { onto }),
+      };
+      try {
+        return unwrap(
+          todoPath === undefined
+            ? await service.rebase(upstream, options)
+            : await service.interactive(upstream, { ...options, todoPath }),
+        );
+      } finally {
+        // Git copies the todo at the start and never looks at it again, so it
+        // is litter inside `.git` from the moment the rebase begins — cleaned
+        // up whichever way the rebase went.
+        if (todoPath !== undefined) await deletePath(todoPath).catch(() => undefined);
+      }
+    },
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+export type RebaseStep = 'continue' | 'skip' | 'abort';
+
+/** Continue, skip or abort a rebase that has stopped. */
+export function useRebaseStep(repoPath: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation<IntegrationOutcome | null, GitQueryError, { step: RebaseStep }>({
+    mutationFn: async ({ step }) => {
+      const service = rebaseService(repoPath ?? '');
+      if (step === 'abort') {
+        unwrap(await service.abort());
+        return null;
+      }
+      return unwrap(step === 'continue' ? await service.continueRebase() : await service.skip());
+    },
     onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
   });
 }

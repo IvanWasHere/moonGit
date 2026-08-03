@@ -9,6 +9,8 @@ import styles from './ToastContainer.module.css';
  * The mockup's `@keyframes toastIn` is reproduced with Framer Motion so exits
  * can animate too — the CSS version simply vanished on removal, which reads as
  * a glitch when several dismiss at once.
+ *
+ * Toasts are **not** clickable; they expire on their own. See the CSS for why.
  */
 
 const ICON = {
@@ -19,7 +21,6 @@ const ICON = {
 
 export function ToastContainer() {
   const toasts = useNotificationStore((state) => state.toasts);
-  const dismiss = useNotificationStore((state) => state.dismiss);
 
   return (
     <div className={styles.container}>
@@ -35,7 +36,6 @@ export function ToastContainer() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
-              onClick={() => dismiss(toast.id)}
             >
               <Icon size={14} />
               <span>{toast.message}</span>

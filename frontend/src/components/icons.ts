@@ -13,6 +13,7 @@
  */
 import {
   Archive,
+  ArrowDownUp,
   ArrowDown,
   ArrowUp,
   Ban,
@@ -92,6 +93,8 @@ export const Icons = {
   Favorite: Star,
   /** The stash stack — git's own metaphor is a shelf, and this is the closest. */
   Stash: Archive,
+  /** Rebase — commits lifted off one base and replayed onto another. */
+  Rebase: ArrowDownUp,
 
   // --- diff viewer (no mockup equivalent; the mockup had one view) ---
   /** Unified view — one column, git's own patch order. */ DiffInline: Rows3,

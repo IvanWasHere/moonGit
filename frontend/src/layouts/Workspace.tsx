@@ -8,6 +8,8 @@ import { useMenuActions } from '@/components/menu/useMenuActions';
 import { ToastContainer } from '@/components/ToastContainer';
 import { MergeModal } from '@/features/merge/MergeModal';
 import { MergeWizard } from '@/features/merge/MergeWizard';
+import { RebaseBanner } from '@/features/rebase/RebaseBanner';
+import { RebaseWizard } from '@/features/rebase/RebaseWizard';
 import { StashModal } from '@/features/stash/StashModal';
 import { TagPrompt } from '@/features/tags/TagPrompt';
 import { useRepository } from '@/queries/repositories';
@@ -45,6 +47,8 @@ export function Workspace({
   const closeMergeWizard = useWorkspaceStore((state) => state.closeMergeWizard);
   const stashOpen = useWorkspaceStore((state) => state.stashOpen);
   const closeStash = useWorkspaceStore((state) => state.closeStash);
+  const rebaseWizardOpen = useWorkspaceStore((state) => state.rebaseWizardOpen);
+  const closeRebaseWizard = useWorkspaceStore((state) => state.closeRebaseWizard);
   const tagPromptOid = useWorkspaceStore((state) => state.tagPromptOid);
   const closeTagPrompt = useWorkspaceStore((state) => state.closeTagPrompt);
   const openRepo = useWorkspaceStore((state) => state.openRepo);
@@ -71,6 +75,7 @@ export function Workspace({
         view={view}
         selectedFileName={selectedFile === null ? null : fileName(selectedFile.path)}
       />
+      <RebaseBanner />
       {isPending ? (
         <div className={styles.loading}>
           <EmptyState icon={Icons.Sync} message="Opening repository…" />
@@ -81,6 +86,7 @@ export function Workspace({
       {mergeOpen && <MergeModal onClose={closeMerge} />}
       {mergeWizardOpen && <MergeWizard onClose={closeMergeWizard} />}
       {stashOpen && <StashModal onClose={closeStash} />}
+      {rebaseWizardOpen && <RebaseWizard onClose={closeRebaseWizard} />}
       {tagPromptOid !== null && <TagPrompt oid={tagPromptOid} onClose={closeTagPrompt} />}
       <ToastContainer />
     </div>

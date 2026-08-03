@@ -92,6 +92,8 @@ interface WorkspaceState {
   readonly tagPromptOid: string | null;
   /** Stash stack, modal over the workspace like the merge tools. */
   readonly stashOpen: boolean;
+  /** The rebase wizard. The *stopped* state is read from git, not stored. */
+  readonly rebaseWizardOpen: boolean;
   readonly diffView: DiffViewMode;
   /**
    * Restrict the Journal to one file's history ("File Log"), or null for all.
@@ -128,6 +130,8 @@ interface WorkspaceState {
   closeTagPrompt: () => void;
   openStash: () => void;
   closeStash: () => void;
+  openRebaseWizard: () => void;
+  closeRebaseWizard: () => void;
   setDiffView: (mode: DiffViewMode) => void;
   setLogPath: (path: string | null) => void;
   toggleLogAll: () => void;
@@ -148,6 +152,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   mergeWizardOpen: false,
   tagPromptOid: null,
   stashOpen: false,
+  rebaseWizardOpen: false,
   // Inline by default: it is the mockup's layout, and the Changes pane is
   // narrow enough at its default size that split would truncate both halves.
   diffView: 'inline',
@@ -178,6 +183,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       mergeWizardOpen: false,
       tagPromptOid: null,
       stashOpen: false,
+      rebaseWizardOpen: false,
       logPath: null,
       logAll: false,
     });
@@ -202,6 +208,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   closeTagPrompt: () => set({ tagPromptOid: null }),
   openStash: () => set({ stashOpen: true }),
   closeStash: () => set({ stashOpen: false }),
+  openRebaseWizard: () => set({ rebaseWizardOpen: true }),
+  closeRebaseWizard: () => set({ rebaseWizardOpen: false }),
 
   setDiffView: (diffView) => set({ diffView }),
 

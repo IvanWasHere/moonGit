@@ -21,8 +21,13 @@
   gap: 8px;
   min-width: 240px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  pointer-events: auto;
-  cursor: pointer;
+  /* Deliberately not `pointer-events: auto`. The stack is fixed to the
+     bottom-right corner at z-index 9999 — the same corner every modal puts its
+     primary action in — so a clickable toast sits on top of "Save & mark
+     resolved" and eats the click that was meant for it. Caught live: a toast
+     from the rebase swallowed the save in the conflict resolver, and the only
+     symptom was a button that appeared to do nothing. Three seconds of
+     auto-dismiss is worth more than click-to-dismiss. */
 }
 
 .success {

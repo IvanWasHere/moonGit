@@ -156,8 +156,9 @@ export class CommitService {
       return err(
         parseFailure(
           new Error(
-            `git emitted ${result.value.chunks} chunks but ${received} arrived — ` +
-              `${result.value.bytesOut} bytes of output were lost in transit`,
+            `git emitted ${result.value.chunks} chunk${result.value.chunks === 1 ? '' : 's'} ` +
+              `but ${received} arrived — ${result.value.bytesOut} bytes of output were lost ` +
+              `in transit`,
           ),
           context,
         ),

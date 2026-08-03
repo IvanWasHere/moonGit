@@ -8,6 +8,7 @@ import { isConflicted, type StatusEntry } from '@/services/git';
 import { openPath, readFile, writeFile } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useRebaseState } from '@/features/rebase/useRebaseState';
 import { useMergeFile } from './useMergeFile';
 import {
   choiceFor,
@@ -107,6 +108,7 @@ function MergeFileView({
 }) {
   const { data, isPending, error } = useMergeFile(repoPath, entry);
   const stage = useStage(repoPath);
+  const rebasing = useRebaseState(repoPath).active;
 
   const [choices, setChoices] = useState<Choices>({});
   /** Set once the file has been edited outside the region model; the file then wins. */
@@ -184,9 +186,20 @@ function MergeFileView({
   return (
     <div className={styles.pane}>
       <div className={styles.columnHeads}>
-        <div className={styles.colOurs}>Ours (current branch)</div>
+        {/*
+         * Git swaps what "ours" means during a rebase, and calling the wrong
+         * side "current branch" while replaying commits onto another one would
+         * have the user pick the opposite of what they meant. Mid-rebase,
+         * "ours" is the branch being replayed *onto* and "theirs" is the commit
+         * being applied — the reverse of a merge.
+         */}
+        <div className={styles.colOurs}>
+          {rebasing ? 'Ours (the new base)' : 'Ours (current branch)'}
+        </div>
         <div className={styles.colResult}>Result</div>
-        <div className={styles.colTheirs}>Theirs (incoming)</div>
+        <div className={styles.colTheirs}>
+          {rebasing ? 'Theirs (commit being replayed)' : 'Theirs (incoming)'}
+        </div>
       </div>
 
       {detached !== null && (

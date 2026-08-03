@@ -65,6 +65,17 @@ export interface IntegrationOutcome {
  */
 const CONFLICT_EXIT = 1;
 
+/**
+ * Single-quote a path for the shell git runs its editors through.
+ *
+ * Duplicated deliberately from `features/rebase/rebaseTodo.ts` rather than
+ * imported: the git layer may not depend on a feature (PLAN.md §5), and three
+ * lines of quoting is a smaller price than that seam.
+ */
+function shellQuoteForGit(path: string): string {
+  return `'${path.replaceAll("'", `'\\''`)}'`;
+}
+
 const CONFLICT_EVIDENCE = /CONFLICT|Automatic merge failed|could not apply|needs merge/i;
 
 /** Returns null when the run was not an outcome at all, but a failure. */
@@ -166,8 +177,54 @@ export interface RebaseOptions extends ReadOptions {
   readonly autostash?: boolean;
 }
 
+export interface InteractiveRebaseOptions extends RebaseOptions {
+  /**
+   * A file holding the todo list. Copied over git's own by the sequence
+   * editor, so it must exist and be readable when the rebase starts.
+   */
+  readonly todoPath: string;
+}
+
 export class RebaseService {
   constructor(private readonly runner: GitRunner) {}
+
+  /**
+   * Rebase interactively, with the todo list supplied rather than edited.
+   *
+   * There is no terminal to open an editor in, so git is given ones that are
+   * not editors:
+   *
+   * - **`GIT_SEQUENCE_EDITOR`** copies `todoPath` over the todo git generated.
+   *   Git invokes it through `sh -c`, which is why the path is shell-quoted —
+   *   a repository under a path with a space would otherwise copy the wrong
+   *   file, or nothing at all.
+   * - **`GIT_EDITOR=true`** answers the message prompts. `squash` and `fixup`
+   *   only *offer* to edit the combined message git has already composed, so
+   *   accepting it unchanged is right. `reword` would be silently ignored,
+   *   which is why `rebaseTodo.ts` does not offer it.
+   *
+   * A stop for `edit`, or for a conflict, comes back as `conflicted` — the
+   * rebase is paused either way and the same continue/skip/abort gets out of
+   * it.
+   */
+  async interactive(
+    upstream: string,
+    options: InteractiveRebaseOptions,
+  ): Promise<Result<IntegrationOutcome, GitError>> {
+    const args = ['rebase', '--interactive'];
+    if (options.autostash === true) args.push('--autostash');
+    if (options.onto !== undefined) args.push('--onto', options.onto);
+    args.push(upstream);
+    if (options.branch !== undefined) args.push(options.branch);
+
+    const result = await this.runner.exec(args, {
+      ...toExecOptions(options),
+      okExitCodes: [0, CONFLICT_EXIT],
+      env: [`GIT_SEQUENCE_EDITOR=cp ${shellQuoteForGit(options.todoPath)}`, 'GIT_EDITOR=true'],
+    });
+    if (!result.ok) return result;
+    return toOutcome(result.value, args, this.runner.repoPath, 'stderr');
+  }
 
   async rebase(
     upstream: string,

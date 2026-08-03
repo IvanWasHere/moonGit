@@ -28,6 +28,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const openMerge = useWorkspaceStore((state) => state.openMerge);
   const openMergeWizard = useWorkspaceStore((state) => state.openMergeWizard);
   const openStash = useWorkspaceStore((state) => state.openStash);
+  const openRebaseWizard = useWorkspaceStore((state) => state.openRebaseWizard);
 
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
@@ -126,7 +127,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
     'branch.create': soon('Branch create'),
     'branch.rename': soon('Branch rename'),
     'branch.merge': openMergeTool,
-    'branch.rebase': soon('Rebase'),
+    'branch.rebase': openRebaseWizard,
     // Cherry-picking needs a commit, and the Journal's context menu is where
     // one is in front of you. This points there rather than being a blinder
     // second route to the same operation.
