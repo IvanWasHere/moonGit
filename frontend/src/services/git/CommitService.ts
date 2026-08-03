@@ -15,13 +15,43 @@ import { createLogParser, LOG_BASE_ARGS, parseLog, type Commit } from './parsers
 import type { ReadOptions } from './RepositoryService';
 import { err, ok, type Result } from './result';
 
-export interface LogOptions extends ReadOptions {
+/**
+ * The limiting patterns — what turns `log` into a search.
+ *
+ * Separated from the rest of `LogOptions` because the UI builds exactly this
+ * subset from a query string (`features/search/commitQuery`), and because the
+ * fields interact: `patternType` and `ignoreCase` are properties of the whole
+ * command, not of one pattern, so git applies them to `grep` and `author`
+ * alike. That is why they are not per-pattern here either — the type should
+ * not be able to express something git cannot do.
+ */
+export interface CommitSearchParams {
+  /** Message patterns. More than one is ORed by git unless `allMatch`. */
+  readonly grep?: readonly string[];
+  /** Require every `grep` to match, rather than any (`--all-match`). */
+  readonly allMatch?: boolean;
+  readonly author?: string;
+  /** Approxidate — git parses "2 weeks ago" and "2026-01-02" alike. */
+  readonly since?: string;
+  readonly until?: string;
+  /**
+   * Limit to these paths. Pathspecs, so wildcards and `:(icase)` work.
+   *
+   * Here rather than on `LogOptions` because a pathspec limits which commits
+   * come back exactly as `--grep` does — it is part of the search, and the
+   * File Log and the search box both produce one.
+   */
+  readonly paths?: readonly string[];
+  /** How git reads every pattern above. Git's own default is `extended`. */
+  readonly patternType?: 'fixed' | 'extended';
+  readonly ignoreCase?: boolean;
+}
+
+export interface LogOptions extends ReadOptions, CommitSearchParams {
   /** Commits to stop after. Omit only when the history is known to be small. */
   readonly maxCount?: number;
   /** Revision range, e.g. `['main']` or `['origin/main..HEAD']`. Defaults to HEAD. */
   readonly revisions?: readonly string[];
-  /** Limit history to these paths. */
-  readonly paths?: readonly string[];
   /** Follow only the first parent, which flattens merge bubbles. */
   readonly firstParent?: boolean;
   /** Order by topology rather than date — what the commit graph needs. */
@@ -43,6 +73,29 @@ function logArgs(options: LogOptions): string[] {
   // which is what stops the graph's lanes zig-zagging. `git log --graph`
   // turns this on for itself for the same reason.
   if (options.topoOrder === true) args.push('--topo-order');
+
+  /*
+   * Limiting patterns.
+   *
+   * `--fixed-strings` / `--extended-regexp` are stateful in git's argument
+   * parser — each one applies to the patterns that follow it — so they go in
+   * first, before any `--grep` or `--author`. A pattern type placed after its
+   * pattern silently does nothing.
+   *
+   * Every value uses the `--flag=value` form. A search for `-v` passed as two
+   * arguments would be read as an option, and a leading dash is exactly the
+   * sort of thing that ends up in a commit message.
+   */
+  if (options.patternType === 'fixed') args.push('--fixed-strings');
+  if (options.patternType === 'extended') args.push('--extended-regexp');
+  if (options.ignoreCase === true) args.push('--regexp-ignore-case');
+  for (const pattern of options.grep ?? []) args.push(`--grep=${pattern}`);
+  // Git ORs multiple --grep; this is what makes two typed words an AND.
+  if (options.allMatch === true) args.push('--all-match');
+  if (options.author !== undefined) args.push(`--author=${options.author}`);
+  if (options.since !== undefined) args.push(`--since=${options.since}`);
+  if (options.until !== undefined) args.push(`--until=${options.until}`);
+
   if (options.revisions !== undefined) args.push(...options.revisions);
   // `--` separates revisions from paths; without it a path that matches a
   // branch name is ambiguous and git refuses the command.

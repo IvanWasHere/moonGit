@@ -88,6 +88,9 @@ export const Icons = {
   /** fa-compress */ CollapseAll: Minimize2,
   /** fa-search */ Search,
   /** fa-filter */ Filter: Funnel,
+  /** Dismiss a bar or box. Same glyph as `Remove`, named for what it does here
+   *  — closing a search is not removing a file. */
+  Close: X,
   /** fa-pen */ NewCommit: Pen,
   Tag,
   Favorite: Star,

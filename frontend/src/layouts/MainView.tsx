@@ -36,6 +36,11 @@ export function MainView() {
   const copyDiff = useCopyDiff();
   const logAll = useWorkspaceStore((state) => state.logAll);
   const toggleLogAll = useWorkspaceStore((state) => state.toggleLogAll);
+  const logQuery = useWorkspaceStore((state) => state.logQuery);
+  const toggleLogSearch = useWorkspaceStore((state) => state.toggleLogSearch);
+  const setLogQuery = useWorkspaceStore((state) => state.setLogQuery);
+  const panelFilters = useWorkspaceStore((state) => state.panelFilters);
+  const togglePanelFilter = useWorkspaceStore((state) => state.togglePanelFilter);
 
   return (
     <div className={styles.content} ref={containerRef}>
@@ -80,6 +85,15 @@ export function MainView() {
                   <Icons.Stage size={11} />
                 </PanelAction>
                 <PanelAction
+                  title={panelFilters.branches === null ? 'Filter branches' : 'Hide filter'}
+                  onClick={() => togglePanelFilter('branches')}
+                >
+                  <Icons.Filter
+                    size={11}
+                    {...(panelFilters.branches !== null && { color: 'var(--accent)' })}
+                  />
+                </PanelAction>
+                <PanelAction
                   title="Fetch"
                   onClick={() => showToast('Fetching from remote...', 'info')}
                 >
@@ -111,6 +125,15 @@ export function MainView() {
                   onClick={() => showToast('All files staged', 'success')}
                 >
                   <Icons.Stage size={11} />
+                </PanelAction>
+                <PanelAction
+                  title={panelFilters.files === null ? 'Filter files' : 'Hide filter'}
+                  onClick={() => togglePanelFilter('files')}
+                >
+                  <Icons.Filter
+                    size={11}
+                    {...(panelFilters.files !== null && { color: 'var(--accent)' })}
+                  />
                 </PanelAction>
                 <PanelAction title="Collapse All">
                   <Icons.CollapseAll size={11} />
@@ -163,10 +186,21 @@ export function MainView() {
                 >
                   <Icons.Branch size={11} color={logAll ? 'var(--accent)' : undefined} />
                 </PanelAction>
-                <PanelAction title="Search">
-                  <Icons.Search size={11} />
+                <PanelAction
+                  title={logQuery === null ? 'Search commits' : 'Close search'}
+                  onClick={toggleLogSearch}
+                >
+                  <Icons.Search size={11} {...(logQuery !== null && { color: 'var(--accent)' })} />
                 </PanelAction>
-                <PanelAction title="Filter">
+                {/* The mockup's second Journal button (L755). It opens the same
+                    box primed with the qualifier, because filtering history by
+                    path is what a filter means here and the search bar already
+                    does it — two independent filter mechanisms over one list
+                    would just be able to disagree. */}
+                <PanelAction
+                  title="Filter by path"
+                  onClick={() => setLogQuery(logQuery === null ? 'path:' : null)}
+                >
                   <Icons.Filter size={11} />
                 </PanelAction>
               </>

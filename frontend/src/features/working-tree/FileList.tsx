@@ -10,6 +10,8 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { PanelBody } from '@/components/Panel';
 import { useStatus } from '@/queries/git';
+import { FilterBox } from '@/features/search/FilterBox';
+import { filterBy } from '@/features/search/matchText';
 import { isConflicted, type StatusEntry } from '@/services/git';
 import { useWorkspaceStore, type FileSide } from '@/stores/workspaceStore';
 import { fileDir, fileName } from '@/utils/format';
@@ -42,6 +44,7 @@ import styles from './FileList.module.css';
  */
 export function FileList() {
   const repoPath = useWorkspaceStore((state) => state.repoPath);
+  const filter = useWorkspaceStore((state) => state.panelFilters.files);
   const { data: status, isPending, error } = useStatus(repoPath);
 
   // The open menu, and where. Held here rather than per row so only one can be
@@ -82,31 +85,49 @@ export function FileList() {
 
   if (files.length === 0) {
     return (
-      <PanelBody>
-        <EmptyState icon={Icons.Clean} message="No changes in working directory" />
-      </PanelBody>
+      <>
+        <FilterBox panel="files" placeholder="Filter files" />
+        <PanelBody>
+          <EmptyState icon={Icons.Clean} message="No changes in working directory" />
+        </PanelBody>
+      </>
     );
   }
 
+  // Matched on the display path, which for a rename is `old → new` — so either
+  // half of a rename finds it, and that is the row the user is looking for.
+  const visible = filterBy(files, filter, (entry) => [displayPath(entry)]);
+
   return (
-    <PanelBody>
-      <div className={styles.columns}>
-        <div className={styles.statusCell}>Status</div>
-        <div>File</div>
-      </div>
-      {files.map((entry) => (
-        <FileRow key={entry.path} entry={entry} onContextMenu={openMenu} />
-      ))}
-      {menu !== null && (
-        <FileContextMenu
-          entry={menu.entry}
-          x={menu.x}
-          y={menu.y}
-          onClose={() => setMenu(null)}
-          repoPath={repoPath}
-        />
-      )}
-    </PanelBody>
+    <>
+      <FilterBox
+        panel="files"
+        placeholder="Filter files"
+        matched={visible.length}
+        total={files.length}
+      />
+      <PanelBody>
+        <div className={styles.columns}>
+          <div className={styles.statusCell}>Status</div>
+          <div>File</div>
+        </div>
+        {visible.length === 0 && (
+          <EmptyState icon={Icons.File} message="No files match this filter" />
+        )}
+        {visible.map((entry) => (
+          <FileRow key={entry.path} entry={entry} onContextMenu={openMenu} />
+        ))}
+        {menu !== null && (
+          <FileContextMenu
+            entry={menu.entry}
+            x={menu.x}
+            y={menu.y}
+            onClose={() => setMenu(null)}
+            repoPath={repoPath}
+          />
+        )}
+      </PanelBody>
+    </>
   );
 }
 

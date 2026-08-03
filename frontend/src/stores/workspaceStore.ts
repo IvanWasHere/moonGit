@@ -69,6 +69,13 @@ export interface FileSelection {
   readonly side: FileSide;
 }
 
+/** Panels with an inline filter box. */
+export type FilterablePanel = 'branches' | 'remotes' | 'files';
+
+export type PanelFilters = Readonly<Record<FilterablePanel, string | null>>;
+
+const NO_FILTERS: PanelFilters = { branches: null, remotes: null, files: null };
+
 interface WorkspaceState {
   readonly repoId: number | null;
   readonly repoPath: string | null;
@@ -111,6 +118,23 @@ interface WorkspaceState {
    * its input is unreachable from the one place it is offered.
    */
   readonly logAll: boolean;
+  /**
+   * The Journal's search box: the query, or null when the box is closed.
+   *
+   * One field rather than a boolean beside a string, for the same reason as
+   * `tagPromptOid` above — an "open" flag and its value can disagree, and a
+   * search bar showing nothing while the list stays filtered is exactly the
+   * disagreement that matters. Closing it clears the filter by construction.
+   */
+  readonly logQuery: string | null;
+  /**
+   * Filter text for the in-memory lists, per panel. Null means closed.
+   *
+   * Shared across both views rather than held in each panel, following
+   * `diffView`: the Main and Review views show the same Files panel, and a
+   * filter that silently reverts on a view switch reads as a lost setting.
+   */
+  readonly panelFilters: PanelFilters;
   readonly main: MainLayout;
   readonly review: ReviewLayout;
 
@@ -135,6 +159,10 @@ interface WorkspaceState {
   setDiffView: (mode: DiffViewMode) => void;
   setLogPath: (path: string | null) => void;
   toggleLogAll: () => void;
+  setLogQuery: (query: string | null) => void;
+  toggleLogSearch: () => void;
+  setPanelFilter: (panel: FilterablePanel, filter: string | null) => void;
+  togglePanelFilter: (panel: FilterablePanel) => void;
   setMain: (patch: Partial<MainLayout>) => void;
   setReview: (patch: Partial<ReviewLayout>) => void;
   resetLayout: () => void;
@@ -158,6 +186,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   diffView: 'inline',
   logPath: null,
   logAll: false,
+  logQuery: null,
+  panelFilters: NO_FILTERS,
   main: MAIN_DEFAULTS,
   review: REVIEW_DEFAULTS,
 
@@ -186,6 +216,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       rebaseWizardOpen: false,
       logPath: null,
       logAll: false,
+      logQuery: null,
+      panelFilters: NO_FILTERS,
     });
   },
 
@@ -215,6 +247,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   setLogPath: (logPath) => set({ logPath }),
   toggleLogAll: () => set((state) => ({ logAll: !state.logAll })),
+
+  setLogQuery: (logQuery) => set({ logQuery }),
+  // Opening lands on an empty string, which is "open, matching everything" —
+  // not null, which would leave the box invisible the moment it was asked for.
+  toggleLogSearch: () => set((state) => ({ logQuery: state.logQuery === null ? '' : null })),
+
+  setPanelFilter: (panel, filter) =>
+    set((state) => ({ panelFilters: { ...state.panelFilters, [panel]: filter } })),
+  togglePanelFilter: (panel) =>
+    set((state) => ({
+      panelFilters: {
+        ...state.panelFilters,
+        [panel]: state.panelFilters[panel] === null ? '' : null,
+      },
+    })),
 
   setMain: (patch) => set((state) => ({ main: { ...state.main, ...patch } })),
   setReview: (patch) => set((state) => ({ review: { ...state.review, ...patch } })),

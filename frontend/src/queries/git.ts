@@ -9,6 +9,7 @@ import {
   stashService,
   type Blame,
   type Commit,
+  type CommitSearchParams,
   type DiffFile,
   type GitError,
   type RefCollection,
@@ -74,10 +75,16 @@ export function useCurrentBranch(
   });
 }
 
-export interface LogParams {
+/**
+ * Everything `useLog` varies by — and therefore everything in its cache key.
+ *
+ * It extends `CommitSearchParams` rather than restating it, so a new search
+ * flag cannot be added to the service and forgotten here, which would cache
+ * two different searches under the same key.
+ */
+export interface LogParams extends CommitSearchParams {
   readonly maxCount?: number;
   readonly revisions?: readonly string[];
-  readonly paths?: readonly string[];
   readonly firstParent?: boolean;
   readonly topoOrder?: boolean;
 }

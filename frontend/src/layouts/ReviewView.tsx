@@ -30,6 +30,8 @@ export function ReviewView() {
   const review = useWorkspaceStore((state) => state.review);
   const setReview = useWorkspaceStore((state) => state.setReview);
   const copyDiff = useCopyDiff();
+  const panelFilters = useWorkspaceStore((state) => state.panelFilters);
+  const togglePanelFilter = useWorkspaceStore((state) => state.togglePanelFilter);
 
   return (
     <div className={`${styles.content} ${styles.vertical}`} ref={containerRef}>
@@ -53,12 +55,23 @@ export function ReviewView() {
           <PanelHeader
             title="Files"
             actions={
-              <PanelAction
-                title="Stage All"
-                onClick={() => showToast('All files staged', 'success')}
-              >
-                <Icons.Stage size={11} />
-              </PanelAction>
+              <>
+                <PanelAction
+                  title={panelFilters.files === null ? 'Filter files' : 'Hide filter'}
+                  onClick={() => togglePanelFilter('files')}
+                >
+                  <Icons.Filter
+                    size={11}
+                    {...(panelFilters.files !== null && { color: 'var(--accent)' })}
+                  />
+                </PanelAction>
+                <PanelAction
+                  title="Stage All"
+                  onClick={() => showToast('All files staged', 'success')}
+                >
+                  <Icons.Stage size={11} />
+                </PanelAction>
+              </>
             }
           />
           <FileList />
@@ -100,9 +113,20 @@ export function ReviewView() {
           <PanelHeader
             title="Origin Branch"
             actions={
-              <PanelAction title="Compare">
-                <Icons.ReviewView size={11} />
-              </PanelAction>
+              <>
+                <PanelAction
+                  title={panelFilters.remotes === null ? 'Filter remote branches' : 'Hide filter'}
+                  onClick={() => togglePanelFilter('remotes')}
+                >
+                  <Icons.Filter
+                    size={11}
+                    {...(panelFilters.remotes !== null && { color: 'var(--accent)' })}
+                  />
+                </PanelAction>
+                <PanelAction title="Compare">
+                  <Icons.ReviewView size={11} />
+                </PanelAction>
+              </>
             }
           />
           <RemoteBranchList />

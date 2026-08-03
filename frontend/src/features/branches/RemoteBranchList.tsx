@@ -4,6 +4,8 @@ import { Icons } from '@/components/icons';
 import { ListItem } from '@/components/ListItem';
 import { PanelBody } from '@/components/Panel';
 import { useRefs } from '@/queries/git';
+import { FilterBox } from '@/features/search/FilterBox';
+import { filterBy } from '@/features/search/matchText';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { branchType } from './branchType';
 
@@ -17,6 +19,7 @@ import { branchType } from './branchType';
  */
 export function RemoteBranchList() {
   const repoPath = useWorkspaceStore((state) => state.repoPath);
+  const filter = useWorkspaceStore((state) => state.panelFilters.remotes);
   const { data: refs, isPending, error } = useRefs(repoPath);
 
   if (repoPath === null) {
@@ -48,18 +51,33 @@ export function RemoteBranchList() {
     );
   }
 
+  // The subject is matched too: "which remote branch was that fix on" is a
+  // question about the commit message, and the message is already on the row.
+  const remotes = filterBy(refs.remotes, filter, (branch) => [branch.shortName, branch.subject]);
+
   return (
-    <PanelBody>
-      {refs.remotes.map((branch) => (
-        <ListItem
-          key={branch.name}
-          icon={<Icons.Branch size={12} color="var(--text-muted)" />}
-          name={branch.shortName}
-          tag={<BranchTag type={branchType(branch.shortName.split('/').slice(1).join('/'))} />}
-          metaBefore={branch.oid.slice(0, 7)}
-          meta={branch.subject}
-        />
-      ))}
-    </PanelBody>
+    <>
+      <FilterBox
+        panel="remotes"
+        placeholder="Filter remote branches"
+        matched={remotes.length}
+        total={refs.remotes.length}
+      />
+      <PanelBody>
+        {remotes.length === 0 && (
+          <EmptyState icon={Icons.Branch} message="No remote branches match this filter" />
+        )}
+        {remotes.map((branch) => (
+          <ListItem
+            key={branch.name}
+            icon={<Icons.Branch size={12} color="var(--text-muted)" />}
+            name={branch.shortName}
+            tag={<BranchTag type={branchType(branch.shortName.split('/').slice(1).join('/'))} />}
+            metaBefore={branch.oid.slice(0, 7)}
+            meta={branch.subject}
+          />
+        ))}
+      </PanelBody>
+    </>
   );
 }

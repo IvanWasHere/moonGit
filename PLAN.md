@@ -420,7 +420,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 3. ~~**Merge**: wizard, conflict detection, conflict viewer, resolution helper~~ ✅ (below)
 4. ~~**Rebase**: interactive, continue/skip/abort, squash/edit~~ ✅ (below)
 5. ~~**Cherry-pick**, **Stash**, **Tags**~~ ✅ (below)
-6. **Search**: commits / files / branches / tags / messages / authors
+6. ~~**Search**: commits / files / branches / tags / messages / authors~~ ✅ (below)
 7. **File explorer**: tree, quick open, reveal in Finder
 8. **Settings**: appearance, git path, SSH, editor, diff/merge tools, keybindings
 9. **Terminal**: xterm.js + `creack/pty` in Go, repo-aware cwd
@@ -800,7 +800,51 @@ Verified live on `test-repo1` with `Header.tsx` made `MM`: the two badges render
 **Two things noticed while verifying, neither in scope here:**
 
 1. **A repository row survives its directory.** `live-scratch` still lists on the dashboard although the path it points at was deleted with an old scratch directory. Opening it will fail on the first git call. The dashboard needs an existence check, or a "missing" state — Phase 6.7.
-2. **`Copy Diff` in the Changes header still fires a toast and copies nothing.** `DiffFile` keeps hunks, not the raw patch text, so making it real means either re-running `git diff` or reconstructing the patch.
+2. ~~**`Copy Diff` in the Changes header still fires a toast and copies nothing.**~~ **Resolved** — `features/diff/useCopyDiff.ts`, wired into both views.
+
+### ✅ Phase 6.6 — search
+
+Item 6, and it splits in two along a line worth naming: **branches, remote branches and working-tree files are already in memory, so filtering them is a predicate; commits are not, so searching them is a git command.** Two mechanisms, deliberately, because pretending otherwise means either running `git log` to filter eight branches or holding a million commits in a store to `Array.filter` them.
+
+**Commits — the Journal search bar** (the mockup's L755 Search button, made real).
+
+The design question was what a bare word means. `git log --grep` takes a **regex** and **ORs** multiple patterns, so git's literal reading of `fix parser` is "matches /fix/ or /parser/" — not what anyone typing two words into a search box wants, and worse the moment they search for `v1.2` and `.` starts matching anything. So `features/search/commitQuery.ts` inverts all three defaults: **fixed strings, case-insensitive, ANDed** (`--all-match`). A regex is still reachable by writing the term as `/…/`, which keeps it visible in the query rather than hidden behind a toggle.
+
+Qualifiers are the syntax every code host has trained people on — `author:`/`by:`, `path:`/`file:`/`in:`, `since:`/`after:`, `until:`/`before:` — with quoting (`author:"Ivan Marinković"`, `since:"2 weeks ago"`). An **unrecognised** `key:value` is searched as literal text rather than rejected: `TODO:refactor` is a plausible thing to look for, and the chips under the box are what reveal that `autor:ivan` was read as text, not as an author.
+
+Four things the implementation turns on, each with a test that fails without it:
+
+| | Why it matters |
+|---|---|
+| **Pattern type is one flag for the whole command** | `--fixed-strings` / `--extended-regexp` govern *every* limiting pattern including `--author`, so a query mixing `v1.2` with `/parse.*/` cannot be expressed as-is — it has to pick extended-regexp and **escape the literals into it**. Getting this backwards silently turns `v1.2` into a pattern matching `v1x2` |
+| **The flag must precede its patterns** | Git's parser applies it to what follows. `--grep=x --fixed-strings` is accepted and reads the pattern as a regex anyway — no error, no exit code, just wrong rows |
+| **`--flag=value`, never two arguments** | A search for `-v` passed separately is read as an option, and a leading dash is exactly what ends up in a commit message |
+| **A bare `path:` value is wrapped as `:(icase)*value*`** | `file:log` should find `services/git/parsers/log.ts`; git's wildcards cross `/`, so one star each side reaches any depth. A value already containing `/` or `*` is passed through — at that point the user is writing a pathspec, not a word |
+
+**A search implies `--all`.** Searching only the current branch would miss the commit being hunted for whenever it is on another one, which is most of the time — or the user would already know where it was.
+
+**The graph is not drawn over a filtered log.** `buildGraph` expects a contiguous walk; over a filtered set almost no commit's parent is present, so every row becomes a branch tip, opens its own lane, and the output is a staircase widening by one column per result. This also fixes the same latent bug in the existing File Log filter.
+
+**Panels — `FilterBox` + `matchText.ts`.** Substring per space-separated term, ANDed: strict enough that `git log` matches `parsers/log.ts` and not `GitRunner.ts`, loose enough that a path need not be typed in full. Fuzzy matching was rejected for keeping every list non-empty — a filter that never says "nothing" is one you stop trusting. State lives in `workspaceStore.panelFilters` keyed by panel, using the `tagPromptOid` idiom already in that store: **the value is the open state** (`null` closed, `''` open and matching everything), so a bar can never be dismissed while its list stays filtered.
+
+Typing is local to the input and pushes to the store on a 250ms pause. The store value is a query key, so writing per keystroke would start a `git log` per character — seven of the eight for "parser" already stale on arrival.
+
+Verified live against `test-repo1`:
+
+| Query | Result |
+|---|---|
+| `author:sarah dark` | **0** — correct: "Add dark mode theme variables" is Alex Chen's |
+| `author:sarah` | **3**, one of them on `fix/memory-leak`, an unchecked-out branch — the `--all` widening |
+| `file:header` | **1**, and `git log --all --oneline -- ':(icase)*header*'` returns the same single commit. The seed's "Refactor header component" does not match because it touches `src/legacy/OldWidget.tsx` — the fixture's message and its files disagree, the app does not |
+| Branches `feature` | 2 of 8 |
+| Files `components tsx` | 3 of 10 — two terms ANDed across one path |
+| Origin Branch `stack end` | 1 of 2, matched on the **commit subject**, not the ref name |
+
+All three filters were open at once in different panels, and Escape closed and cleared each.
+
+**The mockup's second Journal button** (the funnel at L755) now opens the same box primed with `path:`. Two independent filter mechanisms over one list could only ever disagree, and the search bar already does what a filter there would mean.
+
+**Not built**: a tag list to filter — tags exist only as commit decorations, so `tag:` has nothing to filter *in*; **content search** (`git grep`), which needs a results surface of its own rather than a commit list; and the FTS5 index, still Phase 7 and still unmotivated — `git log --grep` over `test-repo1` returns instantly, and the index should be added against a measurement, not a plan.
 
 ---
 
