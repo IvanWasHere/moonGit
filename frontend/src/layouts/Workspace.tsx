@@ -7,6 +7,7 @@ import { TopMenu } from '@/components/menu/TopMenu';
 import { useMenuActions } from '@/components/menu/useMenuActions';
 import { ToastContainer } from '@/components/ToastContainer';
 import { QuickOpen } from '@/features/explorer/QuickOpen';
+import { SettingsModal } from '@/features/settings/SettingsModal';
 import { MergeModal } from '@/features/merge/MergeModal';
 import { MergeWizard } from '@/features/merge/MergeWizard';
 import { RebaseBanner } from '@/features/rebase/RebaseBanner';
@@ -55,6 +56,9 @@ export function Workspace({
   const openRepo = useWorkspaceStore((state) => state.openRepo);
   const openQuickOpen = useWorkspaceStore((state) => state.openQuickOpen);
   const quickOpen = useWorkspaceStore((state) => state.quickOpen);
+  const settingsOpen = useWorkspaceStore((state) => state.settingsOpen);
+  const openSettings = useWorkspaceStore((state) => state.openSettings);
+  const closeSettings = useWorkspaceStore((state) => state.closeSettings);
 
   useEffect(() => {
     if (repository === null || repository === undefined) return;
@@ -62,23 +66,28 @@ export function Workspace({
   }, [repository, openRepo]);
 
   /*
-   * ⌘P / Ctrl+P opens quick open.
+   * ⌘P opens quick open, ⌘, opens settings — both the platform conventions.
    *
    * On `window` rather than a focused element, because the whole point is to
-   * reach it from wherever the user is — including a filter box or the commit
-   * message. `preventDefault` because the browser's own Print is bound to the
-   * same chord and firing both would put a print dialog over the app.
+   * reach them from wherever the user is, including a filter box or the commit
+   * message. `preventDefault` because the browser binds Print to the same
+   * chord as ⌘P, and firing both puts a print dialog over the app.
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'p') {
+      if (!event.metaKey && !event.ctrlKey) return;
+      if (event.key.toLowerCase() === 'p') {
         event.preventDefault();
         openQuickOpen();
+      }
+      if (event.key === ',') {
+        event.preventDefault();
+        openSettings();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [openQuickOpen]);
+  }, [openQuickOpen, openSettings]);
 
   useLayoutPersistence();
   useRepoWatcher(repoPath);
@@ -111,6 +120,7 @@ export function Workspace({
       {rebaseWizardOpen && <RebaseWizard onClose={closeRebaseWizard} />}
       {tagPromptOid !== null && <TagPrompt oid={tagPromptOid} onClose={closeTagPrompt} />}
       {quickOpen && <QuickOpen />}
+      {settingsOpen && <SettingsModal onClose={closeSettings} />}
       <ToastContainer />
     </div>
   );

@@ -15,12 +15,24 @@
  *    value as the mockup's `--bg-darkest` (styles/tokens.css). The palette the
  *    UI was designed around and the palette the code is coloured with are the
  *    same one, rather than two dark themes that nearly agree.
+ *
+ * The light theme (Phase 6.8) extends that third point rather than changing
+ * it: `github-light-default` is the counterpart of the theme already chosen,
+ * and its background is white — which is exactly what `--bg-darkest` becomes.
+ * Both are registered at load and selected per call, because the alternative
+ * is tearing down the highlighter every time the user flips the theme.
  */
 
 import type { HighlighterCore } from 'shiki/core';
 import { grammarLoader } from './languages';
 
-export const THEME = 'github-dark-default';
+/** Shiki's name for each of our two themes. */
+export const THEMES = {
+  dark: 'github-dark-default',
+  light: 'github-light-default',
+} as const;
+
+export type HighlightTheme = keyof typeof THEMES;
 
 /** One coloured run within a line. */
 export interface SyntaxToken {
@@ -48,7 +60,10 @@ async function core(): Promise<HighlighterCore> {
       import('shiki/engine/javascript'),
     ]);
     return createHighlighterCore({
-      themes: [import('@shikijs/themes/github-dark-default')],
+      themes: [
+        import('@shikijs/themes/github-dark-default'),
+        import('@shikijs/themes/github-light-default'),
+      ],
       langs: [],
       engine: createJavaScriptRegexEngine(),
     });
@@ -62,7 +77,11 @@ async function core(): Promise<HighlighterCore> {
  * Returns null for a language with no grammar, which is not an error — the
  * viewer renders the diff unhighlighted and nothing is lost but colour.
  */
-export async function highlightFile(text: string, language: string): Promise<SyntaxLines | null> {
+export async function highlightFile(
+  text: string,
+  language: string,
+  theme: HighlightTheme = 'dark',
+): Promise<SyntaxLines | null> {
   const loader = grammarLoader(language);
   if (loader === undefined) return null;
 
@@ -72,7 +91,7 @@ export async function highlightFile(text: string, language: string): Promise<Syn
     loadedLanguages.add(language);
   }
 
-  const { tokens } = highlighter.codeToTokens(text, { lang: language, theme: THEME });
+  const { tokens } = highlighter.codeToTokens(text, { lang: language, theme: THEMES[theme] });
   return tokens.map((line) =>
     line.map((token) => ({ text: token.content, color: token.color ?? '' })),
   );

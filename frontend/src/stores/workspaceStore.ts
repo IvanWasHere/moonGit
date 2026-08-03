@@ -154,6 +154,15 @@ interface WorkspaceState {
   readonly expandedDirs: readonly string[];
   /** Quick open, modal over the workspace. */
   readonly quickOpen: boolean;
+  /**
+   * Application settings, modal over the workspace.
+   *
+   * Here rather than in `settingsStore` on purpose: that store holds the
+   * *settings*, which outlive the window and persist to SQLite. Whether a
+   * panel is open is workspace state, and mixing the two would mean writing a
+   * row to the database every time somebody opened the dialog.
+   */
+  readonly settingsOpen: boolean;
   readonly main: MainLayout;
   readonly review: ReviewLayout;
 
@@ -186,6 +195,8 @@ interface WorkspaceState {
   toggleDir: (path: string) => void;
   openQuickOpen: () => void;
   closeQuickOpen: () => void;
+  openSettings: () => void;
+  closeSettings: () => void;
   setMain: (patch: Partial<MainLayout>) => void;
   setReview: (patch: Partial<ReviewLayout>) => void;
   resetLayout: () => void;
@@ -214,6 +225,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   filesTab: 'changes',
   expandedDirs: ROOT_EXPANDED,
   quickOpen: false,
+  settingsOpen: false,
   main: MAIN_DEFAULTS,
   review: REVIEW_DEFAULTS,
 
@@ -303,6 +315,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     })),
   openQuickOpen: () => set({ quickOpen: true }),
   closeQuickOpen: () => set({ quickOpen: false }),
+  openSettings: () => set({ settingsOpen: true }),
+  closeSettings: () => set({ settingsOpen: false }),
 
   setMain: (patch) => set((state) => ({ main: { ...state.main, ...patch } })),
   setReview: (patch) => set((state) => ({ review: { ...state.review, ...patch } })),

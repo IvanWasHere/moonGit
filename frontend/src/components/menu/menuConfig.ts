@@ -33,7 +33,12 @@ export const MENUS = [
       { id: 'repository.fetch', label: 'Fetch' },
       { id: 'repository.synchronize', label: 'Synchronize' },
       { id: 'repository.settings', label: 'Repository Settings', separatorBefore: true },
-      { id: 'repository.exit', label: 'Exit' },
+      /* Application preferences, as distinct from the repository's own config
+         above. There is no app menu to put them in — the mockup's bar starts
+         at Repository — so they sit here, which is also where macOS users
+         reach for ⌘, out of habit. */
+      { id: 'repository.preferences', label: 'Preferences…' },
+      { id: 'repository.exit', label: 'Exit', separatorBefore: true },
     ],
   },
   {

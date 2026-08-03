@@ -18,6 +18,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { blobService, isNullOid, type DiffFile } from '@/services/git';
 import { readFile } from '@/services/wails';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { highlightFile, type SyntaxLines } from './highlight';
 import { languageForPath } from './languages';
 
@@ -74,6 +75,16 @@ export function useDiffHighlight(repoPath: string | null, file: DiffFile | null)
   const enabled = repoPath !== null && repoPath !== '' && file !== null && language !== null;
   const fromDisk = file !== null && readsFromDisk(file);
 
+  /*
+   * The resolved theme is part of the cache key, not just an argument.
+   *
+   * Shiki bakes colours into the tokens it returns, so a run tokenized in dark
+   * is a *different value*, not the same value rendered differently. Without
+   * this the diff would keep serving dark hex colours after a switch to light
+   * and the code would stay unreadable until the file was reselected.
+   */
+  const theme = useSettingsStore((state) => state.resolved);
+
   const query = useQuery({
     /**
      * Both sides in one entry — they are always wanted together, and a single
@@ -85,7 +96,7 @@ export function useDiffHighlight(repoPath: string | null, file: DiffFile | null)
      * that this query would happily serve tokens for the previous save.
      */
     queryKey: fromDisk
-      ? [repoPath ?? '', 'fileText', file.path, 'highlight', file.oldOid, language ?? '']
+      ? [repoPath ?? '', 'fileText', file.path, 'highlight', file.oldOid, language ?? '', theme]
       : [
           repoPath ?? '',
           'highlight',
@@ -93,6 +104,7 @@ export function useDiffHighlight(repoPath: string | null, file: DiffFile | null)
           file?.newOid ?? '',
           file?.path ?? '',
           language ?? '',
+          theme,
         ],
     queryFn: async ({ signal }): Promise<DiffHighlight> => {
       if (repoPath === null || file === null || language === null) return NOTHING;
@@ -105,8 +117,8 @@ export function useDiffHighlight(repoPath: string | null, file: DiffFile | null)
       ]);
 
       const [old, next] = await Promise.all([
-        oldText === null ? null : highlightFile(oldText, language),
-        newText === null ? null : highlightFile(newText, language),
+        oldText === null ? null : highlightFile(oldText, language, theme),
+        newText === null ? null : highlightFile(newText, language, theme),
       ]);
       return { old, next };
     },

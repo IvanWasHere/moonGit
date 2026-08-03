@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -64,6 +65,41 @@ func (s *Service) OpenPath(path string) error {
 	default:
 		return exec.Command("xdg-open", path).Start()
 	}
+}
+
+// OpenInEditor opens path with a user-configured editor command.
+//
+// The command is split on whitespace and executed directly — no shell. That is
+// the whole security posture of this function: without a shell there is no
+// metacharacter to inject, so a path containing `; rm -rf ~` is passed to the
+// editor as a filename and nothing else, which is what it is.
+//
+// The command itself comes from the Settings panel, meaning the user typed it.
+// It is never taken from repository content, which is the distinction
+// OpenExternal draws for the same reason — a remote URL is not trustworthy
+// just because the repository was cloned, but a preference the user set is.
+//
+// An empty command is a caller error rather than a silent no-op: the frontend
+// falls back to OpenPath when no editor is configured, and reaching here with
+// nothing to run means that check was skipped.
+func (s *Service) OpenInEditor(command, path string) error {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return fmt.Errorf("no editor command configured")
+	}
+	if _, err := os.Stat(path); err != nil {
+		return err
+	}
+
+	// Resolved before spawning so "not installed" is reported as itself rather
+	// than as a generic exec failure a user cannot act on.
+	binary, err := exec.LookPath(fields[0])
+	if err != nil {
+		return fmt.Errorf("editor %q not found: %w", fields[0], err)
+	}
+
+	args := append(append([]string{}, fields[1:]...), path)
+	return exec.Command(binary, args...).Start()
 }
 
 // OpenTerminal opens a terminal with its working directory set to dir.

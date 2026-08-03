@@ -6,6 +6,10 @@ export function OpenExternal(arg1) {
   return window['go']['shellapi']['Service']['OpenExternal'](arg1);
 }
 
+export function OpenInEditor(arg1, arg2) {
+  return window['go']['shellapi']['Service']['OpenInEditor'](arg1, arg2);
+}
+
 export function OpenPath(arg1) {
   return window['go']['shellapi']['Service']['OpenPath'](arg1);
 }

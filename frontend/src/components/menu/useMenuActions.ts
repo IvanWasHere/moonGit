@@ -25,6 +25,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
   const openCommit = useWorkspaceStore((state) => state.openCommit);
+  const openSettings = useWorkspaceStore((state) => state.openSettings);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
   const openMergeWizard = useWorkspaceStore((state) => state.openMergeWizard);
   const openStash = useWorkspaceStore((state) => state.openStash);
@@ -102,6 +103,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
     'repository.synchronize': () =>
       fetch.mutate({ prune: true }, { onSuccess: doPull, onError: reportError }),
     'repository.settings': soon('Repository settings'),
+    'repository.preferences': openSettings,
     'repository.exit': () => showToast('Close the window to exit', 'info'),
 
     // --- Local ------------------------------------------------------------

@@ -108,7 +108,7 @@
 }
 
 .add {
-  background: rgba(63, 185, 80, 0.06);
+  background: var(--diff-add-bg);
   border-left-color: var(--green);
 }
 
@@ -117,7 +117,7 @@
 }
 
 .remove {
-  background: rgba(248, 81, 73, 0.06);
+  background: var(--diff-del-bg);
   border-left-color: var(--red);
 }
 
@@ -209,12 +209,12 @@
 
 .add .word,
 .code.add .word {
-  background: rgba(63, 185, 80, 0.28);
+  background: var(--diff-add-word);
 }
 
 .remove .word,
 .code.remove .word {
-  background: rgba(248, 81, 73, 0.28);
+  background: var(--diff-del-word);
 }
 
 /* Additions to the mockup's diff styles, for states real patches have and

@@ -19,6 +19,7 @@ import { GitQueryError } from '@/queries/git';
 import { workingTreeService, type StatusEntry } from '@/services/git';
 import {
   copyToClipboard,
+  openInEditor,
   openPath,
   openTerminal,
   readFile,
@@ -29,6 +30,7 @@ import {
   deletePath,
 } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { fileDir, fileName } from '@/utils/format';
 import { extensionOf, type FileMenuAction, type FileMenuItem } from './fileMenu';
@@ -68,6 +70,7 @@ export function useFileMenuActions(repoPath: string | null) {
   const discard = useDiscard(repoPath);
 
   const selectFile = useWorkspaceStore((state) => state.selectFile);
+  const editor = useSettingsStore((state) => state.editor);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
   const openCommit = useWorkspaceStore((state) => state.openCommit);
   const setLogPath = useWorkspaceStore((state) => state.setLogPath);
@@ -139,7 +142,7 @@ export function useFileMenuActions(repoPath: string | null) {
 
       switch (action) {
         case 'open':
-          await openPath(absolute).catch(report);
+          await openInEditor(absolute, editor).catch(report);
           return;
 
         case 'showChanges':

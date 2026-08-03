@@ -43,6 +43,49 @@
   --cyan: #56d4dd;
   --orange: #f0883e;
 
+  /*
+   * --- added for theming (Phase 6.8) ---
+   *
+   * Every one of these was a literal colour in a component stylesheet. The
+   * values here are exactly what those literals were, so the dark theme is
+   * byte-identical to the mockup — the point of naming them is that light has
+   * somewhere to put a different answer.
+   *
+   * A tint that works on #0d1117 does not work on white: 6% green over black
+   * reads as a green wash, 6% green over white is invisible. So the diff and
+   * toast fills are tokens rather than opacity tricks applied to a shared hue.
+   */
+  --accent-hover: #f0b44a;
+
+  /* Modal scrims and the shadows that lift a surface off the page. */
+  --scrim: rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.5);
+
+  /* Diff line fills, and the stronger intra-line word marks over them. */
+  --diff-add-bg: rgba(63, 185, 80, 0.06);
+  --diff-del-bg: rgba(248, 81, 73, 0.06);
+  --diff-add-word: rgba(63, 185, 80, 0.28);
+  --diff-del-word: rgba(248, 81, 73, 0.28);
+
+  /* The merge tool's three columns. */
+  --merge-ours-bg: rgba(88, 166, 255, 0.07);
+  --merge-result-bg: rgba(232, 168, 56, 0.07);
+  --merge-theirs-bg: rgba(63, 185, 80, 0.07);
+
+  /* Toasts carry their own surfaces, being the one thing that floats over
+     every background in the app. */
+  --toast-success-bg: #1a3a2a;
+  --toast-success-border: rgba(63, 185, 80, 0.3);
+  --toast-error-bg: #3a1a1a;
+  --toast-error-border: rgba(248, 81, 73, 0.3);
+  --toast-info-bg: #1a2a3a;
+  --toast-info-border: rgba(88, 166, 255, 0.3);
+
+  /* The menubar's top sheen, and a pressed destructive button. */
+  --sheen: rgba(255, 255, 255, 0.02);
+  --red-strong: rgba(248, 81, 73, 0.2);
+
   /* --- shape & type --- */
   --radius: 6px;
   --font-ui: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -66,4 +109,105 @@
   :root {
     --menubar-height: 44px;
   }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Light theme (PLAN.md §11 / §14, decided in Phase 6.8)
+ * ---------------------------------------------------------------------------
+ *
+ * The mockup is dark-only, so this is a derivation rather than a port, and it
+ * follows GitHub's light palette for the same reason `github-dark-default` was
+ * chosen for syntax highlighting: the dark theme is already GitHub-shaped, and
+ * two palettes that nearly agree look worse than one that does.
+ *
+ * **The surface ramp inverts, it does not lighten.** In dark, `--bg-darkest`
+ * is the list body and `--bg-panel` is a *lighter* header sitting above it. A
+ * light theme that mapped each token to its lightness complement would put a
+ * darker body under a lighter header and the panels would read inside-out. So
+ * the body becomes white and the chrome around it becomes grey — the ordering
+ * of the ramp flips, not just its values.
+ *
+ * **The accent is not the mockup's gold.** #e8a838 on white is about 1.9:1,
+ * which fails every contrast threshold there is, and `--accent` is text: the
+ * commit hash, the active menu item, the ahead counter. #9a6700 is GitHub's
+ * own light-mode amber and clears 4.5:1 on white while still reading as the
+ * same colour family. The dark theme keeps the mockup's value untouched.
+ *
+ * `[data-theme]` is set on <html> by the settings store; `system` resolves to
+ * one of the two before it is written, so this file never has to know about
+ * `prefers-color-scheme`.
+ */
+:root[data-theme='light'] {
+  /* --- surfaces: white body, grey chrome --- */
+  --bg-darkest: #ffffff;
+  --bg-dark: #eef1f4;
+  --bg-panel: #f6f8fa;
+  --bg-input: #eff2f5;
+  --bg-hover: #eaeef2;
+  --bg-active: #dde4ec;
+  --bg-selected: #ddeaf8;
+
+  /* --- borders --- */
+  --border: #d6dde4;
+  --border-light: #c3ccd6;
+
+  /* --- text --- */
+  --text-primary: #1f2328;
+  --text-secondary: #57606a;
+  /*
+   * Darker than the obvious complement of the dark theme's muted, and measured
+   * rather than eyeballed: #7d8590 was the first choice and came out at 3.7:1
+   * on white and 3.5:1 on the panel grey — under 4.5:1, and `--text-muted` is
+   * not decoration here. It is the panel header labels (11px, uppercase), the
+   * commit timestamps and the directory half of every file path. None of those
+   * qualify for the large-text exemption.
+   */
+  --text-muted: #656d76;
+
+  /* --- accent --- */
+  --accent: #9a6700;
+  --accent-dim: rgba(154, 103, 0, 0.12);
+  --accent-glow: rgba(154, 103, 0, 0.25);
+  --accent-hover: #7a5200;
+
+  /* --- semantic: the same hues, darkened until they read as text on white --- */
+  --green: #1a7f37;
+  --green-dim: rgba(26, 127, 55, 0.12);
+  --red: #cf222e;
+  --red-dim: rgba(207, 34, 46, 0.12);
+  --blue: #0969da;
+  --blue-dim: rgba(9, 105, 218, 0.12);
+  --purple: #8250df;
+  --purple-dim: rgba(130, 80, 223, 0.12);
+  --cyan: #1b7c83;
+  --orange: #bc4c00;
+
+  /* A lighter page needs a lighter scrim and much softer shadows — the dark
+     theme's 0.5 black over white reads as a bug rather than a dimming. */
+  --scrim: rgba(31, 35, 40, 0.4);
+  --shadow-md: 0 4px 16px rgba(31, 35, 40, 0.12);
+  --shadow-lg: 0 8px 28px rgba(31, 35, 40, 0.16);
+
+  /* Roughly doubled, because the same alpha over white is half as visible. */
+  --diff-add-bg: rgba(26, 127, 55, 0.12);
+  --diff-del-bg: rgba(207, 34, 46, 0.1);
+  --diff-add-word: rgba(26, 127, 55, 0.3);
+  --diff-del-word: rgba(207, 34, 46, 0.28);
+
+  --merge-ours-bg: rgba(9, 105, 218, 0.08);
+  --merge-result-bg: rgba(154, 103, 0, 0.1);
+  --merge-theirs-bg: rgba(26, 127, 55, 0.09);
+
+  /* Solid tints rather than dark surfaces — GitHub's own light callouts. */
+  --toast-success-bg: #dafbe1;
+  --toast-success-border: rgba(26, 127, 55, 0.35);
+  --toast-error-bg: #ffebe9;
+  --toast-error-border: rgba(207, 34, 46, 0.35);
+  --toast-info-bg: #ddf4ff;
+  --toast-info-border: rgba(9, 105, 218, 0.35);
+
+  /* The menubar's sheen is a highlight in dark and has to become a shade. */
+  --sheen: rgba(31, 35, 40, 0.03);
+  --red-strong: rgba(207, 34, 46, 0.18);
 }

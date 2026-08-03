@@ -6,6 +6,7 @@ import {
 } from '../../../wailsjs/go/dialogs/Service';
 import {
   OpenExternal,
+  OpenInEditor,
   OpenPath,
   OpenTerminal,
   RevealInFinder,
@@ -65,4 +66,16 @@ export function openTerminal(dir: string): Promise<void> {
  */
 export function copyToClipboard(text: string): Promise<boolean> {
   return ClipboardSetText(text);
+}
+
+/**
+ * Open a file with the user's configured editor command, falling back to the
+ * OS default when none is set.
+ *
+ * The fallback lives here rather than at each call site: "open this file" is
+ * one intention, and every caller having to remember to check the preference
+ * is how one of them ends up not doing it.
+ */
+export function openInEditor(path: string, command: string): Promise<void> {
+  return command.trim() === '' ? OpenPath(path) : OpenInEditor(command, path);
 }

@@ -4,6 +4,8 @@ import {context} from '../models';
 
 export function OpenExternal(arg1:string):Promise<void>;
 
+export function OpenInEditor(arg1:string,arg2:string):Promise<void>;
+
 export function OpenPath(arg1:string):Promise<void>;
 
 export function OpenTerminal(arg1:string):Promise<void>;

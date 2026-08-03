@@ -11,8 +11,9 @@
  */
 
 import type { DirEntry } from '@/queries/git';
-import { copyToClipboard, openPath, revealInFinder } from '@/services/wails';
+import { copyToClipboard, openInEditor, revealInFinder } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 export type TreeMenuAction = 'open' | 'reveal' | 'copyPath' | 'history';
@@ -20,6 +21,7 @@ export type TreeMenuAction = 'open' | 'reveal' | 'copyPath' | 'history';
 /** Takes no `repoPath`: every action here works off the entry's own paths. */
 export function useTreeMenuActions() {
   const setLogPath = useWorkspaceStore((state) => state.setLogPath);
+  const editor = useSettingsStore((state) => state.editor);
   const setFilesTab = useWorkspaceStore((state) => state.setFilesTab);
 
   return async (entry: DirEntry, action: TreeMenuAction): Promise<void> => {
@@ -31,7 +33,7 @@ export function useTreeMenuActions() {
 
     switch (action) {
       case 'open':
-        await openPath(absolute).catch(report);
+        await openInEditor(absolute, editor).catch(report);
         return;
 
       case 'reveal':

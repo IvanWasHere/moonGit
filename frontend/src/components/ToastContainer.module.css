@@ -20,7 +20,7 @@
   align-items: center;
   gap: 8px;
   min-width: 240px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-md);
   /* Deliberately not `pointer-events: auto`. The stack is fixed to the
      bottom-right corner at z-index 9999 — the same corner every modal puts its
      primary action in — so a clickable toast sits on top of "Save & mark
@@ -31,19 +31,19 @@
 }
 
 .success {
-  background: #1a3a2a;
+  background: var(--toast-success-bg);
   color: var(--green);
-  border: 1px solid rgba(63, 185, 80, 0.3);
+  border: 1px solid var(--toast-success-border);
 }
 
 .error {
-  background: #3a1a1a;
+  background: var(--toast-error-bg);
   color: var(--red);
-  border: 1px solid rgba(248, 81, 73, 0.3);
+  border: 1px solid var(--toast-error-border);
 }
 
 .info {
-  background: #1a2a3a;
+  background: var(--toast-info-bg);
   color: var(--blue);
-  border: 1px solid rgba(88, 166, 255, 0.3);
+  border: 1px solid var(--toast-info-border);
 }

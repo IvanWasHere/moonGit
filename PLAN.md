@@ -422,7 +422,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 5. ~~**Cherry-pick**, **Stash**, **Tags**~~ ✅ (below)
 6. ~~**Search**: commits / files / branches / tags / messages / authors~~ ✅ (below)
 7. ~~**File explorer**: tree, quick open, reveal in Finder~~ ✅ (below)
-8. **Settings**: appearance, git path, SSH, editor, diff/merge tools, keybindings
+8. ~~**Settings**: appearance, git path, SSH, editor, diff/merge tools, keybindings~~ ✅ (below)
 9. **Terminal**: xterm.js + `creack/pty` in Go, repo-aware cwd
 10. **Repository settings**: ignore rules, git config, hooks, LFS, submodules
 
@@ -883,6 +883,46 @@ Verified live against `test-repo1`:
 
 **Not built**: a viewer for clean files. Selecting one says it is unchanged rather than rendering its contents — a read-only file viewer is a different surface from a diff pane, and the Changes panel is honest about not being one. Also deferred: the dashboard's missing-repository check noted earlier in this section, which is a dashboard concern rather than an explorer one.
 
+### ✅ Phase 6.8 — settings, and the light theme
+
+Item 8, and it pulled §14's open **light theme** question forward from Phase 8 rather than shipping an Appearance section with nothing in it.
+
+**The "tokens only, never literal hex" rule (§7) was 90% true.** An audit found ~30 literal colours across 12 stylesheets — diff line fills, toast surfaces, modal scrims, the primary button's hover, the menubar's sheen. Each is now a token whose **dark value is exactly what the literal was**, so the dark theme is byte-identical to the mockup and the rule is now enforceable rather than aspirational. Two things needed no work at all: `LANE_COLORS` was already `var(--…)` references, so the commit graph themed itself.
+
+Three things the light palette could not do by simply inverting:
+
+| | Why |
+|---|---|
+| **The surface ramp inverts, it does not lighten** | In dark, `--bg-darkest` is the list body with a *lighter* `--bg-panel` header above it. Mapping each token to its lightness complement would put a darker body under a lighter header and every panel would read inside-out. The body becomes white and the chrome becomes grey — the ordering flips, not just the values |
+| **The accent is not the mockup's gold** | #e8a838 on white is 1.9:1, and `--accent` is *text* — the commit hash, the active menu item, the ahead counter. Light uses #9a6700 (GitHub's own light amber) at 4.87:1. Dark keeps the mockup's value untouched |
+| **Tints need different alpha, not a different hue** | 6% green over #0d1117 reads as a green wash; 6% green over white is invisible. The diff and toast fills are tokens with per-theme values rather than one hue at one opacity |
+
+**Shiki follows the theme, and the theme is part of the cache key.** `github-light-default` joins `github-dark-default` — the same reasoning as §9.1's original choice, since its background is white, which is what `--bg-darkest` becomes. Both are registered once and selected per call. The key matters: Shiki *bakes colours into the tokens it returns*, so a run tokenized in dark is a different value, not the same value rendered differently. Without the theme in `useDiffHighlight`'s key the diff would keep serving dark hex after a switch and the code would stay unreadable until the file was reselected.
+
+**The theme loads in `bootstrap`, before first render** — the one preference that does. Read it after the first paint and a user on a light desktop watches the app render fully dark and then switch, every launch. A failed settings read is *not* fatal, unlike a failed migration: starting in the wrong theme beats not starting.
+
+The rest of the panel: **git path** (validated through `SetGitPath` and kept only if the binary answers `--version`, since it is the one setting that can break every other screen), **editor command**, and **credentials** — which reports rather than edits, because secrets live in the OS keychain and a UI implying moonGit holds a copy would be lying. `shellapi.OpenInEditor` is new and runs the command with **no shell**: that is its whole security posture, since without a shell there is no metacharacter for a path to inject through.
+
+Nothing has a Save button. A preferences panel with pending state has to answer what escape means, and the answer people expect is "it already applied".
+
+**Deliberate menu deviation**: `Preferences…` is added to the Repository menu — the first menu, since the mockup's bar has no app menu — and `menuConfig.test.ts` was updated with the reason rather than loosened. ⌘, and ⌘P are both bound on `window`.
+
+**Verified live**, switching themes with the app in front of it: every panel, the side-by-side diff with its word marks, Shiki re-tokenizing light, the graph lanes, the badges, and the segmented control. Dark after a round trip is indistinguishable from before.
+
+**A contrast measurement, run in the live DOM rather than by eye, caught a real defect and one inherited one:**
+
+| Pair | First attempt | Now |
+|---|---|---|
+| light `--text-muted` on body | **3.73** ✗ | **5.25** ✓ |
+| light `--text-muted` on panel | **3.50** ✗ | **4.93** ✓ |
+
+`--text-muted` is panel header labels, commit timestamps and the directory half of every path — none of which qualify for the large-text exemption. #7d8590 became #656d76.
+
+**Left standing, and worth naming: the *dark* theme fails the same check.** `--text-muted` on `--bg-darkest` measures **3.21:1**, and on the panel grey **2.93:1** — worse than the light value that was just rejected. That value is the mockup's, and §7 says the mockup's tokens must not drift, so changing it is a design decision rather than a fix to slip in here. **It belongs to Phase 8's a11y pass**, and it is now a measured number rather than a suspicion.
+
+**Not built**: keybindings. The app has exactly three shortcuts (⌘P, ⌘,, ⌘Enter), and an editor for rebinding three things is a settings page for nothing. It belongs after there are bindings worth rebinding.
+
+
 ---
 
 ## 10. Phase 7 — Performance hardening *(~1 week)*
@@ -1016,7 +1056,7 @@ Three places where this plan knowingly diverges — worth a second look before P
 
 ### Still open (not blocking — decide by the phase noted)
 
-- **Light theme** — the mockup is dark-only, and the PRD wants light/dark/system plus custom accent. The token structure makes this mechanical, but someone has to choose the light palette. *Needed by Phase 8.*
+- ~~**Light theme**~~ — **resolved: built in Phase 6.8**, ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. Custom accent is still open. See §9's Phase 6.8 entry, including the dark theme's own measured contrast failure now waiting on Phase 8.
 - **Git-flow / Index Editor / Investigate** — three menubar buttons in the mockup that only fire toasts, and the PRD never defines them. *Needed by Phase 6.*
 - ~~**Merge/diff tool integration**~~ — **resolved: built in.** A three-way modal with per-region choices; the escape hatch is the user's own editor, not a configured external differ. See §9.3 above.
 - **Code signing identity + notarization credentials.** *Needed by Phase 8.*

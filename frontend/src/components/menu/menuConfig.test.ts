@@ -13,6 +13,16 @@ describe('menuConfig', () => {
     ]);
   });
 
+  /*
+   * These lists are the mockup's menus, item for item, and the point of the
+   * assertion is that they do not quietly drift from it.
+   *
+   * **`Preferences…` is the one deliberate addition** (Phase 6.8). Application
+   * settings need a home and the mockup's bar has no app menu — it starts at
+   * Repository — so they sit at the end of the first menu, next to the
+   * repository's own settings and where ⌘, already points. Distinct from
+   * "Repository Settings" above it, which is git config and still unbuilt.
+   */
   it.each([
     [
       'Repository',
@@ -25,6 +35,7 @@ describe('menuConfig', () => {
         'Fetch',
         'Synchronize',
         'Repository Settings',
+        'Preferences…',
         'Exit',
       ],
     ],
