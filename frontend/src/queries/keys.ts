@@ -32,6 +32,10 @@ export const gitKeys = {
   blob: (repoPath: string, oid: string): QueryKey => [repoPath, 'blob', oid],
   /** A working-tree file read from disk, for the side git has no object for. */
   fileText: (repoPath: string, path: string): QueryKey => [repoPath, 'fileText', path],
+  /** One directory of the explorer tree, keyed by its repo-relative path. */
+  dir: (repoPath: string, path: string): QueryKey => [repoPath, 'dir', path],
+  /** Every path in the repository, flat — quick open's corpus. */
+  paths: (repoPath: string): QueryKey => [repoPath, 'paths'],
   stashes: (repoPath: string): QueryKey => [repoPath, 'stash'],
   remotes: (repoPath: string): QueryKey => [repoPath, 'remotes'],
   blame: (repoPath: string, path: string, revision?: string): QueryKey => [
@@ -74,11 +78,17 @@ export function keysToInvalidate(repoPath: string, reasons: readonly ChangeReaso
         add(gitKeys.diff(repoPath, 'worktree'));
         // Files read off disk moved with it; blobs did not, being immutable.
         add([repoPath, 'fileText']);
+        // The explorer reads the filesystem, so a created or deleted file
+        // changes it. Every open directory is under this one prefix.
+        add([repoPath, 'dir']);
+        add(gitKeys.paths(repoPath));
         break;
       case 'index':
         add(gitKeys.status(repoPath));
         add(gitKeys.diff(repoPath, 'worktree'));
         add(gitKeys.diff(repoPath, 'staged'));
+        // `ls-files --cached` is the index; staging a new file adds to it.
+        add(gitKeys.paths(repoPath));
         break;
       case 'refs':
         add(gitKeys.refs(repoPath));

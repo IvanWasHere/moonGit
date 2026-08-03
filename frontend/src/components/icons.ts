@@ -18,6 +18,8 @@ import {
   ArrowUp,
   Ban,
   Check,
+  ChevronDown,
+  ChevronRight,
   CircleAlert,
   CircleCheck,
   ClockArrowLeft,
@@ -91,6 +93,9 @@ export const Icons = {
   /** Dismiss a bar or box. Same glyph as `Remove`, named for what it does here
    *  — closing a search is not removing a file. */
   Close: X,
+  /** Explorer disclosure triangles. */
+  TreeOpen: ChevronDown,
+  TreeClosed: ChevronRight,
   /** fa-pen */ NewCommit: Pen,
   Tag,
   Favorite: Star,

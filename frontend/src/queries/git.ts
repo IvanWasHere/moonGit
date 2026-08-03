@@ -7,6 +7,7 @@ import {
   remoteService,
   repositoryService,
   stashService,
+  treeService,
   type Blame,
   type Commit,
   type CommitSearchParams,
@@ -18,6 +19,7 @@ import {
   type Result,
   type Stash,
 } from '@/services/git';
+import { listDir, type FileInfo } from '@/services/wails';
 import { gitKeys } from './keys';
 
 /**
@@ -158,6 +160,59 @@ export function useCommitDiff(
     queryFn: async ({ signal }) =>
       unwrap(await diffService(repoPath ?? '').commit(oid ?? '', { signal })),
     enabled: enabled(repoPath) && oid !== null && oid !== '',
+  });
+}
+
+/** One directory's entries, with git's verdict on each attached. */
+export interface DirEntry extends FileInfo {
+  /** Repo-relative path, which is what every other part of the app keys on. */
+  readonly relPath: string;
+  readonly ignored: boolean;
+}
+
+/**
+ * A single level of the explorer tree.
+ *
+ * Lazy by directory rather than a recursive walk: the PRD's target is 500k
+ * files, and the only listing that stays constant-time at that size is the one
+ * the user actually opened.
+ *
+ * Two calls, not one — `listDir` reads the filesystem (so untracked files
+ * appear) and `check-ignore` supplies the one fact the filesystem does not
+ * have. They are in a single query because a half-loaded row would render as
+ * un-ignored and then dim a moment later.
+ */
+export function useDirectory(
+  repoPath: string | null,
+  dir: string,
+): UseQueryResult<DirEntry[], GitQueryError> {
+  return useQuery({
+    queryKey: gitKeys.dir(repoPath ?? '', dir),
+    queryFn: async ({ signal }): Promise<DirEntry[]> => {
+      const base = repoPath ?? '';
+      const entries = await listDir(dir === '' ? base : `${base}/${dir}`);
+
+      // `.git` is not part of the working tree in any sense the user cares
+      // about, and walking into it is a way to find a thousand loose objects.
+      const visible = entries.filter((entry) => !(dir === '' && entry.name === '.git'));
+      const relative = visible.map((entry) => (dir === '' ? entry.name : `${dir}/${entry.name}`));
+
+      const ignored = unwrap(await treeService(base).ignored(relative, { signal }));
+      return visible.map((entry, index) => {
+        const relPath = relative[index] ?? entry.name;
+        return { ...entry, relPath, ignored: ignored.has(relPath) };
+      });
+    },
+    enabled: enabled(repoPath),
+  });
+}
+
+/** Every path in the repository, flat — the corpus quick open matches against. */
+export function usePaths(repoPath: string | null): UseQueryResult<string[], GitQueryError> {
+  return useQuery({
+    queryKey: gitKeys.paths(repoPath ?? ''),
+    queryFn: async ({ signal }) => unwrap(await treeService(repoPath ?? '').listPaths({ signal })),
+    enabled: enabled(repoPath),
   });
 }
 

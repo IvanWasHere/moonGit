@@ -1,0 +1,110 @@
+/* Quick open. Modal over the workspace, so z-index 1000 like the other modals
+   (the top menu is 200) and still below the toasts at 9999 — they report what
+   the modals do. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  /* Near the top rather than centred: the list grows downward, and a centred
+     panel would jump as results arrive. */
+  padding-top: 12vh;
+}
+
+.panel {
+  width: 560px;
+  max-width: 90vw;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.input:focus {
+  outline: none;
+}
+
+.results {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-darkest);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.active {
+  background: var(--bg-selected);
+}
+
+.name {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.dir {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  /* Truncate the *front* of a long path: the tail is what distinguishes
+     `src/features/a/x.ts` from `src/features/b/x.ts`. */
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.badges {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.message,
+.footer {
+  padding: 10px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.footer {
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}

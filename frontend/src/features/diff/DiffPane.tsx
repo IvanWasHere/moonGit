@@ -69,9 +69,16 @@ export function DiffPane() {
 
   const file = query.data.find((entry) => entry.path === selected.path) ?? query.data[0];
   if (file === undefined) {
+    /*
+     * An empty diff for a selected file means the file is unchanged, and since
+     * the explorer tree landed that is the *ordinary* case — most of a
+     * repository is clean, and every one of those files is now selectable. The
+     * old wording ("no diff data available") described it as a missing
+     * response, which reads as a failure for what is a perfectly good answer.
+     */
     return (
       <PanelBody>
-        <EmptyState icon={Icons.NoDiff} message="No diff data available for this file" />
+        <EmptyState icon={Icons.NoDiff} message="No changes in this file" />
       </PanelBody>
     );
   }

@@ -6,6 +6,7 @@ import { MenuBar } from '@/components/MenuBar';
 import { TopMenu } from '@/components/menu/TopMenu';
 import { useMenuActions } from '@/components/menu/useMenuActions';
 import { ToastContainer } from '@/components/ToastContainer';
+import { QuickOpen } from '@/features/explorer/QuickOpen';
 import { MergeModal } from '@/features/merge/MergeModal';
 import { MergeWizard } from '@/features/merge/MergeWizard';
 import { RebaseBanner } from '@/features/rebase/RebaseBanner';
@@ -52,11 +53,32 @@ export function Workspace({
   const tagPromptOid = useWorkspaceStore((state) => state.tagPromptOid);
   const closeTagPrompt = useWorkspaceStore((state) => state.closeTagPrompt);
   const openRepo = useWorkspaceStore((state) => state.openRepo);
+  const openQuickOpen = useWorkspaceStore((state) => state.openQuickOpen);
+  const quickOpen = useWorkspaceStore((state) => state.quickOpen);
 
   useEffect(() => {
     if (repository === null || repository === undefined) return;
     openRepo(repository.id, repository.path);
   }, [repository, openRepo]);
+
+  /*
+   * ⌘P / Ctrl+P opens quick open.
+   *
+   * On `window` rather than a focused element, because the whole point is to
+   * reach it from wherever the user is — including a filter box or the commit
+   * message. `preventDefault` because the browser's own Print is bound to the
+   * same chord and firing both would put a print dialog over the app.
+   */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+        openQuickOpen();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [openQuickOpen]);
 
   useLayoutPersistence();
   useRepoWatcher(repoPath);
@@ -88,6 +110,7 @@ export function Workspace({
       {stashOpen && <StashModal onClose={closeStash} />}
       {rebaseWizardOpen && <RebaseWizard onClose={closeRebaseWizard} />}
       {tagPromptOid !== null && <TagPrompt oid={tagPromptOid} onClose={closeTagPrompt} />}
+      {quickOpen && <QuickOpen />}
       <ToastContainer />
     </div>
   );

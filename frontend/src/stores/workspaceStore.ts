@@ -76,6 +76,12 @@ export type PanelFilters = Readonly<Record<FilterablePanel, string | null>>;
 
 const NO_FILTERS: PanelFilters = { branches: null, remotes: null, files: null };
 
+/** The Files panel's two views: the working-tree changes, or the whole repo. */
+export type FilesTab = 'changes' | 'tree';
+
+/** The root is expanded from the start; a tree that opens closed shows nothing. */
+const ROOT_EXPANDED: readonly string[] = [''];
+
 interface WorkspaceState {
   readonly repoId: number | null;
   readonly repoPath: string | null;
@@ -135,6 +141,19 @@ interface WorkspaceState {
    * filter that silently reverts on a view switch reads as a lost setting.
    */
   readonly panelFilters: PanelFilters;
+  /** Which half of the Files panel is showing: what changed, or everything. */
+  readonly filesTab: FilesTab;
+  /**
+   * Repo-relative paths of the expanded directories, `''` being the root.
+   *
+   * A list of what is *open* rather than a tree of node state: the tree itself
+   * is refetched from disk on every change, so anything held per node would
+   * have to be reattached to nodes that may no longer exist. A path survives
+   * that — and a directory deleted while open simply stops matching anything.
+   */
+  readonly expandedDirs: readonly string[];
+  /** Quick open, modal over the workspace. */
+  readonly quickOpen: boolean;
   readonly main: MainLayout;
   readonly review: ReviewLayout;
 
@@ -163,6 +182,10 @@ interface WorkspaceState {
   toggleLogSearch: () => void;
   setPanelFilter: (panel: FilterablePanel, filter: string | null) => void;
   togglePanelFilter: (panel: FilterablePanel) => void;
+  setFilesTab: (tab: FilesTab) => void;
+  toggleDir: (path: string) => void;
+  openQuickOpen: () => void;
+  closeQuickOpen: () => void;
   setMain: (patch: Partial<MainLayout>) => void;
   setReview: (patch: Partial<ReviewLayout>) => void;
   resetLayout: () => void;
@@ -188,6 +211,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   logAll: false,
   logQuery: null,
   panelFilters: NO_FILTERS,
+  filesTab: 'changes',
+  expandedDirs: ROOT_EXPANDED,
+  quickOpen: false,
   main: MAIN_DEFAULTS,
   review: REVIEW_DEFAULTS,
 
@@ -218,6 +244,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       logAll: false,
       logQuery: null,
       panelFilters: NO_FILTERS,
+      filesTab: 'changes',
+      // Paths are repo-relative, so keeping them would expand whatever
+      // happened to share a name in the repository being opened.
+      expandedDirs: ROOT_EXPANDED,
+      quickOpen: false,
     });
   },
 
@@ -262,6 +293,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         [panel]: state.panelFilters[panel] === null ? '' : null,
       },
     })),
+
+  setFilesTab: (filesTab) => set({ filesTab }),
+  toggleDir: (path) =>
+    set((state) => ({
+      expandedDirs: state.expandedDirs.includes(path)
+        ? state.expandedDirs.filter((dir) => dir !== path)
+        : [...state.expandedDirs, path],
+    })),
+  openQuickOpen: () => set({ quickOpen: true }),
+  closeQuickOpen: () => set({ quickOpen: false }),
 
   setMain: (patch) => set((state) => ({ main: { ...state.main, ...patch } })),
   setReview: (patch) => set((state) => ({ review: { ...state.review, ...patch } })),

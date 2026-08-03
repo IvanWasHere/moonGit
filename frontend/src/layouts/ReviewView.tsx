@@ -8,7 +8,7 @@ import { DiffPane } from '@/features/diff/DiffPane';
 import { useCopyDiff } from '@/features/diff/useCopyDiff';
 import { CommitMessagesView } from '@/features/history/CommitMessagesView';
 import { RepoList } from '@/features/repositories/RepoList';
-import { FileList } from '@/features/working-tree/FileList';
+import { FilesPane } from '@/features/explorer/FilesPane';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import styles from './Layout.module.css';
@@ -74,7 +74,7 @@ export function ReviewView() {
               </>
             }
           />
-          <FileList />
+          <FilesPane />
         </Panel>
 
         <Resizer

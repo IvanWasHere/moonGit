@@ -421,7 +421,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 4. ~~**Rebase**: interactive, continue/skip/abort, squash/edit~~ ✅ (below)
 5. ~~**Cherry-pick**, **Stash**, **Tags**~~ ✅ (below)
 6. ~~**Search**: commits / files / branches / tags / messages / authors~~ ✅ (below)
-7. **File explorer**: tree, quick open, reveal in Finder
+7. ~~**File explorer**: tree, quick open, reveal in Finder~~ ✅ (below)
 8. **Settings**: appearance, git path, SSH, editor, diff/merge tools, keybindings
 9. **Terminal**: xterm.js + `creack/pty` in Go, repo-aware cwd
 10. **Repository settings**: ignore rules, git config, hooks, LFS, submodules
@@ -845,6 +845,43 @@ All three filters were open at once in different panels, and Escape closed and c
 **The mockup's second Journal button** (the funnel at L755) now opens the same box primed with `path:`. Two independent filter mechanisms over one list could only ever disagree, and the search bar already does what a filter there would mean.
 
 **Not built**: a tag list to filter — tags exist only as commit decorations, so `tag:` has nothing to filter *in*; **content search** (`git grep`), which needs a results surface of its own rather than a commit list; and the FTS5 index, still Phase 7 and still unmotivated — `git log --grep` over `test-repo1` returns instantly, and the index should be added against a measurement, not a plan.
+
+### ✅ Phase 6.7 — file explorer
+
+Item 7. The Files panel gained a **Changes | Tree** tab strip rather than a new panel: the mockup's layout has no room for one, both tabs answer "which file" with one of them filtered to what changed, and keeping them under one header keeps one selection driving one Changes pane.
+
+**The tree is read from the filesystem, not from git.** `git ls-files` would build it in a single call — and it would be missing every file the user just created, which are the exact files someone opens an explorer to find. So each level is a `listDir` plus a `check-ignore`, fetched only when its directory is opened. `.git` is excluded by name; the PRD's 500k-file target is met by never walking more than the one directory that was expanded.
+
+Two facts about `check-ignore` that the tests pin down, because both fail quietly:
+
+- **Exit 1 is the answer "none of them"**, not a failure. `check-ignore` reports its result in the exit status, so classifying 1 as an error makes every unignored directory in the tree render as broken.
+- **Paths go in on stdin** (`--stdin -z`), never as argv. A directory listing can be thousands of entries containing spaces, quotes and newlines, and stdin has no quoting rules to get wrong.
+
+Ignored files are shown, dimmed and tagged, rather than hidden — a tree that silently omits `node_modules` is a tree that disagrees with the user's own `ls`.
+
+**Quick open (⌘P)** is the other half, and it inverts the trade deliberately: one `ls-files --cached --others --exclude-standard` for a flat corpus, because at the target size browsing to a file is thousands of rows of scrolling and typing three characters is not. Matching reuses §6.6's `matchText`, so `git log` behaves identically in the palette and in the Files filter box. It is mounted conditionally rather than self-hiding, which is what keeps the query and the highlight fresh without a reset effect. Results cap at 50 with the footer saying so — a silent cap reads as "that's all there is".
+
+`ls-files` prints one line per *index entry*, so a conflicted path appears three times, once per stage. Quick open lists files, not index entries; it de-duplicates.
+
+The tree's context menu (Open, Reveal in Finder, Copy Path, Show History) is deliberately **not** the Changes tab's menu. That one is built from a `StatusEntry` and offers staging and discarding, which mean nothing for a file with no changes — and most of a repository has none. `RevealInFinder` already existed in `shellapi` from the Phase 6 file menu; this reuses it.
+
+Verified live against `test-repo1`:
+
+| | Result |
+|---|---|
+| Tree | `src/` expanded to `components` `hooks` `pages` `styles`, correctly indented; `.git` absent |
+| Status badges | `package.json` **M**, `.env.local` and `tsconfig.json` **?**, matching `git status --porcelain` exactly |
+| Ignored | `src/.DS_Store` dimmed and tagged — and it is ignored via the user's **global** `core.excludesfile`, not any file in the repo. The tree inherits global ignore rules because `check-ignore` does |
+| Quick open | `components tsx` → Header/Sidebar/Widget with their badges; Enter opened `Header.tsx`'s word diff |
+| Clean file | Selecting `README.md` shows the Changes pane's empty state, not an error |
+| Show History | Filtered the Journal to `README.md` and switched back to the Changes tab |
+
+**Two fixes the live run produced:**
+
+1. **`/src/components` instead of `src/components`.** Quick open truncates the directory column from the left via `direction: rtl`, and `fileDir` returns a trailing slash — a bidi-*neutral* character, which at the end of the string gets reordered to the visual left. Stripped at the call site.
+2. **"No diff data available for this file"** now reads **"No changes in this file"**. Before the tree, every selectable file had changes, so that state only ever meant something had gone wrong. The tree makes every clean file in the repository selectable, which turns the message into the ordinary case — and describing a perfectly good answer as a missing response sends people looking for a bug.
+
+**Not built**: a viewer for clean files. Selecting one says it is unchanged rather than rendering its contents — a read-only file viewer is a different surface from a diff pane, and the Changes panel is honest about not being one. Also deferred: the dashboard's missing-repository check noted earlier in this section, which is a dashboard concern rather than an explorer one.
 
 ---
 

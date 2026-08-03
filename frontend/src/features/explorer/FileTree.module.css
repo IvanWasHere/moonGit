@@ -1,0 +1,79 @@
+/* The explorer tree. Row metrics match `FileList.module.css` so switching tabs
+   does not change the rhythm of the list underneath the same header. */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 12px;
+  height: 26px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.selected {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+/* Ignored files stay visible rather than being hidden. A tree that silently
+   omits `node_modules` is a tree that disagrees with the user's `ls`. */
+.ignored .name {
+  color: var(--text-muted);
+}
+
+.chevron {
+  width: 11px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.ignoredTag {
+  font-size: 9px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border-radius: 8px;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+
+.badges {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+/* Loading, empty and unreadable directories — inline at the level they belong
+   to, so the failure is attached to the folder that produced it. */
+.message {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}

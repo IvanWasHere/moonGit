@@ -9,7 +9,7 @@ import { useCopyDiff } from '@/features/diff/useCopyDiff';
 import { JournalView } from '@/features/history/JournalView';
 import { RepoList } from '@/features/repositories/RepoList';
 import { CommitBox } from '@/features/working-tree/CommitBox';
-import { FileList } from '@/features/working-tree/FileList';
+import { FilesPane } from '@/features/explorer/FilesPane';
 
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -141,7 +141,7 @@ export function MainView() {
               </>
             }
           />
-          <FileList />
+          <FilesPane />
           {commitOpen && <CommitBox />}
         </Panel>
 
