@@ -17,16 +17,14 @@ import { useStage, useUnstage, useDiscard } from '@/queries/mutations';
 import { gitKeys } from '@/queries/keys';
 import { GitQueryError } from '@/queries/git';
 import { workingTreeService, type StatusEntry } from '@/services/git';
+import { addRule, readIgnoreFile, ruleForPath, writeIgnoreFile } from '@/services/ignoreFiles';
 import {
   copyToClipboard,
   openInEditor,
-  openPath,
   openTerminal,
-  readFile,
   revealInFinder,
   saveFile,
   showMessage,
-  writeFile,
   deletePath,
 } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
@@ -36,30 +34,20 @@ import { fileDir, fileName } from '@/utils/format';
 import { extensionOf, type FileMenuAction, type FileMenuItem } from './fileMenu';
 import { defaultSide } from './statusDisplay';
 
-const GITIGNORE = '.gitignore';
-
 /**
  * Append a rule to `.gitignore`, if it is not already there.
  *
- * Read-modify-write rather than a blind append: a repository's ignore file is
- * hand-maintained, and adding `*.log` to it three times because the user
- * right-clicked three log files is untidy in a file people read.
+ * The read-modify-write and the duplicate check live in `services/ignoreFiles`
+ * so that this and the Repository Settings editor cannot disagree about what
+ * counts as the same rule — `!build` is not `build`, and getting that wrong in
+ * one of two places would silently drop rules in whichever one is wrong.
  */
 async function appendIgnoreRule(repoPath: string, rule: string): Promise<'added' | 'present'> {
-  const path = `${repoPath}/${GITIGNORE}`;
-  let existing = '';
-  try {
-    const content = await readFile(path);
-    existing = content.text ?? '';
-  } catch {
-    // No .gitignore yet — the write below creates it.
-  }
+  const existing = await readIgnoreFile(repoPath, 'repo');
+  const next = addRule(existing, rule);
+  if (next === null) return 'present';
 
-  const lines = existing.split('\n').map((line) => line.trim());
-  if (lines.includes(rule)) return 'present';
-
-  const needsNewline = existing !== '' && !existing.endsWith('\n');
-  await writeFile(path, `${existing}${needsNewline ? '\n' : ''}${rule}\n`);
+  await writeIgnoreFile(repoPath, 'repo', next);
   return 'added';
 }
 
@@ -74,6 +62,7 @@ export function useFileMenuActions(repoPath: string | null) {
   const openMerge = useWorkspaceStore((state) => state.openMerge);
   const openCommit = useWorkspaceStore((state) => state.openCommit);
   const setLogPath = useWorkspaceStore((state) => state.setLogPath);
+  const openRepoSettings = useWorkspaceStore((state) => state.openRepoSettings);
 
   const report = (error: unknown) =>
     showToast(error instanceof Error ? error.message : String(error), 'error');
@@ -218,7 +207,7 @@ export function useFileMenuActions(repoPath: string | null) {
           const extension = extensionOf(entry.path);
           const rule =
             action === 'ignoreByName'
-              ? `/${entry.path}`
+              ? ruleForPath(entry.path)
               : extension === null
                 ? null
                 : `*.${extension}`;
@@ -237,15 +226,11 @@ export function useFileMenuActions(repoPath: string | null) {
         }
 
         case 'editGitignore':
-          // Created first when absent: `open` on a missing file fails, and
-          // "edit the ignore file" on a repository that has none should make
-          // one rather than report that it does not exist.
-          try {
-            await appendIgnoreRule(repoPath, '');
-          } catch {
-            /* the open below will report anything that matters */
-          }
-          await openPath(`${repoPath}/${GITIGNORE}`).catch(report);
+          // Opens the app's own editor rather than handing the file to the OS,
+          // which is what this did before Repository Settings existed. In-app
+          // it can also offer `.git/info/exclude` — "ignore this, but only for
+          // me" — which an `open` on one fixed path cannot.
+          openRepoSettings('ignore');
           return;
 
         case 'remove':

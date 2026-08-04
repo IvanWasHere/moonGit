@@ -3,7 +3,9 @@ import {
   blameService,
   branchService,
   commitService,
+  configService,
   diffService,
+  ignoreService,
   remoteService,
   repositoryService,
   stashService,
@@ -11,14 +13,18 @@ import {
   type Blame,
   type Commit,
   type CommitSearchParams,
+  type ConfigEntry,
+  type ConfigScope,
   type DiffFile,
   type GitError,
+  type IgnoreRule,
   type RefCollection,
   type Remote,
   type RepoStatus,
   type Result,
   type Stash,
 } from '@/services/git';
+import { readIgnoreFile, type IgnoreFileId } from '@/services/ignoreFiles';
 import { listDir, type FileInfo } from '@/services/wails';
 import { gitKeys } from './keys';
 
@@ -229,6 +235,57 @@ export function useRemotes(repoPath: string | null): UseQueryResult<Remote[], Gi
     queryKey: gitKeys.remotes(repoPath ?? ''),
     queryFn: async ({ signal }) => unwrap(await remoteService(repoPath ?? '').list({ signal })),
     enabled: enabled(repoPath),
+  });
+}
+
+/**
+ * The repository's config for one scope.
+ *
+ * `effective` is the merge of system, global and local — what the repository
+ * will actually behave like — and the settings panel reads both it and `local`
+ * so it can tell "set here" from "inherited from your global config".
+ */
+export function useRepoConfig(
+  repoPath: string | null,
+  scope: ConfigScope,
+): UseQueryResult<ConfigEntry[], GitQueryError> {
+  return useQuery({
+    queryKey: gitKeys.config(repoPath ?? '', scope),
+    queryFn: async ({ signal }) =>
+      unwrap(await configService(repoPath ?? '').list(scope, { signal })),
+    enabled: enabled(repoPath),
+  });
+}
+
+/**
+ * An ignore file's text.
+ *
+ * Missing is empty, not an error — a repository with no `.gitignore` is the
+ * normal starting state, and the editor should open on a blank file that
+ * saving will create. That is `readIgnoreFile`'s own behaviour, so this never
+ * fails for the common case.
+ */
+export function useIgnoreFileText(
+  repoPath: string | null,
+  file: IgnoreFileId,
+): UseQueryResult<string, Error> {
+  return useQuery({
+    queryKey: gitKeys.ignoreText(repoPath ?? '', file),
+    queryFn: () => readIgnoreFile(repoPath ?? '', file),
+    enabled: enabled(repoPath),
+  });
+}
+
+/** Which rule ignores each path, for the ignore editor's explainer. */
+export function useIgnoreRules(
+  repoPath: string | null,
+  paths: readonly string[],
+): UseQueryResult<IgnoreRule[], GitQueryError> {
+  return useQuery({
+    queryKey: [repoPath ?? '', 'checkIgnore', paths],
+    queryFn: async ({ signal }) =>
+      unwrap(await ignoreService(repoPath ?? '').explain(paths, { signal })),
+    enabled: enabled(repoPath) && paths.length > 0,
   });
 }
 

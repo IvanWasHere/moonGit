@@ -95,6 +95,9 @@ export const Icons = {
   TreeOpen: ChevronDown,
   TreeClosed: ChevronRight,
   /** fa-pen */ NewCommit: Pen,
+  /** Rename in place. Same glyph as `NewCommit`, named for what it does here —
+   *  the mockup has neither, and "edit this label" is not "write a message". */
+  Rename: Pen,
   Tag,
   Favorite: Star,
   /** The stash stack — git's own metaphor is a shelf, and this is the closest. */

@@ -13,7 +13,7 @@ import type { GitError } from './errors';
 import { getGitRunner, type ExecOptions, type GitRunner } from './GitRunner';
 import { BLAME_BASE_ARGS, parseBlame, type Blame } from './parsers';
 import type { ReadOptions } from './RepositoryService';
-import { ok, type Result } from './result';
+import { err, ok, type Result } from './result';
 
 function toExecOptions(options: ReadOptions): ExecOptions {
   return options.signal !== undefined ? { signal: options.signal } : {};
@@ -48,6 +48,54 @@ export interface FetchOptions extends ReadOptions {
   readonly tags?: boolean;
 }
 
+/** Git's own rule: none of these may appear in a ref path, and a remote name becomes one. */
+const FORBIDDEN_IN_REF = ' \t~^:?*[\\';
+
+/**
+ * Names git will accept, and that argv will not misread.
+ *
+ * Two rules with different reasons. Git's own: a remote name may not contain
+ * whitespace or the ref metacharacters `~^:?*[\`, because it becomes part of a
+ * ref path (`refs/remotes/<name>/…`). And ours: it may not begin with `-`,
+ * because `git remote add` has no `--` separator, so a "name" of `--mirror`
+ * would be read as an option and add a remote nobody asked for.
+ */
+export function isValidRemoteName(name: string): boolean {
+  if (name === '' || name.startsWith('-') || name.startsWith('.') || name.endsWith('.lock')) {
+    return false;
+  }
+  if (name.includes('..')) return false;
+  // Checked character by character rather than with a regex class. The class
+  // that expresses this needs three escapes and a trailing dash, and a
+  // near-invisible mistake in one is a validator that quietly accepts what it
+  // was written to refuse.
+  return ![...name].some((char) => FORBIDDEN_IN_REF.includes(char) || char < ' ');
+}
+
+/**
+ * A URL git will not read as an option.
+ *
+ * Deliberately not a URL *format* check: `git@host:org/repo.git`, `../sibling`,
+ * `file:///srv/git/x`, and `ssh://…` are all legitimate, and a validator strict
+ * enough to be worth having would reject something real. The only thing being
+ * excluded is the leading dash, for the same argv reason as the name.
+ */
+export function isSafeRemoteUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (trimmed === '' || trimmed.startsWith('-')) return false;
+  // Anything at or below the space character: whitespace would make the URL a
+  // second argv word, and a control character has no business in one.
+  return ![...trimmed].some((char) => char <= ' ');
+}
+
+function refusedRemote(
+  message: string,
+  args: readonly string[],
+  repoPath: string,
+): Result<never, GitError> {
+  return err({ kind: 'Unknown', message, stderr: '', exitCode: -1, args, repoPath });
+}
+
 export class RemoteService {
   constructor(private readonly runner: GitRunner) {}
 
@@ -63,13 +111,70 @@ export class RemoteService {
   }
 
   async add(name: string, url: string, options: ReadOptions = {}): Promise<Result<void, GitError>> {
-    const result = await this.runner.exec(['remote', 'add', name, url], toExecOptions(options));
+    const args = ['remote', 'add', name, url];
+    const invalid = this.reject(name, url, args);
+    if (invalid !== null) return invalid;
+
+    const result = await this.runner.exec(args, toExecOptions(options));
     return result.ok ? ok(undefined) : result;
   }
 
   async remove(name: string, options: ReadOptions = {}): Promise<Result<void, GitError>> {
-    const result = await this.runner.exec(['remote', 'remove', name], toExecOptions(options));
+    const args = ['remote', 'remove', name];
+    const invalid = this.reject(name, undefined, args);
+    if (invalid !== null) return invalid;
+
+    const result = await this.runner.exec(args, toExecOptions(options));
     return result.ok ? ok(undefined) : result;
+  }
+
+  /**
+   * Rename a remote.
+   *
+   * `git remote rename` is the whole operation, not a config edit: it also
+   * rewrites `refs/remotes/<old>/*` and every branch's `branch.*.remote`, so a
+   * branch that tracked `origin/main` still tracks it afterwards. Editing
+   * `remote.<name>.url` by hand would leave both dangling.
+   */
+  async rename(
+    from: string,
+    to: string,
+    options: ReadOptions = {},
+  ): Promise<Result<void, GitError>> {
+    const args = ['remote', 'rename', from, to];
+    const invalid = this.reject(from, undefined, args) ?? this.reject(to, undefined, args);
+    if (invalid !== null) return invalid;
+
+    const result = await this.runner.exec(args, toExecOptions(options));
+    return result.ok ? ok(undefined) : result;
+  }
+
+  async setUrl(
+    name: string,
+    url: string,
+    options: ReadOptions = {},
+  ): Promise<Result<void, GitError>> {
+    const args = ['remote', 'set-url', name, url];
+    const invalid = this.reject(name, url, args);
+    if (invalid !== null) return invalid;
+
+    const result = await this.runner.exec(args, toExecOptions(options));
+    return result.ok ? ok(undefined) : result;
+  }
+
+  /** Null when the inputs are usable; a refusal otherwise. */
+  private reject(
+    name: string,
+    url: string | undefined,
+    args: readonly string[],
+  ): Result<never, GitError> | null {
+    if (!isValidRemoteName(name)) {
+      return refusedRemote(`“${name}” is not a valid remote name`, args, this.runner.repoPath);
+    }
+    if (url !== undefined && !isSafeRemoteUrl(url)) {
+      return refusedRemote('That is not a usable remote URL', args, this.runner.repoPath);
+    }
+    return null;
   }
 
   /**

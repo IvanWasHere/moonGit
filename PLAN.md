@@ -424,7 +424,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 7. ~~**File explorer**: tree, quick open, reveal in Finder~~ ✅ (below)
 8. ~~**Settings**: appearance, git path, SSH, editor, diff/merge tools, keybindings~~ ✅ (below)
 9. ~~**Terminal**: xterm.js + `creack/pty` in Go, repo-aware cwd~~ ✅ (below)
-10. **Repository settings**: ignore rules, git config, hooks, LFS, submodules
+10. ~~**Repository settings**: ignore rules, git config~~ ✅ (below) — hooks, LFS and submodules deliberately not built, with reasons in that entry
 
 Each ships behind the same skeleton: `Loading | Success | Error | Retry`.
 
@@ -953,6 +953,48 @@ Item 9: `internal/ptyapi` (creack/pty) under `features/terminal` (xterm.js). `sh
 
 **Not built**: multiple sessions per repository (tabs or a split), and a shell picker in Settings. The Go side takes both — `Open` is keyed by a caller-chosen session id and `OpenRequest.Shell` is honoured — but the UI is one drawer with one shell, which is what "run a git command without leaving the app" needs. Closing the drawer ends the session; the tooltip says so rather than letting a long-running command disappear quietly.
 
+### ✅ Phase 6.10 — repository settings
+
+Item 10, and the last of Phase 6. `services/git/ConfigService.ts`, `services/ignoreFiles.ts`, four new methods on `RemoteService`, and one panel in `features/repo-settings` with three sections.
+
+**Three of the five areas the item names, chosen rather than defaulted to.** Config, ignore rules and remotes are the three with dead menu items already pointing at them — `repository.settings`, `remote.manage` and `local.ignore` were all `soon()` stubs — and all three are things a person edits by hand today. Hooks, LFS and submodules are named as not built at the end of this entry, with their reasons.
+
+**Repository versus application is the distinction the panel exists to hold.** `SettingsModal` (§9's Phase 6.8 entry) edits moonGit's own preferences, which live in SQLite and follow the install. Everything here belongs to the repository: it lives in `.git/config` and `.gitignore`, the command line sees the same values, and a colleague who clones gets some of them. One panel for both would make "does this follow me to my other machine?" unanswerable. Nothing here is mirrored into SQLite either — git's files are the source of truth, the same rule §1.2 sets for refs and status.
+
+| Decision | Why |
+|---|---|
+| **Config is read twice — `--local` and no scope at all** | A repository sets almost nothing. `user.email` is normally the global one, and an empty box for it would say "unset" when the truth is "the address every commit made here will carry". So each field resolves to **set here**, **inherited** (shown greyed, as a placeholder) or **not set**, and clearing a field runs `--unset` rather than writing `""` — different things to git |
+| **Seven keys have controls; every other local key is listed read-only underneath** | The panel writes to the same file the user's own `git config` does. Showing only the seven would imply the rest is not there, and a repository with a `core.hooksPath` or an `includeIf` behaves in a way no form explains. The list is the panel declining to lie by omission — not a config editor, which would be a worse text editor than the one in the terminal drawer |
+| **Keys and values are validated before they reach argv** | `git config --local` takes its key *positionally*, so a "key" of `--global` would be read as an option and quietly write the user's global file. There is no `--` separator to hide behind, so `isValidConfigKey` refuses anything that is not `section[.subsection].name` and `isSafeConfigValue` refuses a leading dash. Every key today comes from a fixed list in the UI; the guard belongs next to the command, not in the caller that happens to be safe |
+| **The Ignore tab has a Save button** — the deliberate exception to §6.8's rule | Preferences apply on change because a half-set preference is still a preference. A half-typed ignore rule is not: it is a *file* in an intermediate state, which the next `git add` would commit, and every keystroke would wake the watcher to re-run `status` against rules nobody has finished writing |
+| **Two ignore files, not three** | `.gitignore` is committed and shared; `.git/info/exclude` is neither. "Ignore this, but only for me" — a scratch directory, an editor's droppings — is a real intention, and serving it from `.gitignore` means committing a rule that is nobody else's business. The third layer, `core.excludesFile`, is deliberately absent: it is not part of *this* repository, and changing every repository at once from a repository panel would be a surprise |
+| **`ruleForPath` and the duplicate check moved into `services/ignoreFiles`** | The Files panel's "Ignore by Name" and this editor must not disagree about what counts as the same rule. `!build` is not `build` and `/dist` is not `dist` — both change what git does — and getting that wrong in one of two implementations silently drops rules in whichever one is wrong |
+| **A remote's URL is an editable field; its name is a button** | `git remote rename` is not a config edit. It rewrites `refs/remotes/<old>/*` and every branch's `branch.*.remote`, so a branch that tracked `origin/main` still tracks it afterwards — and a text box that ran that when focus moved is the wrong shape for it. Remote names are validated against git's own ref rules for the same reason config keys are: the name becomes a ref path, and `git remote add` has no `--` either |
+| **Remote URLs are checked for argv safety and nothing else** | `git@host:org/repo.git`, `../sibling`, `file:///srv/git/x` and `ssh://…` are all legitimate. A validator strict enough to be worth having would reject something real, so the only exclusions are a leading dash and whitespace |
+| **The open tab is part of the open state, not remembered separately** | Three menu items open this panel at three different places. A remembered "last tab" would make two of the three land somewhere other than where the user aimed |
+| **Fields are keyed by their resolved value, so a write remounts them** | Rather than an effect syncing a draft to a refetch. Same outcome, one fewer place for the two to disagree, and no frame that shows the old value before the effect corrects it |
+
+**Verified live** against `testGitHere/test-repo1`, with every write checked against `git config`/`git remote` on disk afterwards, and the repository restored to its starting state:
+
+| Path | Result |
+|---|---|
+| `user.email` typed, Enter | `git config --local` has it; the row flips `inherited` → `set here` |
+| the same field cleared | key gone from `.git/config`, row falls back to the greyed global address |
+| `core.autocrlf` → `input` | written; and the read-only list below correctly excludes the managed keys while showing `remote.origin.*`, `branch.*` and the keys git wrote at init |
+| `.gitignore` written from empty | file created, trailing newline present |
+| a rule added to `.git/info/exclude` | `.env.local` **left the Files panel live** — the watcher saw the file, `status` re-ran, no refresh |
+| switching ignore files while dirty | native "Discard changes?" alert; Cancel keeps the draft, and Revert restores the on-disk text |
+| remote add / rename / retarget | all three on disk, and `rename` moved the fetch refspec with it |
+| remote remove | native confirm naming the remote; Cancel removes nothing, Remove does |
+| Escape, and the backdrop | both close the panel |
+| switching repositories | the panel is repo-scoped — reopened against `test-repo2` it shows that repository's remotes and identity |
+
+**One rough edge found while verifying, not a bug**: the config and remote queries are cached, so a change made on the command line while the panel is open is not noticed until some mutation invalidates them. The watcher covers the working tree, not `.git/config`. Left as is — a panel that refetched on every `.git` write would be re-running `git config` during a rebase.
+
+**Not built, and why**: **hooks** — listing and toggling them is easy, but the useful version opens and edits a shell script, which is an editor feature and not a settings one. **LFS** — untestable here: no LFS repository exists in `testGitHere`, and shipping a panel verified only against a repository without the thing it manages is worse than not shipping it. **Submodules** — init, update, sync and their failure modes are a feature in their own right, not a tab; it belongs beside the branch and merge work, not under Settings. All three keep their `soon()` stubs, which say what they are rather than pretending to exist.
+
+608 frontend tests pass (66 new, in `config.test.ts` and `ignoreFiles.test.ts`), and `tsc --noEmit` is clean.
+
 
 ---
 
@@ -1097,4 +1139,5 @@ Three places where this plan knowingly diverges — worth a second look before P
 - ~~**Light theme**~~ — **resolved: built in Phase 6.8**, ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. Custom accent is still open. See §9's Phase 6.8 entry, including the dark theme's own measured contrast failure now waiting on Phase 8.
 - ~~**Git-flow / Index Editor / Investigate**~~ — **all three resolved.** Index Editor was built (§9, hunk and line staging). **Git-flow and Investigate were removed**: the PRD never defined either, both only ever fired a toast, and a control that does nothing is worse than an absent one — it costs a click to discover that. Their icons went with them, since an icon with no caller is a mapping to nothing. `icons.test.ts` records the reason.
 - ~~**Merge/diff tool integration**~~ — **resolved: built in.** A three-way modal with per-region choices; the escape hatch is the user's own editor, not a configured external differ. See §9.3 above.
+- **Hooks, LFS and submodules** — the three areas of §9 item 10 that Phase 6.10 deliberately left out; each has its reason in that entry. Submodules is the one that is a feature rather than a tab, and LFS is blocked on having an LFS repository to verify against (§13a's generated repos are the place for it). *Decide by Phase 8, or leave to a later release.*
 - **Code signing identity + notarization credentials.** *Needed by Phase 8.*

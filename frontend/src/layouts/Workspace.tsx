@@ -12,6 +12,7 @@ import { MergeModal } from '@/features/merge/MergeModal';
 import { MergeWizard } from '@/features/merge/MergeWizard';
 import { RebaseBanner } from '@/features/rebase/RebaseBanner';
 import { RebaseWizard } from '@/features/rebase/RebaseWizard';
+import { RepoSettingsModal } from '@/features/repo-settings/RepoSettingsModal';
 import { StashModal } from '@/features/stash/StashModal';
 import { TagPrompt } from '@/features/tags/TagPrompt';
 import { TerminalDrawer } from '@/features/terminal/TerminalDrawer';
@@ -64,6 +65,8 @@ export function Workspace({
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen);
   const openSettings = useWorkspaceStore((state) => state.openSettings);
   const closeSettings = useWorkspaceStore((state) => state.closeSettings);
+  const repoSettingsTab = useWorkspaceStore((state) => state.repoSettingsTab);
+  const closeRepoSettings = useWorkspaceStore((state) => state.closeRepoSettings);
   const terminalOpen = useWorkspaceStore((state) => state.terminalOpen);
   const toggleTerminal = useWorkspaceStore((state) => state.toggleTerminal);
 
@@ -139,6 +142,9 @@ export function Workspace({
       {tagPromptOid !== null && <TagPrompt oid={tagPromptOid} onClose={closeTagPrompt} />}
       {quickOpen && <QuickOpen />}
       {settingsOpen && <SettingsModal onClose={closeSettings} />}
+      {repoSettingsTab !== null && (
+        <RepoSettingsModal tab={repoSettingsTab} onClose={closeRepoSettings} />
+      )}
       <ToastContainer />
     </div>
   );

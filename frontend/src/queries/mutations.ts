@@ -3,6 +3,7 @@ import {
   branchService,
   cherryPickService,
   commitService,
+  configService,
   isStaged,
   mergeService,
   rebaseService,
@@ -19,6 +20,7 @@ import {
   type Result,
 } from '@/services/git';
 import { deletePath } from '@/services/wails';
+import { writeIgnoreFile, type IgnoreFileId } from '@/services/ignoreFiles';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { GitQueryError } from './git';
 import { gitKeys } from './keys';
@@ -557,6 +559,110 @@ export function usePush(repoPath: string | null) {
     mutationFn: async ({ remote, branch, setUpstream }) =>
       unwrap(await remoteService(repoPath ?? '').push({ remote, branch, setUpstream })),
     onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+// --- repository settings ----------------------------------------------------
+
+/**
+ * Invalidate the config queries only.
+ *
+ * Not the whole repository, which every other mutation here does: a config
+ * write changes no ref, no file and no index entry, so re-running `status`,
+ * `log` and the ref list would be work with a guaranteed-identical result. The
+ * two config scopes are the only things that can have changed.
+ */
+async function refreshConfig(queryClient: QueryClient, repoPath: string): Promise<void> {
+  await queryClient.invalidateQueries({ queryKey: [repoPath, 'config'] });
+}
+
+export interface SetConfigVariables {
+  readonly key: string;
+  /** Null removes the local value, falling back to the inherited one. */
+  readonly value: string | null;
+}
+
+export function useSetRepoConfig(repoPath: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, GitQueryError, SetConfigVariables>({
+    mutationFn: async ({ key, value }) => {
+      const service = configService(repoPath ?? '');
+      unwrap(value === null ? await service.unset(key) : await service.set(key, value));
+    },
+    onSettled: () => (repoPath === null ? undefined : refreshConfig(queryClient, repoPath)),
+  });
+}
+
+export type RemoteVariables =
+  | { readonly action: 'add'; readonly name: string; readonly url: string }
+  | { readonly action: 'setUrl'; readonly name: string; readonly url: string }
+  | { readonly action: 'rename'; readonly name: string; readonly to: string }
+  | { readonly action: 'remove'; readonly name: string };
+
+/**
+ * Add, retarget, rename or remove a remote.
+ *
+ * One hook rather than four: they share a variables shape, an invalidation and
+ * an error channel, and the panel calling them switches on the action anyway.
+ *
+ * This one *does* refresh the whole repository. A rename rewrites
+ * `refs/remotes/<name>/*` and every branch's upstream, and a removal deletes
+ * those refs outright — so the branch list, the ahead/behind counts in status,
+ * and the graph's remote labels are all downstream of it.
+ */
+export function useRemoteAction(repoPath: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, GitQueryError, RemoteVariables>({
+    mutationFn: async (variables) => {
+      const service = remoteService(repoPath ?? '');
+      switch (variables.action) {
+        case 'add':
+          unwrap(await service.add(variables.name, variables.url));
+          return;
+        case 'setUrl':
+          unwrap(await service.setUrl(variables.name, variables.url));
+          return;
+        case 'rename':
+          unwrap(await service.rename(variables.name, variables.to));
+          return;
+        case 'remove':
+          unwrap(await service.remove(variables.name));
+          return;
+      }
+    },
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+export interface WriteIgnoreVariables {
+  readonly file: IgnoreFileId;
+  readonly text: string;
+}
+
+/**
+ * Save an ignore file.
+ *
+ * Invalidates the repository whole, unlike the config write above: ignore
+ * rules decide which files appear as untracked, so saving one changes what
+ * `status` reports and what the explorer shows. The watcher would notice
+ * `.gitignore` on its own, but not `.git/info/exclude` — which lives inside
+ * `.git`, where the watcher deliberately ignores everything but refs, HEAD and
+ * the index (`internal/watcher/service.go`).
+ */
+export function useWriteIgnoreFile(repoPath: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, WriteIgnoreVariables>({
+    mutationFn: async ({ file, text }) => {
+      await writeIgnoreFile(repoPath ?? '', file, text);
+    },
+    onSettled: async () => {
+      if (repoPath === null) return;
+      await queryClient.invalidateQueries({ queryKey: [repoPath, 'ignoreText'] });
+      await refresh(queryClient, repoPath);
+    },
   });
 }
 

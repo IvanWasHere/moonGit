@@ -38,6 +38,18 @@ export const gitKeys = {
   paths: (repoPath: string): QueryKey => [repoPath, 'paths'],
   stashes: (repoPath: string): QueryKey => [repoPath, 'stash'],
   remotes: (repoPath: string): QueryKey => [repoPath, 'remotes'],
+  /**
+   * The repository's config, per scope.
+   *
+   * Not invalidated by the watcher: `classify` in `internal/watcher` treats
+   * `.git/config` as uninteresting, and rightly — nothing else in the app
+   * reads it, and a write to it has no UI consequence anywhere but here. So
+   * the settings panel invalidates its own key after a write, which is also
+   * the only thing in the app that changes it.
+   */
+  config: (repoPath: string, scope: string): QueryKey => [repoPath, 'config', scope],
+  /** An ignore file's text, keyed by which of the two it is. */
+  ignoreText: (repoPath: string, file: string): QueryKey => [repoPath, 'ignoreText', file],
   blame: (repoPath: string, path: string, revision?: string): QueryKey => [
     repoPath,
     'blame',

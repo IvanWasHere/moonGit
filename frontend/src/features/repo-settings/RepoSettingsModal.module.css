@@ -1,0 +1,398 @@
+/*
+ * Repository settings. The same modal chrome as the application Settings panel
+ * — z-index 1000, over the workspace, under the toasts — with a sidebar,
+ * because this one has three sections rather than four short stacked ones and
+ * scrolling past a config form to reach the remotes would be worse.
+ */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panel {
+  width: 720px;
+  max-width: 94vw;
+  height: 560px;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  height: 42px;
+  min-height: 42px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+
+.repoName {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+}
+
+.close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 150px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 8px 0;
+  background: var(--bg-panel);
+}
+
+.tab {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 16px;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tabActive {
+  border-left-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-active);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--bg-darkest);
+  display: flex;
+  flex-direction: column;
+}
+
+.section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.hint {
+  margin: 4px 0 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.fieldLabel {
+  width: 132px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.fieldControl {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input,
+.select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.select {
+  flex: 0 0 auto;
+  min-width: 180px;
+  font-family: var(--font-ui);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* An inherited value is shown, not hidden — but it is somebody else's, so it
+   reads as placeholder text until this repository overrides it. */
+.inherited {
+  color: var(--text-muted);
+}
+
+.origin {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.fieldHint {
+  margin: 0 0 6px 142px;
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.error {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--red);
+  line-height: 1.5;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* --- ignore editor --- */
+
+.editorHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.segment {
+  padding: 4px 12px;
+  background: var(--bg-input);
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.segment:last-child {
+  border-right: none;
+}
+
+.segment:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.segmentActive {
+  background: var(--accent);
+  color: var(--bg-darkest);
+}
+
+.segmentActive:hover {
+  background: var(--accent-hover);
+  color: var(--bg-darkest);
+}
+
+.dirty {
+  font-size: 10px;
+  color: var(--accent);
+}
+
+.textarea {
+  flex: 1;
+  min-height: 180px;
+  margin: 0;
+  padding: 10px 14px;
+  border: none;
+  background: var(--bg-darkest);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  resize: none;
+  tab-size: 2;
+}
+
+.editorFooter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.footerHint {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* --- remotes --- */
+
+.remoteRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.remoteRow:last-of-type {
+  border-bottom: none;
+}
+
+.remoteName {
+  width: 110px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.remoteActions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.iconButton {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconButton:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.danger:hover {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.addRow {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.rawList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.rawKey {
+  color: var(--text-secondary);
+}
+
+.rawValue {
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}

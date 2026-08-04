@@ -20,5 +20,7 @@ export * from './BlobService';
 export * from './StashService';
 export * from './IntegrationService';
 export * from './RemoteService';
+export * from './ConfigService';
+export * from './IgnoreService';
 export * from './WorkingTreeService';
 export * from './TreeService';

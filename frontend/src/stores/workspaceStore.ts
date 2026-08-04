@@ -64,6 +64,9 @@ const TERMINAL_DEFAULT_H = 32;
 export const TERMINAL_MIN_H = 12;
 export const TERMINAL_MAX_H = 80;
 
+/** The Repository Settings panel's sections. */
+export type RepoSettingsTab = 'general' | 'ignore' | 'remotes';
+
 /** Which list a selected file came from — the two have separate diffs. */
 export type FileSide = 'staged' | 'worktree';
 
@@ -183,6 +186,16 @@ interface WorkspaceState {
    * the file list, and a sheet over the workspace would hide the thing the
    * command is about. It also outlives a repository switch — see `openRepo`.
    */
+  /**
+   * Repository settings, and which tab it opens on — or null when closed.
+   *
+   * The tab is part of the open state rather than remembered separately,
+   * because three different menu items open this panel at three different
+   * places: "Repository Settings" at General, "Manage Remotes" at Remotes,
+   * "Ignore" at Ignore. A remembered tab would make two of those three land
+   * somewhere other than where the user aimed.
+   */
+  readonly repoSettingsTab: RepoSettingsTab | null;
   readonly terminalOpen: boolean;
   /** Drawer height, as a percentage of the window. */
   readonly terminalH: number;
@@ -220,6 +233,8 @@ interface WorkspaceState {
   closeQuickOpen: () => void;
   openSettings: () => void;
   closeSettings: () => void;
+  openRepoSettings: (tab?: RepoSettingsTab) => void;
+  closeRepoSettings: () => void;
   openTerminal: () => void;
   closeTerminal: () => void;
   toggleTerminal: () => void;
@@ -253,6 +268,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   expandedDirs: ROOT_EXPANDED,
   quickOpen: false,
   settingsOpen: false,
+  repoSettingsTab: null,
   terminalOpen: false,
   terminalH: TERMINAL_DEFAULT_H,
   main: MAIN_DEFAULTS,
@@ -290,6 +306,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       // happened to share a name in the repository being opened.
       expandedDirs: ROOT_EXPANDED,
       quickOpen: false,
+      // Scoped to the repository it was opened from, unlike the terminal
+      // below: a panel editing test-repo1's remotes must not stay on screen
+      // showing them while the workspace has moved to test-repo2.
+      repoSettingsTab: null,
       // `terminalOpen` is deliberately absent. The drawer is a workspace
       // affordance, not a selection: somebody who works with a terminal open
       // wants it open in the next repository too. The *session* is still
@@ -351,6 +371,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   closeQuickOpen: () => set({ quickOpen: false }),
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
+
+  openRepoSettings: (tab = 'general') => set({ repoSettingsTab: tab }),
+  closeRepoSettings: () => set({ repoSettingsTab: null }),
 
   openTerminal: () => set({ terminalOpen: true }),
   closeTerminal: () => set({ terminalOpen: false }),

@@ -31,6 +31,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const openStash = useWorkspaceStore((state) => state.openStash);
   const openRebaseWizard = useWorkspaceStore((state) => state.openRebaseWizard);
   const toggleTerminal = useWorkspaceStore((state) => state.toggleTerminal);
+  const openRepoSettings = useWorkspaceStore((state) => state.openRepoSettings);
 
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
@@ -104,7 +105,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
     'repository.synchronize': () =>
       fetch.mutate({ prune: true }, { onSuccess: doPull, onError: reportError }),
     'repository.terminal': toggleTerminal,
-    'repository.settings': soon('Repository settings'),
+    'repository.settings': () => openRepoSettings('general'),
     'repository.preferences': openSettings,
     'repository.exit': () => showToast('Close the window to exit', 'info'),
 
@@ -124,7 +125,10 @@ export function useMenuActions(): (id: MenuItemId) => void {
     // it had just taken away.
     'local.stash': openStash,
     'local.shelve': openStash,
-    'local.ignore': soon('Ignore'),
+    // The panel's Ignore tab, not a per-file action: the menubar has no file
+    // in hand the way the Files panel's context menu does, and "Ignore" with
+    // nothing selected can only sensibly mean "show me the rules".
+    'local.ignore': () => openRepoSettings('ignore'),
 
     // --- Branch -----------------------------------------------------------
     'branch.checkout': soon('Branch checkout'),
@@ -144,7 +148,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
     'remote.fetch': doFetch,
     'remote.pull': doPull,
     'remote.push': doPush,
-    'remote.manage': soon('Remote management'),
+    'remote.manage': () => openRepoSettings('remotes'),
     'remote.pullRequests': soon('Pull requests'),
 
     // --- Query ------------------------------------------------------------
