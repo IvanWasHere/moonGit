@@ -185,6 +185,28 @@ export interface PtyExitEvent {
   message?: string;
 }
 
+// --- appmenu -------------------------------------------------------------
+
+/**
+ * One row of the native menu bar.
+ *
+ * `separatorBefore` is required here although it is optional in `menuConfig`:
+ * Go's struct has no notion of an absent boolean, and sending `undefined` for
+ * it would arrive as `false` anyway. Making the bridge shape explicit keeps the
+ * conversion in one visible place rather than in JSON's defaults.
+ */
+export interface NativeMenuItem {
+  id: string;
+  label: string;
+  separatorBefore: boolean;
+}
+
+export interface NativeMenu {
+  id: string;
+  label: string;
+  items: NativeMenuItem[];
+}
+
 // --- app -----------------------------------------------------------------
 
 export interface Environment {

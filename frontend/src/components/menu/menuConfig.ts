@@ -118,3 +118,15 @@ export type MenuItemId = (typeof MENUS)[number]['items'][number]['id'];
 export const MENU_ITEM_IDS: readonly MenuItemId[] = MENUS.flatMap((menu) =>
   menu.items.map((item) => item.id),
 );
+
+/**
+ * Whether a string is one of those ids.
+ *
+ * Needed because the native menu bar's clicks arrive from Go as plain strings
+ * (`useNativeMenu`). Inside the app the type is guaranteed; across the bridge
+ * it is an assumption, and an unrecognised id should be dropped rather than
+ * indexed into a map that has no entry for it.
+ */
+export function isMenuItemId(value: string): value is MenuItemId {
+  return (MENU_ITEM_IDS as readonly string[]).includes(value);
+}

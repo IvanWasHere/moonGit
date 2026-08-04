@@ -5,6 +5,7 @@ import (
 	"embed"
 	"log"
 
+	"moongit/internal/appmenu"
 	"moongit/internal/creds"
 	"moongit/internal/dialogs"
 	"moongit/internal/fsapi"
@@ -36,6 +37,7 @@ func main() {
 	storeSvc := store.New()
 	credsSvc := creds.New()
 	ptySvc := ptyapi.New()
+	menuSvc := appmenu.New()
 
 	err := wails.Run(&options.App{
 		Title:     "moonGit",
@@ -56,6 +58,7 @@ func main() {
 			dialogSvc.Startup(ctx)
 			shellSvc.Startup(ctx)
 			ptySvc.Startup(ctx)
+			menuSvc.Startup(ctx)
 			// A failed store is not fatal: the app works without persisted
 			// preferences, and refusing to launch over a settings file would be
 			// a bad trade. The frontend sees it via Store.Info().open == false.
@@ -72,6 +75,10 @@ func main() {
 			_ = storeSvc.Close()
 		},
 
+		// No `Menu:` here on purpose. The native menu bar is set at runtime by
+		// appmenu.Service, from the same structure the frontend draws its own
+		// menubar from — see that package's doc comment for why it is pushed in
+		// rather than declared here.
 		Mac: &mac.Options{
 			// The design supplies its own 60px menubar, so the native title bar
 			// is hidden and the traffic lights float over it. The frontend
@@ -94,6 +101,7 @@ func main() {
 			storeSvc,
 			credsSvc,
 			ptySvc,
+			menuSvc,
 		},
 	})
 

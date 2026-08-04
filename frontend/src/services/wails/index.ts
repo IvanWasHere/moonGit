@@ -13,5 +13,6 @@ export * from './watch';
 export * from './db';
 export * from './ui';
 export * from './pty';
+export * from './appmenu';
 export * from './secrets';
 export * from './events';

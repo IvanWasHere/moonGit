@@ -5,6 +5,7 @@ import { Icons } from '@/components/icons';
 import { MenuBar } from '@/components/MenuBar';
 import { TopMenu } from '@/components/menu/TopMenu';
 import { useMenuActions } from '@/components/menu/useMenuActions';
+import { useNativeMenu } from '@/components/menu/useNativeMenu';
 import { ToastContainer } from '@/components/ToastContainer';
 import { QuickOpen } from '@/features/explorer/QuickOpen';
 import { SettingsModal } from '@/features/settings/SettingsModal';
@@ -110,6 +111,9 @@ export function Workspace({
   useLayoutPersistence();
   useRepoWatcher(repoPath);
   const onMenuAction = useMenuActions();
+  // The same actions, reachable from the macOS menu bar as well as the bar in
+  // the window. Called before the early return below so the hook order holds.
+  useNativeMenu(onMenuAction);
 
   // A route pointing at a repository that has been forgotten — or a hand-typed
   // id — goes back to the dashboard rather than rendering empty panels.

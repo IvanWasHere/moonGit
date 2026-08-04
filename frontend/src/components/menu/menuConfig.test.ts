@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MENUS, MENU_ITEM_IDS } from './menuConfig';
+import { isMenuItemId, MENUS, MENU_ITEM_IDS } from './menuConfig';
 
 describe('menuConfig', () => {
   it('has the six top-level menus in order', () => {
@@ -69,5 +69,26 @@ describe('menuConfig', () => {
         expect(item.id.startsWith(`${menu.id}.`)).toBe(true);
       }
     }
+  });
+
+  /*
+   * The guard exists for the native menu bar, whose clicks arrive from Go as
+   * plain strings. Anything it lets through is indexed straight into the
+   * handler map, so "recognises every real id" and "refuses everything else"
+   * are both load-bearing.
+   */
+  describe('isMenuItemId', () => {
+    it('accepts every id in the config', () => {
+      for (const id of MENU_ITEM_IDS) {
+        expect(isMenuItemId(id)).toBe(true);
+      }
+    });
+
+    it.each(['', 'repository', 'repository.', 'repository.nope', 'toString', '__proto__'])(
+      'rejects %o',
+      (value) => {
+        expect(isMenuItemId(value)).toBe(false);
+      },
+    );
   });
 });

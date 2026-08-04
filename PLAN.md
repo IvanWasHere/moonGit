@@ -425,6 +425,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 8. ~~**Settings**: appearance, git path, SSH, editor, diff/merge tools, keybindings~~ ✅ (below)
 9. ~~**Terminal**: xterm.js + `creack/pty` in Go, repo-aware cwd~~ ✅ (below)
 10. ~~**Repository settings**: ignore rules, git config~~ ✅ (below) — hooks, LFS and submodules deliberately not built, with reasons in that entry
+11. ~~**Native menu bar**: the same menus in macOS's own bar, not only the window's~~ ✅ (below) — not in the mockup, which drew the in-window bar and stopped there
 
 Each ships behind the same skeleton: `Loading | Success | Error | Retry`.
 
@@ -994,6 +995,36 @@ Item 10, and the last of Phase 6. `services/git/ConfigService.ts`, `services/ign
 **Not built, and why**: **hooks** — listing and toggling them is easy, but the useful version opens and edits a shell script, which is an editor feature and not a settings one. **LFS** — untestable here: no LFS repository exists in `testGitHere`, and shipping a panel verified only against a repository without the thing it manages is worse than not shipping it. **Submodules** — init, update, sync and their failure modes are a feature in their own right, not a tab; it belongs beside the branch and merge work, not under Settings. All three keep their `soon()` stubs, which say what they are rather than pretending to exist.
 
 608 frontend tests pass (66 new, in `config.test.ts` and `ignoreFiles.test.ts`), and `tsc --noEmit` is clean.
+
+### ✅ Phase 6.11 — the native menu bar
+
+The window has had an application menubar since Phase 4, because the mockup drew one. macOS also gives every app a menu bar of its own, and until now this one held `moonGit`, `Edit` and `Window` — Wails' default, and none of it the application's. `internal/appmenu` puts Repository, Local, Branch, Remote, Query and Help where a Mac user looks for them.
+
+**Both menus exist, deliberately.** The in-window bar is the design's, and it is also load-bearing: the window is `TitleBarHiddenInset`, so that strip is the inset that clears the traffic lights *and* the only `--wails-draggable` region — removing it would take the window's drag handle with it. The native bar is where macOS puts an app's menu whether the app agrees or not. What matters is that they cannot disagree.
+
+| Decision | Why |
+|---|---|
+| **The structure is pushed from the frontend, not declared in Go** | `menuConfig.ts` already holds it as data and the in-window bar is drawn from it. A second copy in `main.go` would be a second place to add an item to, and forgetting one would produce two menus that quietly differ — with nothing failing to compile. So `appmenu.Service` is a native capability and nothing else, like every other service under `internal/` (§4): it knows how to build an NSMenu and how to report a click, and what the items *mean* stays in TypeScript next to the handlers |
+| **A click emits the item's own `MenuItemId`** | Both surfaces land in `useMenuActions`, which is already a `Record<MenuItemId, …>` — so an item can never do one thing in the window and another in the menu bar, and adding one still fails to compile until it is wired |
+| **The id is guarded on arrival, not cast** | It crosses a process boundary. `isMenuItemId` drops anything unrecognised rather than indexing a map with it — the difference between a no-op and a crash if the two sides ever fall out of step |
+| **No accelerators on the native items** | The frontend owns the app's shortcuts (⌘P, ⌘,, ⌃`). A native accelerator for the same action would fire *alongside* the frontend's handler rather than instead of it: two handlers, one keystroke |
+| **No Window menu** | Its contents do not work in a frameless window, which this one is |
+| **Edit stays, and this is the one that was nearly wrong** | The ask was a menu bar holding `moonGit` and the app's own menus, nothing else. Removing Edit costs ⌘C/⌘X/⌘V/⌘A/⌘Z **app-wide**: macOS routes those key equivalents through menu items, and with no Edit menu there are none for WKWebView to inherit. Measured rather than assumed — see below. Wails v2 exposes whole-menu roles only (`AppMenu`, `EditMenu`, `WindowMenu`), so there is no per-item Copy role to hide inside the app menu. A visible Edit menu is the price of a working ⌘V, and in a client whose daily work is pasting a remote URL and copying a SHA that is not a close call |
+
+**The clipboard measurement.** Same keystroke sequence both times — type into Quick Open, ⌘A, ⌘C — with the system clipboard primed with a sentinel first:
+
+| Menu bar | Clipboard after ⌘C |
+|---|---|
+| `moonGit` + the six | unchanged — the sentinel survived |
+| `moonGit` + `Edit` + the six | the typed text |
+
+A control ruled out the obvious alternative explanation: ⌃` sent the same way opened the terminal drawer and spawned a shell, so the keystrokes were reaching the app.
+
+**Verified live** against the running app, read back through the accessibility API rather than by eye: the bar reads `moonGit · Edit · Repository · Local · Branch · Remote · Query · Help`; every menu's items match `menuConfig.ts` item for item, separators included; **Repository → Terminal** clicked from the native bar opened the drawer and spawned a real `zsh`, which is the whole path — Go callback → `menu:action` → guard → handler map.
+
+**One free win.** macOS retitles a menu item called `Preferences…` to `Settings…` on Ventura and later, so the native menu says `Settings…` while the in-window one still says `Preferences…`. Each bar matches its own convention, from one source.
+
+615 frontend tests pass (7 new, for `isMenuItemId`), `tsc --noEmit`, `go build ./...` and `go vet ./...` are clean.
 
 
 ---
