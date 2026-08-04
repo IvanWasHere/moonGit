@@ -426,6 +426,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 9. ~~**Terminal**: xterm.js + `creack/pty` in Go, repo-aware cwd~~ ✅ (below)
 10. ~~**Repository settings**: ignore rules, git config~~ ✅ (below) — hooks, LFS and submodules deliberately not built, with reasons in that entry
 11. ~~**Native menu bar**: the same menus in macOS's own bar, not only the window's~~ ✅ (below) — not in the mockup, which drew the in-window bar and stopped there
+12. ~~**Files panel**: a PATH column of its own, and status filter chips beside the Changes/Tree tabs~~ ✅ (below)
 
 Each ships behind the same skeleton: `Loading | Success | Error | Retry`.
 
@@ -1025,6 +1026,91 @@ A control ruled out the obvious alternative explanation: ⌃` sent the same way 
 **One free win.** macOS retitles a menu item called `Preferences…` to `Settings…` on Ventura and later, so the native menu says `Settings…` while the in-window one still says `Preferences…`. Each bar matches its own convention, from one source.
 
 615 frontend tests pass (7 new, for `isMenuItemId`), `tsc --noEmit`, `go build ./...` and `go vet ./...` are clean.
+
+### ✅ Phase 6.12 — the Files panel's path column and status filters
+
+**The one entry in this section written before the work rather than after it**, and left standing below so the plan and the result can be compared. Everything it planned was built; the four places reality argued back are recorded at the end. Two changes to the Files panel, agreed 2026-08-04 and independent of each other.
+
+#### A. `STATUS | FILE | PATH`
+
+`FileList`'s row puts the filename and its directory in one cell, back to back, which renders as `Header.tsxsrc/components/`. The directory moves to a column of its own.
+
+| Decision | Why |
+|---|---|
+| **The header and the rows become one grid** | They are two independent flex rows today. That survives two columns of which one is fixed-width; it does not survive a third whose width depends on the content, and the header would drift off the rows as soon as a path got long |
+| **PATH truncates from the left** | `…/components/` is informative and `src/comp…` is not — the leaf directory is the part that identifies the file, and it is at the end |
+| **The rename split is fixed on the way past** | `displayPath` returns `old → new`, and the current row runs `fileDir()` over that whole string — so a rename's "directory" today is `src/legacy/OldWidget.tsx → src/components/`. Two columns make the right answer expressible: FILE is `OldWidget.tsx → Widget.tsx`, PATH is `src/legacy/ → src/components/`. This is a bug the column removes rather than a feature it adds |
+| **The split is a pure function in `statusDisplay.ts`** | Rename-aware name/dir is the only interesting part, and that file already holds `displayPath`, `sidesOf` and `defaultSide` for the same reason: the decisions are testable without a DOM |
+
+The `submodule` marker, which currently trails the path cell, moves into PATH as a suffix.
+
+#### B. Status filter chips in the tabs row
+
+Seven toggles, right-aligned in the `Changes | Tree` row. Hidden on the Tree tab — the tree is not status-driven, and a control that cannot affect what is on screen is a control that lies.
+
+| Chip | Matches | Role |
+|---|---|---|
+| Staged | index half non-`.` | asked for; also half the coverage floor |
+| Not staged | worktree half non-`.` | asked for; the other half |
+| Added | index `A` | refinement |
+| Untracked | `kind: 'untracked'` | outside the staged/unstaged axis |
+| Deleted | either half `D` | refinement |
+| Conflicted | `kind: 'unmerged'` | outside the axis, and never safe to hide during a merge |
+| Ignored | `kind: 'ignored'` | asked for; the expensive one, below |
+
+**Why seven is enough, and why there is no Modified or Renamed chip.** Every tracked change has an XY pair, so it is staged or unstaged or both — those two chips already reach Modified, Renamed, Copied and Typechange. The only entries with no XY pair are untracked, unmerged and ignored, which is exactly what the other chips add. Adding a chip per badge letter would be enumeration for its own sake; the invariant that matters is that **nothing on screen can be filtered into being unreachable**, and five of the seven are what establish it.
+
+| Decision | Why |
+|---|---|
+| **Glyphs are `StatusBadge`'s own letters and colours** | The STATUS column already teaches `M A D ? R !`. A second vocabulary for the same facts, in a row 30px away from the first, would be two things to learn for one idea |
+| **None selected shows everything; any selected is an OR** | The natural reading of "show only what I picked". It does mean Staged + Deleted shows staged-anything *plus* deleted-anything, not staged deletions — if the intersection is ever wanted, the side chips and the status chips become two groups ANDed together, which is a change to the predicate and nothing else |
+| **The predicate is pure and fixture-tested** | `parsers/__fixtures__/status.ts` already holds real porcelain captured from git 2.47.1. A filter that decides what the user can see should be asserted against real `AM`/`RM`/`UU` rows, not against hand-written objects that agree with the implementation |
+| **ANDed with the existing text FilterBox** | They answer different questions ("which kind" and "which name"), and the `n of m` count reflects both |
+| **Persisted as a *preference*, not a layout** | It is a choice, like `diff.viewMode`, so it goes through `layoutPersistence`'s preference path. It also survives a repository switch, unlike the text filters, which reset: a way of working travels with the user, a selection belongs to the thing selected |
+| **Icon-only at narrow widths** | The Files pane can sit at ~300px, and seven chips share that row with two tabs and a count. To be checked live at the minimum pane width rather than assumed |
+
+**Ignored is not a UI change, and it is most of the work.** `STATUS_ARGS` deliberately omits `--ignored` (`parsers/status.ts`), so the parser's `ignored` kind is currently unreachable and `FileList` filters it out defensively. The chip needs a second query: enabled only while it is on, its own key, a long `staleTime`, **not** invalidated by the watcher, and `--directory`-collapsed so a repository with `node_modules` produces one row rather than thirty thousand. Two consequences to accept rather than engineer away: switching the chip on has a visible pause on a large repository, and because chips persist, that pause happens at launch if it was left on. Ignored rows have no XY pair, so they get their own muted badge instead of the two empty dots the STATUS column would otherwise show.
+
+**Also needed**: an empty state for "the chips hid everything" that offers to clear them, distinct from today's "No files match this filter".
+
+**Order**: A first (three files, self-contained), then the six cheap chips, then Ignored — it is the only piece that touches the query layer, and the only one that can be slow.
+
+#### What the work changed about the plan
+
+Built: `splitPath` in `statusDisplay.ts`, `statusFilters.ts`, `IGNORED_STATUS_ARGS` + `RepositoryService.ignored`, `gitKeys.ignored` + `useIgnoredFiles`, `statusFilters` on the workspace store persisted through `layoutPersistence`, and the grid in `FileList` / chips in `FilesPane`. 637 frontend tests (22 new), `tsc`, `eslint`, `go vet` clean.
+
+**Five things measured rather than assumed, four of which changed the design:**
+
+1. **`git status` has no `--directory` option.** The plan named it; it belongs to `ls-files`, and passing it is `error: unknown option 'directory'`. The collapse that makes the Ignored chip viable comes from `--ignored` (traditional) together with **`--untracked-files=normal`** — `=all` defeats it. On this repository that is **6 rows against 18,163**. Also unstated in the plan and load-bearing: `--ignored` *adds* the `!` records to an otherwise normal status rather than replacing it, so the service has to select them or the caller gets a second copy of every file it already has.
+
+2. **A conflict wears `AA`, so the letter chips claimed it.** `index === 'A'` put `conflict.txt` under Added — while the row itself shows `!` on both sides, because `displayStatus` had already decided an unmerged path's XY letters describe *how* it conflicts rather than what happened to it. The rule is now explicit: **a chip matches an entry when the entry's own row could wear that chip's glyph.** Added and Deleted therefore exclude unmerged; the two axis chips still match it, deliberately, because the row does show a badge on both sides and a merge in progress is the worst moment for conflicts to drop out of a list. A unit test caught this, but only because the fixture was real porcelain — hand-written entries would have carried the same wrong assumption as the code.
+
+3. **The empty state's escape hatch was below the fold.** "Clear status filters" rendered at y=327 in a panel body ending at y=317 — in a panel whose entire content was the message telling the user to press it. Two causes: `EmptyState` claims `height: 100%` for its own centring, and the sticky column header ate 27px of a pane that routinely sits at ~115px. Fixed by centring on the wrapper instead, and by **not rendering a column header over no columns of data** — which also removes the odd sight of `STATUS FILE PATH` sitting above "no files match". Found by measuring the DOM rather than by looking at the screenshot, where it simply appeared absent.
+
+4. **Chips wrap; they do not collapse to icons.** The plan said icon-only at narrow widths. Two of the seven are *positions* in the XY pair rather than status letters and have no glyph to collapse to, and inventing one would add a vocabulary to a row whose whole argument is that it borrows the one below it. The group wraps to a second line instead — measured at 520/420/360/300px: the row grows from 29px to 52px at ≤360px and nothing overflows at any width down to 300.
+
+5. **Ignored is `I`, not git's `!!`.** Porcelain v1 writes ignored as `!!`, but `!` is already spent on conflicted here, and a grey `!` beside a red one is the one confusion in this vocabulary that costs something — it pairs "nothing to do" with "stop and fix this".
+
+**One thing the plan did not anticipate at all**: `mutations.ts`'s `refresh` invalidates `[repoPath]`, which is a prefix of every key including the new one — so *every* stage, commit and checkout would have re-walked `node_modules` while the chip was on, at the highest frequency in the app. `refresh` now excludes it by predicate and `useWriteIgnoreFile` asks for it explicitly. Keeping it out of `keysToInvalidate` was necessary but not sufficient.
+
+**Verified live** against `testGitHere/test-repo1`, seeded with an ignored directory, an ignored file and a root→subdirectory rename for the occasion, then restored — final `git status` byte-identical to the starting state, HEAD unmoved at `d564383`:
+
+| | Result |
+|---|---|
+| Columns | Header and rows both computed `52px 486.5px 486.5px` — read out of the live DOM, since the whole reason for one template is that they cannot drift |
+| Rename split | `OldWidget.tsx → Widget.tsx` in FILE, `src/legacy → src/components` in PATH. The old row rendered that entire string as the directory |
+| Pure move | `package.json` with PATH `. → config` and no arrow in FILE — the half the rename left alone is not repeated |
+| Bidi | The `→` and the leading `.` stayed put under the left-truncating `direction: rtl`. `unicode-bidi: plaintext` on an inner span, since it overrides `direction` on the element it sits on |
+| Staged | 5 rows, exactly the non-`.` index halves git reports |
+| Deleted | 1 row, the `.D` file — and `git status` agreed |
+| Ignored | `.env.local`, `src/.DS_Store` (via the user's **global** `core.excludesfile`) and **`vendor/` as a single collapsed row**, its trailing slash intact in the FILE column |
+| Text filter | ANDed with the chips: `components` over Staged+Ignored gave 3 rows and `3 of 12` |
+| Persistence | Both chips survived a reload, and the ignored query re-ran at launch — the accepted consequence, now observed |
+| Repository switch | Chips survived it; `test-repo2`'s two staged files matched `git status` and its lack of ignored files showed as nothing added |
+| Tree tab | Chips hidden, selection preserved on return |
+| Review view | Same columns, same chips, same state |
+
+**Not exercised**: the Ignored chip against a genuinely large repository. `vendor/` proves the collapse; it does not measure the pause the plan warns about. The honest test is this repository's own 18,163 ignored files, and it belongs with the §10 performance work, where there is somewhere to record the number.
 
 
 ---

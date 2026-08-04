@@ -38,6 +38,34 @@ export const STATUS_ARGS: readonly string[] = [
 ];
 
 /**
+ * The ignored-files query — a second command, not a flag on the first.
+ *
+ * Three things about it were measured against git 2.47.1 rather than reasoned
+ * about, and each one is load-bearing:
+ *
+ * 1. **`--untracked-files=normal`, not `all`.** Only `traditional` ignore
+ *    reporting collapses a wholly-ignored directory to a single `node_modules/`
+ *    row, and `--untracked-files=all` defeats that collapse. On this repository
+ *    the difference is **6 rows against 18,163**.
+ * 2. **There is no `--directory` option on `git status`.** It belongs to
+ *    `ls-files`; passing it here is `error: unknown option 'directory'`. The
+ *    collapse comes entirely from point 1.
+ * 3. **The output still contains every ordinary entry.** `--ignored` adds the
+ *    `!` records to a normal status rather than replacing it, so the caller has
+ *    to select them — which is what `RepositoryService.ignored` does.
+ *
+ * `--branch` is deliberately absent: the branch header is already known from
+ * `STATUS_ARGS`, and this query is asked far less often than that one.
+ */
+export const IGNORED_STATUS_ARGS: readonly string[] = [
+  'status',
+  '--porcelain=v2',
+  '-z',
+  '--ignored',
+  '--untracked-files=normal',
+];
+
+/**
  * A porcelain v2 status letter. `.` is "unchanged in this half of the pair";
  * `?` and `!` are moonGit's stand-ins for untracked and ignored, which git
  * reports as their own record types rather than as XY codes.

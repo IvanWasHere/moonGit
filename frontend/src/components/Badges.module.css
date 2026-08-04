@@ -72,3 +72,11 @@
   background: var(--red-dim);
   color: var(--orange);
 }
+
+/* Inert, and it has to *look* inert: an ignored file is the one status in the
+   column that asks nothing of the user. The only muted badge, matching how the
+   explorer tree already dims its ignored rows. */
+.statusIgnored {
+  background: var(--bg-input);
+  color: var(--text-muted);
+}

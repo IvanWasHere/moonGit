@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { StatusFilter } from '@/features/working-tree/statusFilters';
 
 /**
  * Selection and layout state for the workspace.
@@ -159,6 +160,16 @@ interface WorkspaceState {
   /** Which half of the Files panel is showing: what changed, or everything. */
   readonly filesTab: FilesTab;
   /**
+   * The Files panel's status filter chips. Empty means "show everything".
+   *
+   * Unlike `panelFilters` above, this **survives a repository switch** and is
+   * persisted as a preference: a way of working travels with the user, while a
+   * text filter is a selection and belongs to the thing selected. Somebody who
+   * works staged-only wants that in the next repository too; somebody filtering
+   * for `Header` does not.
+   */
+  readonly statusFilters: readonly StatusFilter[];
+  /**
    * Repo-relative paths of the expanded directories, `''` being the root.
    *
    * A list of what is *open* rather than a tree of node state: the tree itself
@@ -228,6 +239,8 @@ interface WorkspaceState {
   setPanelFilter: (panel: FilterablePanel, filter: string | null) => void;
   togglePanelFilter: (panel: FilterablePanel) => void;
   setFilesTab: (tab: FilesTab) => void;
+  toggleStatusFilter: (id: StatusFilter) => void;
+  setStatusFilters: (ids: readonly StatusFilter[]) => void;
   toggleDir: (path: string) => void;
   openQuickOpen: () => void;
   closeQuickOpen: () => void;
@@ -265,6 +278,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   logQuery: null,
   panelFilters: NO_FILTERS,
   filesTab: 'changes',
+  statusFilters: [],
   expandedDirs: ROOT_EXPANDED,
   quickOpen: false,
   settingsOpen: false,
@@ -302,6 +316,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       logQuery: null,
       panelFilters: NO_FILTERS,
       filesTab: 'changes',
+      // `statusFilters` is deliberately absent, alongside `terminalOpen` below:
+      // it is a persisted preference about how the user works, not a selection
+      // scoped to the repository being left.
       // Paths are repo-relative, so keeping them would expand whatever
       // happened to share a name in the repository being opened.
       expandedDirs: ROOT_EXPANDED,
@@ -361,6 +378,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     })),
 
   setFilesTab: (filesTab) => set({ filesTab }),
+  toggleStatusFilter: (id) =>
+    set((state) => ({
+      statusFilters: state.statusFilters.includes(id)
+        ? state.statusFilters.filter((current) => current !== id)
+        : [...state.statusFilters, id],
+    })),
+  setStatusFilters: (ids) => set({ statusFilters: [...ids] }),
   toggleDir: (path) =>
     set((state) => ({
       expandedDirs: state.expandedDirs.includes(path)

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { getLayout, getPreference, setLayout, setPreference } from '@/services/db/keyValue';
+import { parseStatusFilters } from '@/features/working-tree/statusFilters';
 import {
   useWorkspaceStore,
   type DiffViewMode,
@@ -34,6 +35,13 @@ const DIFF_VIEW_KEY = 'diff.viewMode';
  * for on this launch.
  */
 const TERMINAL_KEY = 'workspace.terminalHeight';
+/**
+ * The Files panel's status chips — a preference, like the diff mode above.
+ *
+ * It is a choice about how someone works rather than a pane size, and it
+ * survives a repository switch for the same reason (`workspaceStore`).
+ */
+const STATUS_FILTERS_KEY = 'files.statusFilters';
 const SAVE_DEBOUNCE_MS = 400;
 
 export function useLayoutPersistence(): void {
@@ -46,17 +54,32 @@ export function useLayoutPersistence(): void {
 
     void (async () => {
       try {
-        const { main, review, diffView, terminalH, setMain, setReview, setDiffView, setTerminalH } =
-          useWorkspaceStore.getState();
-        const [savedMain, savedReview, savedDiffView, savedTerminalH] = await Promise.all([
-          getLayout<MainLayout>(MAIN_KEY, main),
-          getLayout<ReviewLayout>(REVIEW_KEY, review),
-          getPreference<DiffViewMode>(DIFF_VIEW_KEY, diffView),
-          getLayout<number>(TERMINAL_KEY, terminalH),
-        ]);
+        const {
+          main,
+          review,
+          diffView,
+          terminalH,
+          setMain,
+          setReview,
+          setDiffView,
+          setTerminalH,
+          setStatusFilters,
+        } = useWorkspaceStore.getState();
+        const [savedMain, savedReview, savedDiffView, savedTerminalH, savedStatusFilters] =
+          await Promise.all([
+            getLayout<MainLayout>(MAIN_KEY, main),
+            getLayout<ReviewLayout>(REVIEW_KEY, review),
+            getPreference<DiffViewMode>(DIFF_VIEW_KEY, diffView),
+            getLayout<number>(TERMINAL_KEY, terminalH),
+            getPreference<unknown>(STATUS_FILTERS_KEY, []),
+          ]);
         if (cancelled) return;
         setMain(savedMain);
         setReview(savedReview);
+        // Validated rather than cast: the value is unchecked JSON out of
+        // SQLite and it feeds a predicate lookup, so an id an older build
+        // wrote would throw while rendering the file list.
+        setStatusFilters(parseStatusFilters(savedStatusFilters));
         // The setter clamps, so a value written by a build with a different
         // range cannot restore a drawer taller than the window.
         setTerminalH(savedTerminalH);
@@ -85,7 +108,8 @@ export function useLayoutPersistence(): void {
         state.main === previous.main &&
         state.review === previous.review &&
         state.diffView === previous.diffView &&
-        state.terminalH === previous.terminalH
+        state.terminalH === previous.terminalH &&
+        state.statusFilters === previous.statusFilters
       ) {
         return;
       }
@@ -97,6 +121,7 @@ export function useLayoutPersistence(): void {
           setLayout(REVIEW_KEY, state.review),
           setPreference(DIFF_VIEW_KEY, state.diffView),
           setLayout(TERMINAL_KEY, state.terminalH),
+          setPreference(STATUS_FILTERS_KEY, state.statusFilters),
         ]).catch((cause: unknown) => console.warn('could not save layout', cause));
       }, SAVE_DEBOUNCE_MS);
     });

@@ -1,11 +1,26 @@
 /* Ported from ui-example L158–173, with the status column that replaced the
    mockup's "Staged Changes" / "Changes" section headers. */
 
-.file {
-  display: flex;
+/* STATUS | FILE | PATH.
+
+   The header and every row are separate elements sharing one template, which
+   only stays honest because **every track is width-independent**: 52px for the
+   badges, then two `fr` shares. An `auto` or `max-content` track would be sized
+   from each container's own contents, so a long path in the list would widen a
+   column the header knows nothing about and the two would drift apart — which
+   is exactly the failure two columns never had and three would. The one
+   variable-width thing in a row, the Resolve button, therefore lives *inside*
+   the PATH cell rather than in a fourth track of its own. */
+.grid {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   padding: 4px 12px;
+}
+
+.file {
+  composes: grid;
   cursor: pointer;
   transition: background 0.1s;
   font-size: 12px;
@@ -20,12 +35,17 @@
   background: var(--bg-selected);
 }
 
+/* Ignored rows stay visible but recede, matching the explorer tree: they are
+   there to answer "why is this not showing up", not to be worked on. */
+.ignoredRow .nameCell,
+.ignoredRow .pathCell {
+  color: var(--text-muted);
+}
+
 /* The column header. Sticky, because the two badge positions only mean
    anything if their labels are still on screen when the list is scrolled. */
 .columns {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  composes: grid;
   padding: 6px 12px;
   position: sticky;
   top: 0;
@@ -46,8 +66,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 52px;
-  flex-shrink: 0;
 }
 
 .sideButton {
@@ -77,20 +95,61 @@
   background-repeat: no-repeat;
 }
 
-.path {
-  flex: 1;
+/* FILE. Truncates from the right, unlike PATH: a filename's *front* is what
+   identifies it, and two files in a directory rarely differ only in their
+   last few characters. */
+.nameCell {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-secondary);
-}
-
-.filename {
   color: var(--text-primary);
 }
 
-.dir {
+.pathCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* PATH truncates from the *left*: `…/components` identifies the file and
+   `src/comp…` does not — the leaf directory is the informative end, and it is
+   at the back. `direction: rtl` is what moves the ellipsis to the front.
+
+   `unicode-bidi: plaintext` on the text is not optional. Under an RTL run the
+   bidi algorithm relocates neutral characters at the ends of the string to the
+   visual left, which is how quick open once rendered `src/components` as
+   `/src/components` (PLAN.md §9, Phase 6.7). `splitPath` already strips the
+   trailing slash; plaintext covers the other end, where a rename's ` → ` would
+   otherwise be free to move. It resolves the run direction from the first
+   strong character instead, which for a path is always its first letter. */
+.dirText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+/* Separate element on purpose: `unicode-bidi: plaintext` overrides `direction`
+   for the element it sits on, so putting both on `.dirText` would give up the
+   rtl that puts the ellipsis at the front. The outer element chooses which end
+   truncates; the inner one keeps the characters in the order they were typed. */
+.dirBidi {
+  unicode-bidi: plaintext;
+}
+
+.marker {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border-radius: 8px;
+  padding: 0 6px;
 }
 
 /* Conflicted rows only: a badge says something is wrong, this says what to do
@@ -109,4 +168,44 @@
 
 .resolve:hover {
   background: var(--red-dim);
+}
+
+/* "The chips hid everything" — distinct from "no files match this filter",
+   because the way out is different and the user cannot be expected to work out
+   which of two filters emptied the list. */
+.filteredOut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 4px;
+}
+
+/* `EmptyState` claims `height: 100%` for its own centring, which inside a
+   column that is *already* the full body pushes whatever follows it past the
+   bottom edge. Measured live: the button rendered at y=327 in a body ending at
+   y=317 — below the fold, in a panel whose entire content was the message
+   telling the user to press it. The centring happens on the wrapper instead. */
+.filteredOut > :first-child {
+  height: auto;
+  /* Its own 20px of padding is sized for a panel that has nothing else in it.
+     This one has a button under it, in a pane that is routinely ~115px tall. */
+  padding: 8px;
+}
+
+.clearChips {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.clearChips:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }

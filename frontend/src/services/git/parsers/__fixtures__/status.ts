@@ -34,3 +34,51 @@ export const STATUS_DETACHED =
 /** Nothing to report: headers only, no entries, and no upstream configured. */
 export const STATUS_CLEAN =
   '# branch.oid 160b4ea650f406a260024365c24a5776b45b5cdc\x00# branch.head main\x00';
+
+/**
+ * Renames that move a file between directories, and deletions on both sides.
+ *
+ * Captured for the Files panel's PATH column, which has to split a rename into
+ * a name pair and a directory pair. `STATUS_EVERYTHING`'s renames are all at
+ * the repository root, so they cannot tell a correct split from one that puts
+ * the whole `old → new` string through `fileDir()`.
+ *
+ * Three shapes that a single split has to get right:
+ *
+ * - `src/legacy/OldWidget.tsx → src/components/Widget.tsx` — both halves change
+ * - `src/components/Same.tsx → docs/Same.tsx` — only the directory moves
+ * - `RM`, a rename staged and then edited again, which is also the only entry
+ *   here with a change on both sides of the XY pair
+ *
+ * Plus `D.` (staged deletion) and `.D` (deleted in the working tree), which the
+ * Deleted filter chip needs and which no other fixture has.
+ *
+ *     git status --porcelain=v2 -z --branch --untracked-files=all
+ */
+export const STATUS_RENAMES_AND_DELETES =
+  '# branch.oid b97420cbdb9f1636af8e745b352a6b4cc5a1339b\x00# branch.head main\x002 R. N... 100644 100644 100644 d905d9da82c97264ab6f4920e20242e088850ce9 d905d9da82c97264ab6f4920e20242e088850ce9 R100 docs/Same.tsx\x00src/components/Same.tsx\x001 D. N... 100644 000000 000000 61780798228d17af2d34fce4cfbdf35556832472 0000000000000000000000000000000000000000 docs/gone.md\x001 .D N... 100644 100644 000000 4bcfe98e640c8284511312660fb8709b0afa888e 4bcfe98e640c8284511312660fb8709b0afa888e root.txt\x002 RM N... 100644 100644 100644 78981922613b2afb6025042ff6bd878ac1994e85 78981922613b2afb6025042ff6bd878ac1994e85 R100 src/components/Widget.tsx\x00src/legacy/OldWidget.tsx\x00? .gitignore\x00? new.tmp\x00';
+
+/**
+ * The same repository through the *ignored* query, which is a second command
+ * rather than a flag on the first — see `IGNORED_STATUS_ARGS`.
+ *
+ * Note that it re-reports every ordinary entry as well: the caller wants only
+ * the `!` records and has to say so, which is what the service's filter is for.
+ *
+ *     git status --porcelain=v2 -z --ignored --untracked-files=normal
+ */
+export const STATUS_WITH_IGNORED =
+  '2 R. N... 100644 100644 100644 d905d9da82c97264ab6f4920e20242e088850ce9 d905d9da82c97264ab6f4920e20242e088850ce9 R100 docs/Same.tsx\x00src/components/Same.tsx\x001 D. N... 100644 000000 000000 61780798228d17af2d34fce4cfbdf35556832472 0000000000000000000000000000000000000000 docs/gone.md\x001 .D N... 100644 100644 000000 4bcfe98e640c8284511312660fb8709b0afa888e 4bcfe98e640c8284511312660fb8709b0afa888e root.txt\x002 RM N... 100644 100644 100644 78981922613b2afb6025042ff6bd878ac1994e85 78981922613b2afb6025042ff6bd878ac1994e85 R100 src/components/Widget.tsx\x00src/legacy/OldWidget.tsx\x00? .gitignore\x00? new.tmp\x00! debug.log\x00';
+
+/**
+ * A whole directory collapsed to one row, which is the reason the ignored query
+ * runs with `--untracked-files=normal`.
+ *
+ * Captured from this repository, where `--untracked-files=all` turns these six
+ * rows into **18,163**. The trailing slash is git's, and it is what tells the
+ * PATH column it is looking at a directory rather than a file.
+ *
+ *     git status --porcelain=v2 -z --ignored --untracked-files=normal
+ */
+export const STATUS_IGNORED_DIRS =
+  '! .DS_Store\x00! .claude/\x00! build/bin/\x00! frontend/dist/\x00! frontend/node_modules/\x00! node_modules/\x00';

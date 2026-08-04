@@ -1,5 +1,11 @@
+import { StatusBadge } from '@/components/Badges';
 import { useStatus } from '@/queries/git';
 import { FileList } from '@/features/working-tree/FileList';
+import {
+  STATUS_FILTERS,
+  type StatusFilter,
+  type StatusFilterSpec,
+} from '@/features/working-tree/statusFilters';
 import { useWorkspaceStore, type FilesTab } from '@/stores/workspaceStore';
 import { FileTree } from './FileTree';
 import styles from './FilesPane.module.css';
@@ -36,9 +42,57 @@ export function FilesPane() {
           count={changed}
         />
         <Tab tab="tree" active={filesTab} onSelect={setFilesTab} label="Tree" />
+        {/* Hidden on the Tree tab: the tree is read from the filesystem and is
+            not status-driven, so a control that cannot affect what is on screen
+            would be a control that lies. */}
+        {filesTab === 'changes' && <StatusChips />}
       </div>
       {filesTab === 'changes' ? <FileList /> : <FileTree />}
     </>
+  );
+}
+
+/**
+ * The status filter chips, right-aligned in the tabs row.
+ *
+ * They wrap to their own line rather than collapsing to icons when the pane is
+ * narrow — the Files pane can sit at ~300px, and two of the seven ("Staged",
+ * "Unstaged") are *positions* in the XY pair rather than status letters, so
+ * they have no glyph to collapse to. Inventing one would add a vocabulary to a
+ * row whose whole argument is that it borrows the one below it.
+ */
+function StatusChips() {
+  const selected = useWorkspaceStore((state) => state.statusFilters);
+  const toggle = useWorkspaceStore((state) => state.toggleStatusFilter);
+
+  return (
+    <div className={styles.chips}>
+      {STATUS_FILTERS.map((spec) => (
+        <Chip key={spec.id} spec={spec} active={selected.includes(spec.id)} onToggle={toggle} />
+      ))}
+    </div>
+  );
+}
+
+function Chip({
+  spec,
+  active,
+  onToggle,
+}: {
+  readonly spec: StatusFilterSpec;
+  readonly active: boolean;
+  readonly onToggle: (id: StatusFilter) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      title={`${spec.label} — ${spec.hint}`}
+      className={`${styles.chip} ${active ? styles.chipOn : ''}`}
+      onClick={() => onToggle(spec.id)}
+    >
+      {spec.badge === null ? spec.label : <StatusBadge status={spec.badge} />}
+    </button>
   );
 }
 

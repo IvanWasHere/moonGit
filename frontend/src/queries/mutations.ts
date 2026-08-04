@@ -61,9 +61,23 @@ function followSelection(paths: readonly string[], to: 'staged' | 'worktree'): v
   selectFile({ path: selectedFile.path, side: to });
 }
 
-/** After a write, let git tell us the truth rather than assuming it. */
+/**
+ * After a write, let git tell us the truth rather than assuming it.
+ *
+ * Everything under the repository except the ignored-file list, which no
+ * command this app runs can change — staging a file, committing, checking out a
+ * branch and pushing all leave the ignore rules exactly as they were. Sweeping
+ * it up with the rest would re-walk `node_modules` after every stage, which on
+ * a large repository is the most expensive thing in the app run at the highest
+ * frequency. The two callers that *do* change ignore rules invalidate it
+ * themselves: `useWriteIgnoreFile` below, and the Files panel's "Ignore by
+ * Name", which refreshes the repository whole through its own helper.
+ */
 async function refresh(queryClient: QueryClient, repoPath: string): Promise<void> {
-  await queryClient.invalidateQueries({ queryKey: gitKeys.repo(repoPath) });
+  await queryClient.invalidateQueries({
+    queryKey: gitKeys.repo(repoPath),
+    predicate: (query) => query.queryKey[1] !== 'ignored',
+  });
 }
 
 // --- staging ----------------------------------------------------------------
@@ -661,6 +675,9 @@ export function useWriteIgnoreFile(repoPath: string | null) {
     onSettled: async () => {
       if (repoPath === null) return;
       await queryClient.invalidateQueries({ queryKey: [repoPath, 'ignoreText'] });
+      // The one write that genuinely changes which files are ignored, and so
+      // the one that has to ask for the list `refresh` deliberately skips.
+      await queryClient.invalidateQueries({ queryKey: gitKeys.ignored(repoPath) });
       await refresh(queryClient, repoPath);
     },
   });

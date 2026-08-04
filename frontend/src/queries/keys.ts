@@ -15,6 +15,17 @@ export const gitKeys = {
   /** Everything for one repository — used to drop a whole repo's cache. */
   repo: (repoPath: string): QueryKey => [repoPath],
   status: (repoPath: string): QueryKey => [repoPath, 'status'],
+  /**
+   * The ignored files, from a second and much more expensive status call.
+   *
+   * Its own key rather than a parameter on `status`, and **deliberately absent
+   * from `keysToInvalidate`**: an ignore rule changes about once a month, while
+   * the watcher fires on every keystroke in an editor — and re-walking
+   * `node_modules` on each of those would make the panel unusable on any real
+   * repository. Editing `.gitignore` invalidates it explicitly, which is the
+   * same bargain `config` above makes for the same reason.
+   */
+  ignored: (repoPath: string): QueryKey => [repoPath, 'ignored'],
   refs: (repoPath: string): QueryKey => [repoPath, 'refs'],
   currentBranch: (repoPath: string): QueryKey => [repoPath, 'currentBranch'],
   log: (repoPath: string, params: unknown = {}): QueryKey => [repoPath, 'log', params],

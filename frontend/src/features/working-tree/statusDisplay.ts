@@ -1,5 +1,6 @@
 import { isStaged, isUnstaged, type StatusEntry } from '@/services/git';
 import type { FileSide } from '@/stores/workspaceStore';
+import { fileDir, fileName } from '@/utils/format';
 
 /**
  * Porcelain v2 status codes → the badge the Files panel shows.
@@ -22,7 +23,8 @@ export type DisplayStatus =
   | 'renamed'
   | 'copied'
   | 'typechange'
-  | 'conflicted';
+  | 'conflicted'
+  | 'ignored';
 
 const CODES: Record<string, DisplayStatus> = {
   M: 'modified',
@@ -36,7 +38,10 @@ const CODES: Record<string, DisplayStatus> = {
 
 export function displayStatus(entry: StatusEntry, side: FileSide): DisplayStatus {
   if (entry.kind === 'untracked') return 'untracked';
-  if (entry.kind === 'ignored') return 'untracked';
+  // Its own status rather than "untracked", which it is not: an ignored file is
+  // one git has been told to leave alone, and the two are opposite intentions
+  // even though neither is in the index.
+  if (entry.kind === 'ignored') return 'ignored';
   // An unmerged path is a conflict whichever half is being looked at; git's
   // XY pair for it describes *how* it conflicts, not what to do about it.
   if (entry.kind === 'unmerged') return 'conflicted';
@@ -89,6 +94,69 @@ export function displayPath(entry: StatusEntry): string {
     return `${entry.origPath} → ${entry.path}`;
   }
   return entry.path;
+}
+
+/** The two path columns: the filename, and the directory holding it. */
+export interface PathParts {
+  /** FILE — a bare filename, or `old → new` when a rename changed it. */
+  readonly name: string;
+  /** PATH — the directory, or `old → new` when a rename moved it. Empty at the root. */
+  readonly dir: string;
+}
+
+/**
+ * Split an entry across the FILE and PATH columns.
+ *
+ * Before there were two columns, the row ran `fileDir()` over `displayPath()` —
+ * so a rename's "directory" was the whole string `src/legacy/OldWidget.tsx →
+ * src/components/`, with the arrow and both filenames inside it. Two columns
+ * make the right answer expressible: the name pair and the directory pair are
+ * different facts and belong in different cells.
+ *
+ * **A half that did not change is not repeated.** `Same.tsx → Same.tsx` in the
+ * FILE column of a file that only moved directories says nothing, twice; the
+ * move is entirely in the PATH column, and that is where the arrow belongs.
+ *
+ * **No trailing slash**, unlike `fileDir`. The PATH column truncates from the
+ * left, which makes a trailing `/` an ellipsis-side bidi-neutral character that
+ * the browser relocates to the visual left — `src/x` rendering as `x/src`. Quick
+ * open hit this and stripped it at the call site (PLAN.md §9, Phase 6.7); doing
+ * it here means the hazard cannot come back through a third caller.
+ */
+export function splitPath(entry: StatusEntry): PathParts {
+  const from = entry.origPath;
+  if (from === undefined || from === entry.path) {
+    return { name: leafOf(entry.path), dir: dirOf(entry.path) };
+  }
+  return {
+    name: pair(leafOf(from), leafOf(entry.path)),
+    dir: pair(dirOf(from), dirOf(entry.path)),
+  };
+}
+
+/** `old → new`, or just the one value when the rename left this half alone. */
+function pair(from: string, to: string): string {
+  if (from === to) return to;
+  // `.` for the repository root rather than an empty side, which would leave a
+  // dangling ` → src` whose arrow reads as pointing at nothing.
+  return `${from === '' ? '.' : from} → ${to === '' ? '.' : to}`;
+}
+
+/**
+ * The trailing segment, keeping git's trailing slash when there is one.
+ *
+ * The ignored query reports a wholly-ignored directory as one row — `node_
+ * modules/` — and that slash is the only thing distinguishing it from a file.
+ * A plain `split('/')` on it yields an empty last segment, which would render
+ * as a nameless row.
+ */
+function leafOf(path: string): string {
+  return path.endsWith('/') ? `${fileName(path.slice(0, -1))}/` : fileName(path);
+}
+
+/** The directory part, without `fileDir`'s trailing slash — see `splitPath`. */
+function dirOf(path: string): string {
+  return fileDir(path.endsWith('/') ? path.slice(0, -1) : path).replace(/\/$/, '');
 }
 
 /** Sorted by path so the list does not reshuffle between refetches. */

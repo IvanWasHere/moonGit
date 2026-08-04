@@ -9,19 +9,20 @@ import {
 import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { PanelBody } from '@/components/Panel';
-import { useStatus } from '@/queries/git';
+import { useIgnoredFiles, useStatus } from '@/queries/git';
 import { FilterBox } from '@/features/search/FilterBox';
 import { filterBy } from '@/features/search/matchText';
 import { isConflicted, type StatusEntry } from '@/services/git';
 import { useWorkspaceStore, type FileSide } from '@/stores/workspaceStore';
-import { fileDir, fileName } from '@/utils/format';
 import {
   defaultSide,
   displayPath,
   sidesOf,
   sortEntries,
+  splitPath,
   type DisplayStatus,
 } from './statusDisplay';
+import { matchesStatusFilters } from './statusFilters';
 import { fileMenuFor, type FileMenuItem } from './fileMenu';
 import { useFileMenuActions } from './useFileMenuActions';
 import styles from './FileList.module.css';
@@ -41,11 +42,21 @@ import styles from './FileList.module.css';
  * right badge is what is not, and a dot means that side is unchanged. Clicking
  * either badge opens that side's diff; clicking the row takes the unstaged half
  * when there is one, since that is the change still being worked on.
+ *
+ * The other two columns are FILE and PATH. They were one cell until Phase 6.12,
+ * which rendered `Header.tsxsrc/components/` — and, for a rename, ran the
+ * directory split over the whole `old → new` string. `splitPath` is what makes
+ * the right answer expressible; see its comment.
  */
 export function FileList() {
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const filter = useWorkspaceStore((state) => state.panelFilters.files);
+  const statusFilters = useWorkspaceStore((state) => state.statusFilters);
+  const setStatusFilters = useWorkspaceStore((state) => state.setStatusFilters);
   const { data: status, isPending, error } = useStatus(repoPath);
+  // Only fetched while the chip is on — it is the expensive query in the panel.
+  const showIgnored = statusFilters.includes('ignored');
+  const { data: ignored, isFetching: ignoredLoading } = useIgnoredFiles(repoPath, showIgnored);
 
   // The open menu, and where. Held here rather than per row so only one can be
   // open at a time without every row having to know about the others.
@@ -79,11 +90,15 @@ export function FileList() {
     );
   }
 
-  // An ignored entry has nothing on either side; git only reports it when
-  // asked, and it is not a change.
-  const files = sortEntries(status.entries.filter((entry) => entry.kind !== 'ignored'));
+  // The ordinary status never reports ignored entries — `STATUS_ARGS` does not
+  // ask for them — so they arrive from their own query and are merged in here
+  // rather than being filtered out of one list.
+  const files = sortEntries([
+    ...status.entries.filter((entry) => entry.kind !== 'ignored'),
+    ...(showIgnored ? (ignored ?? []) : []),
+  ]);
 
-  if (files.length === 0) {
+  if (files.length === 0 && !ignoredLoading) {
     return (
       <>
         <FilterBox panel="files" placeholder="Filter files" />
@@ -94,9 +109,10 @@ export function FileList() {
     );
   }
 
+  const byStatus = files.filter((entry) => matchesStatusFilters(entry, statusFilters));
   // Matched on the display path, which for a rename is `old → new` — so either
   // half of a rename finds it, and that is the row the user is looking for.
-  const visible = filterBy(files, filter, (entry) => [displayPath(entry)]);
+  const visible = filterBy(byStatus, filter, (entry) => [displayPath(entry)]);
 
   return (
     <>
@@ -107,12 +123,36 @@ export function FileList() {
         total={files.length}
       />
       <PanelBody>
-        <div className={styles.columns}>
-          <div className={styles.statusCell}>Status</div>
-          <div>File</div>
-        </div>
-        {visible.length === 0 && (
+        {/* No column header over no columns of data. It also costs 27px of a
+            pane that is routinely ~115px tall, which is the difference between
+            an empty state's escape hatch being on screen and being below the
+            fold — measured, once it was. */}
+        {visible.length > 0 && (
+          <div className={styles.columns}>
+            <div className={styles.statusCell}>Status</div>
+            <div className={styles.nameCell}>File</div>
+            <div className={styles.pathCell}>Path</div>
+          </div>
+        )}
+        {/* Three empty states, because three different things went wrong and
+            only one of them is fixed by clearing the chips. */}
+        {ignoredLoading && files.length === 0 && (
+          <EmptyState icon={Icons.Sync} message="Listing ignored files…" />
+        )}
+        {visible.length === 0 && byStatus.length > 0 && (
           <EmptyState icon={Icons.File} message="No files match this filter" />
+        )}
+        {byStatus.length === 0 && files.length > 0 && (
+          <div className={styles.filteredOut}>
+            <EmptyState icon={Icons.Filter} message="No files match the selected statuses" />
+            <button
+              type="button"
+              className={styles.clearChips}
+              onClick={() => setStatusFilters([])}
+            >
+              Clear status filters
+            </button>
+          </div>
         )}
         {visible.map((entry) => (
           <FileRow key={entry.path} entry={entry} onContextMenu={openMenu} />
@@ -205,13 +245,16 @@ function FileRow({
   const openMerge = useWorkspaceStore((state) => state.openMerge);
 
   const path = displayPath(entry);
-  const dir = fileDir(path);
+  const { name, dir } = splitPath(entry);
   const sides = sidesOf(entry);
   const isSelected = selected?.path === entry.path;
+  const isIgnored = entry.kind === 'ignored';
 
   return (
     <div
-      className={`${styles.file} ${isSelected ? styles.selected : ''}`}
+      className={`${styles.file} ${isSelected ? styles.selected : ''} ${
+        isIgnored ? styles.ignoredRow : ''
+      }`}
       onClick={() => selectFile({ path: entry.path, side: defaultSide(entry) })}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -223,41 +266,55 @@ function FileRow({
       title={path}
     >
       <div className={styles.statusCell}>
-        <SideBadge
-          status={sides.staged}
-          side="staged"
-          path={entry.path}
-          active={isSelected && selected.side === 'staged'}
-          onSelect={selectFile}
-        />
-        <SideBadge
-          status={sides.worktree}
-          side="worktree"
-          path={entry.path}
-          active={isSelected && selected.side === 'worktree'}
-          onSelect={selectFile}
-        />
+        {/* An ignored entry has no XY pair at all, so the two positional slots
+            would both render as "unchanged" dots — which reads as a file with
+            nothing wrong rather than one git has been told to skip. */}
+        {isIgnored ? (
+          <StatusBadge status="ignored" />
+        ) : (
+          <>
+            <SideBadge
+              status={sides.staged}
+              side="staged"
+              path={entry.path}
+              active={isSelected && selected.side === 'staged'}
+              onSelect={selectFile}
+            />
+            <SideBadge
+              status={sides.worktree}
+              side="worktree"
+              path={entry.path}
+              active={isSelected && selected.side === 'worktree'}
+              onSelect={selectFile}
+            />
+          </>
+        )}
       </div>
-      <div className={styles.path}>
-        <span className={styles.filename}>{fileName(path)}</span>
-        {dir !== '' && <span className={styles.dir}>{dir}</span>}
+      <div className={styles.nameCell}>{name}</div>
+      <div className={styles.pathCell}>
+        {/* `unicode-bidi: plaintext` takes the run direction from the first
+            strong character, so the `→` in a rename cannot be reordered by the
+            `direction: rtl` that truncates this cell from the left. */}
+        <span className={styles.dirText}>
+          <span className={styles.dirBidi}>{dir}</span>
+        </span>
+        {entry.submodule !== undefined && <span className={styles.marker}>submodule</span>}
+        {/* A conflict needs somewhere to go. The badge alone says "this is
+            broken" without saying what to do about it. */}
+        {isConflicted(entry) && (
+          <button
+            type="button"
+            className={styles.resolve}
+            title="Resolve this conflict"
+            onClick={(event) => {
+              event.stopPropagation();
+              openMerge();
+            }}
+          >
+            Resolve
+          </button>
+        )}
       </div>
-      {entry.submodule !== undefined && <span className={styles.dir}>submodule</span>}
-      {/* A conflict needs somewhere to go. The badge alone says "this is
-          broken" without saying what to do about it. */}
-      {isConflicted(entry) && (
-        <button
-          type="button"
-          className={styles.resolve}
-          title="Resolve this conflict"
-          onClick={(event) => {
-            event.stopPropagation();
-            openMerge();
-          }}
-        >
-          Resolve
-        </button>
-      )}
     </div>
   );
 }

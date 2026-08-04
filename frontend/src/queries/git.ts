@@ -23,6 +23,7 @@ import {
   type RepoStatus,
   type Result,
   type Stash,
+  type StatusEntry,
 } from '@/services/git';
 import { readIgnoreFile, type IgnoreFileId } from '@/services/ignoreFiles';
 import { listDir, type FileInfo } from '@/services/wails';
@@ -62,6 +63,32 @@ export function useStatus(repoPath: string | null): UseQueryResult<RepoStatus, G
     queryFn: async ({ signal }) =>
       unwrap(await repositoryService(repoPath ?? '').status({ signal })),
     enabled: enabled(repoPath),
+  });
+}
+
+/**
+ * The ignored files, fetched only while the Ignored filter chip is on.
+ *
+ * The expensive query in the Files panel, and the only one in the app that is
+ * gated on a UI toggle rather than on having a repository. Two consequences the
+ * design accepts rather than engineers away: switching the chip on has a
+ * visible pause on a large repository, and because the chips persist, that
+ * pause happens at launch if it was left on.
+ *
+ * `staleTime` is long and the watcher does not invalidate this key (see
+ * `gitKeys.ignored`), so toggling the chip off and back on inside the window is
+ * free. Editing an ignore file invalidates it explicitly.
+ */
+export function useIgnoredFiles(
+  repoPath: string | null,
+  enabledWhen: boolean,
+): UseQueryResult<StatusEntry[], GitQueryError> {
+  return useQuery({
+    queryKey: gitKeys.ignored(repoPath ?? ''),
+    queryFn: async ({ signal }) =>
+      unwrap(await repositoryService(repoPath ?? '').ignored({ signal })),
+    enabled: enabled(repoPath) && enabledWhen,
+    staleTime: 5 * 60_000,
   });
 }
 

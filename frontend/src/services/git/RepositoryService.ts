@@ -11,7 +11,13 @@
 import { mapParsed } from './boundary';
 import type { GitError } from './errors';
 import { getGitRunner, type ExecOptions, type GitRunner } from './GitRunner';
-import { parseStatus, STATUS_ARGS, type RepoStatus } from './parsers';
+import {
+  IGNORED_STATUS_ARGS,
+  parseStatus,
+  STATUS_ARGS,
+  type RepoStatus,
+  type StatusEntry,
+} from './parsers';
 import { ok, type Result } from './result';
 
 /** Options every read shares. Cancellation matters once a repo switch can outrun a query. */
@@ -37,6 +43,28 @@ export class RepositoryService {
       args: STATUS_ARGS,
       repoPath: this.runner.repoPath,
     });
+  }
+
+  /**
+   * The ignored files and directories, and nothing else.
+   *
+   * A separate command from `status()` because it is a separate cost: the
+   * ordinary status runs on every watcher tick, and walking the ignored tree on
+   * a repository with a `node_modules` costs more than everything else in the
+   * panel put together. So this one is asked for only while the Ignored chip is
+   * on (PLAN.md §9, Phase 6.12).
+   *
+   * `--ignored` *adds* the `!` records to a normal status rather than replacing
+   * it, so the selection here is not a convenience — the caller would otherwise
+   * get a second, differently-flagged copy of every file it already has.
+   */
+  async ignored(options: ReadOptions = {}): Promise<Result<StatusEntry[], GitError>> {
+    const result = await this.runner.exec(IGNORED_STATUS_ARGS, toExecOptions(options));
+    return mapParsed(
+      result,
+      (stdout) => parseStatus(stdout).entries.filter((entry) => entry.kind === 'ignored'),
+      { args: IGNORED_STATUS_ARGS, repoPath: this.runner.repoPath },
+    );
   }
 
   /**

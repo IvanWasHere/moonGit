@@ -4,11 +4,16 @@
 
 .tabs {
   display: flex;
+  align-items: center;
   gap: 2px;
   padding: 4px 8px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  /* The chip group wraps to its own line when the pane is too narrow for tabs
+     and chips side by side, rather than being clipped or scrolled away. */
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 
 .tab {
@@ -42,4 +47,45 @@
   color: var(--text-secondary);
   border-radius: 8px;
   padding: 0 6px;
+}
+
+/* Status filter chips. `margin-left: auto` right-aligns the group against the
+   tabs; it is also what makes the group wrap as a unit rather than one chip at
+   a time. */
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* Off by default, and it has to *look* off: an unselected chip is not a
+   disabled control, so it keeps its glyph's colour and loses only the surface
+   behind it. Anything dimmer would read as "unavailable" over a row of
+   perfectly available filters. */
+.chip {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.55;
+  transition: all 0.15s;
+}
+
+.chip:hover {
+  opacity: 1;
+  background: var(--bg-hover);
+}
+
+.chipOn {
+  opacity: 1;
+  background: var(--bg-input);
+  border-color: var(--border-light);
+  color: var(--text-primary);
 }
