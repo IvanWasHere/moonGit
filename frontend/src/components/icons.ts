@@ -45,6 +45,7 @@ import {
   ScrollText,
   Search,
   SquarePen,
+  SquareTerminal,
   Star,
   Tag,
   Trash2,
@@ -100,6 +101,8 @@ export const Icons = {
   Stash: Archive,
   /** Rebase — commits lifted off one base and replayed onto another. */
   Rebase: ArrowDownUp,
+  /** The terminal drawer (Phase 6.9). Not in the mockup, which has no shell. */
+  Terminal: SquareTerminal,
 
   // --- diff viewer (no mockup equivalent; the mockup had one view) ---
   /** Unified view — one column, git's own patch order. */ DiffInline: Rows3,

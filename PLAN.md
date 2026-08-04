@@ -423,7 +423,7 @@ Nothing below exists in the mockup — each needs UI design as well as implement
 6. ~~**Search**: commits / files / branches / tags / messages / authors~~ ✅ (below)
 7. ~~**File explorer**: tree, quick open, reveal in Finder~~ ✅ (below)
 8. ~~**Settings**: appearance, git path, SSH, editor, diff/merge tools, keybindings~~ ✅ (below)
-9. **Terminal**: xterm.js + `creack/pty` in Go, repo-aware cwd
+9. ~~**Terminal**: xterm.js + `creack/pty` in Go, repo-aware cwd~~ ✅ (below)
 10. **Repository settings**: ignore rules, git config, hooks, LFS, submodules
 
 Each ships behind the same skeleton: `Loading | Success | Error | Retry`.
@@ -922,6 +922,37 @@ Nothing has a Save button. A preferences panel with pending state has to answer 
 
 **Not built**: keybindings. The app has exactly three shortcuts (⌘P, ⌘,, ⌘Enter), and an editor for rebinding three things is a settings page for nothing. It belongs after there are bindings worth rebinding.
 
+### ✅ Phase 6.9 — the terminal
+
+Item 9: `internal/ptyapi` (creack/pty) under `features/terminal` (xterm.js). `shellapi.OpenTerminal` already launched Terminal.app at the repository, so this is not new *capability* — it is about not leaving the app to use it.
+
+**A drawer, not a modal — the one presentation departure from Stash, Merge, Rebase and Settings.** Those are all sheets over the workspace, and that is right for them: each is a task you finish and dismiss. A terminal is not. `git rebase --continue` is run *while* reading the file list, and a sheet would cover the thing the command is about. It sits in the flex column after the view, so it takes height from the panels rather than floating over them, and the divider is the same `Resizer` every pane uses.
+
+**ptyapi is gitexec's sibling, with one guarantee inverted.** gitexec sets `GIT_TERMINAL_PROMPT=0` so a credential prompt fails fast rather than hanging a process with no terminal attached. Here there *is* a terminal, so a prompt is a prompt — and being able to answer one is much of the reason to embed a shell.
+
+| Decision | Why |
+|---|---|
+| **Base64 both directions** | A pty carries bytes. A read lands mid-rune, and plenty of what runs in a shell emits binary outright; `encoding/json` replaces every invalid sequence with U+FFFD silently. Exactly the trap `RunBase64` exists for. Input is encoded too — not because it must be, but because a second encoding for the other direction would be a second thing to get wrong, and arrow keys and control chords are escape sequences rather than text |
+| **Login shell (`-l`), and `$SHELL` before any default** | What Terminal.app does. Skip it and the shell never reads `.zprofile`, so `PATH` is missing everything `path_helper` and the user's profile add — very often including the git and node the rest of their tooling expects |
+| **Output batched on an 8 ms tick, flushed early at 128 KB** | A shell outruns the bridge easily (`yes`, a build, a large `git log`). Per-read events would drown the frontend; batching bounds the rate to ~125/s however loud the process is. The reader is a separate goroutine feeding a bounded channel, so a process louder than the bridge blocks on the pty — backpressure through the terminal, rather than dropped output |
+| **Closing the master, not signalling the shell** | Closing the pty master makes the kernel send SIGHUP to the whole foreground process group — the shell *and* whatever it is running. Signalling the shell alone would orphan a running build with a half-dead terminal. A 2 s grace then a hard kill covers a shell that ignores the hangup |
+
+**`OnShutdown` had to learn about it, and this is the part that would have been a real bug.** A terminal session is a child *process*, not a subscription: closing the window does not end it. Verified by quitting the app with six sessions open (the dev-reload leak below) and confirming every `zsh` was gone.
+
+**Two ordering bugs, one of them only findable by using it.** Typing `git status -sb` into the running app produced `git sattus  - i gb slotg` in the shell — the characters genuinely reordered in flight, because every keystroke was its own promise across the bridge with no ordering between them. `inputQueue.ts` now keeps one write in flight and accumulates the rest, which also turns a twenty-key burst into one call. `term.onResize` had the same hazard for the same reason — a drag fires on every mouse move, and out-of-order arrivals would leave the pty at a size from the middle of the drag — so those are chained too.
+
+**Resize is answered twice, deliberately.** A `ResizeObserver` on the host is the general answer and covers the window and the panes above rearranging. But it only delivers during the rendering lifecycle, so anything that starves the page of frames starves the terminal of its size — which is not hypothetical: the browser-automation tab used for verification produced no animation frames at all, and the drawer could be dragged with the grid never refitting while `tput lines` kept reporting the old value. The drag has a cause that can be observed directly, so `terminalH` drives a refit as well. One effect, and the path no longer depends on frame delivery.
+
+**xterm cannot read CSS variables** — it paints to a canvas and wants 20 resolved colours up front. So the theme is pushed into it on change, the same lesson as Shiki's baked-in colours in §9.1, and 20 tokens joined `tokens.css`: the 16 ANSI slots plus background, foreground, cursor and selection, in both themes. The ANSI palette is not ours to invent — `git status` picks "red" by number — so it is GitHub's, matching the Shiki themes already in use. In light, the *bright* variants are **darker** than their base counterparts, which is what "bright" has to mean on white if it is to mean anything; bright yellow on white is invisible, and shells use it for warnings.
+
+**Lazy-loaded**, as §10 asks: xterm and the fit addon are a 333 KB chunk that only a session which opens the drawer pays for.
+
+**Verified live** against `testGitHere/test-repo1`: a real zsh in the repository, coloured `git status`/`git log` output, theme switched under a running session with no restart, `exit` reporting `[session ended]` with a New session button, and `tput lines`/`tput cols` matching the grid after a drag.
+
+**A leak worth naming, and its limit.** A page *reload* never runs an effect cleanup, so `wails dev`'s reloads left orphaned shells — six of them by the end of a verification session, against a cap of 8. There is now a `pagehide` handler, and it is best-effort by construction: it posts an IPC message into a page that is being torn down, which the production WKWebView delivers synchronously but the dev websocket may drop. A packaged app never reloads, and `OnShutdown` is the real backstop.
+
+**Not built**: multiple sessions per repository (tabs or a split), and a shell picker in Settings. The Go side takes both — `Open` is keyed by a caller-chosen session id and `OpenRequest.Shell` is honoured — but the UI is one drawer with one shell, which is what "run a git command without leaving the app" needs. Closing the drawer ends the session; the tooltip says so rather than letting a long-running command disappear quietly.
+
 
 ---
 
@@ -933,7 +964,7 @@ Targets are 500k files / 1M commits. Concretely:
 - **Status at 500k files**: enable `core.fsmonitor` + `core.untrackedCache` on open, and don't call `--untracked-files=all` on huge repos — degrade to `normal` above a file-count threshold
 - **Streaming**: everything large goes through `RunStream`, parsed incrementally, never a single giant string
 - **Rerenders**: `React.memo` + granular Zustand selectors; assert render counts in tests for the big lists
-- **Bundle**: lazy-load Monaco and xterm.js on first use
+- **Bundle**: lazy-load Monaco on first use — ~~xterm.js~~ ✅ already is, as a 333 KB chunk behind the terminal drawer (§9's Phase 6.9 entry)
 
 ---
 

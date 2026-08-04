@@ -146,6 +146,45 @@ export interface Secret {
   value?: string;
 }
 
+// --- ptyapi --------------------------------------------------------------
+
+export interface PtyOpenRequest {
+  /** Where the shell starts — the open repository. */
+  cwd: string;
+  /** A path to a shell binary, never a command line. Empty means the user's own. */
+  shell?: string;
+  cols?: number;
+  rows?: number;
+  env?: string[];
+}
+
+export interface PtySessionInfo {
+  sessionId: string;
+  shell: string;
+  cwd: string;
+  pid: number;
+}
+
+/**
+ * `data` is base64, not text.
+ *
+ * A pty carries bytes: a read can land mid-rune, and plenty of what runs in a
+ * shell emits binary outright. JSON would replace every invalid sequence with
+ * U+FFFD silently — the same reason `runGitBase64` exists.
+ */
+export interface PtyDataEvent {
+  sessionId: string;
+  seq: number;
+  data: string;
+}
+
+export interface PtyExitEvent {
+  sessionId: string;
+  exitCode: number;
+  /** A spawn or wait failure, as opposed to an exit status. */
+  message?: string;
+}
+
 // --- app -----------------------------------------------------------------
 
 export interface Environment {

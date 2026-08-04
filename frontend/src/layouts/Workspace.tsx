@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
@@ -14,6 +14,7 @@ import { RebaseBanner } from '@/features/rebase/RebaseBanner';
 import { RebaseWizard } from '@/features/rebase/RebaseWizard';
 import { StashModal } from '@/features/stash/StashModal';
 import { TagPrompt } from '@/features/tags/TagPrompt';
+import { TerminalDrawer } from '@/features/terminal/TerminalDrawer';
 import { useRepository } from '@/queries/repositories';
 import { useRepoWatcher } from '@/queries/useRepoWatcher';
 import { useLayoutPersistence } from '@/stores/layoutPersistence';
@@ -36,6 +37,10 @@ export function Workspace({
   readonly view: 'main' | 'review';
   readonly children: ReactNode;
 }) {
+  // The terminal drawer's resizer measures against the whole shell, since the
+  // drawer's height is a share of the window rather than of a pane.
+  const appRef = useRef<HTMLDivElement>(null);
+
   const { repoId: repoIdParam } = useParams();
   const repoId = repoIdParam === undefined ? null : Number.parseInt(repoIdParam, 10);
   const valid = repoId !== null && !Number.isNaN(repoId);
@@ -59,6 +64,8 @@ export function Workspace({
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen);
   const openSettings = useWorkspaceStore((state) => state.openSettings);
   const closeSettings = useWorkspaceStore((state) => state.closeSettings);
+  const terminalOpen = useWorkspaceStore((state) => state.terminalOpen);
+  const toggleTerminal = useWorkspaceStore((state) => state.toggleTerminal);
 
   useEffect(() => {
     if (repository === null || repository === undefined) return;
@@ -66,12 +73,16 @@ export function Workspace({
   }, [repository, openRepo]);
 
   /*
-   * ⌘P opens quick open, ⌘, opens settings — both the platform conventions.
+   * ⌘P opens quick open, ⌘, opens settings, ⌃` toggles the terminal — all
+   * three the platform conventions.
    *
    * On `window` rather than a focused element, because the whole point is to
    * reach them from wherever the user is, including a filter box or the commit
    * message. `preventDefault` because the browser binds Print to the same
    * chord as ⌘P, and firing both puts a print dialog over the app.
+   *
+   * The terminal is ⌃`, not ⌘`: macOS gives ⌘` to "cycle through windows" at
+   * the system level, so binding it would fight the OS and lose.
    */
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -84,10 +95,14 @@ export function Workspace({
         event.preventDefault();
         openSettings();
       }
+      if (event.key === '`' && event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        toggleTerminal();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [openQuickOpen, openSettings]);
+  }, [openQuickOpen, openSettings, toggleTerminal]);
 
   useLayoutPersistence();
   useRepoWatcher(repoPath);
@@ -100,7 +115,7 @@ export function Workspace({
   }
 
   return (
-    <div className={styles.app}>
+    <div className={styles.app} ref={appRef}>
       <TopMenu onAction={onMenuAction} />
       <MenuBar
         view={view}
@@ -114,6 +129,9 @@ export function Workspace({
       ) : (
         children
       )}
+      {/* Inside the flex column and after the view, so it takes height from
+          the panels above rather than floating over them. */}
+      {terminalOpen && <TerminalDrawer containerRef={appRef} />}
       {mergeOpen && <MergeModal onClose={closeMerge} />}
       {mergeWizardOpen && <MergeWizard onClose={closeMergeWizard} />}
       {stashOpen && <StashModal onClose={closeStash} />}

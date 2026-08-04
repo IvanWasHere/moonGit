@@ -223,6 +223,49 @@ export namespace main {
 
 }
 
+export namespace ptyapi {
+	
+	export class OpenRequest {
+	    cwd: string;
+	    shell?: string;
+	    cols?: number;
+	    rows?: number;
+	    env?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new OpenRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cwd = source["cwd"];
+	        this.shell = source["shell"];
+	        this.cols = source["cols"];
+	        this.rows = source["rows"];
+	        this.env = source["env"];
+	    }
+	}
+	export class SessionInfo {
+	    sessionId: string;
+	    shell: string;
+	    cwd: string;
+	    pid: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.shell = source["shell"];
+	        this.cwd = source["cwd"];
+	        this.pid = source["pid"];
+	    }
+	}
+
+}
+
 export namespace store {
 	
 	export class DBInfo {

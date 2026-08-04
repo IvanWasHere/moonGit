@@ -86,6 +86,41 @@
   --sheen: rgba(255, 255, 255, 0.02);
   --red-strong: rgba(248, 81, 73, 0.2);
 
+  /*
+   * --- terminal (Phase 6.9) ---
+   *
+   * The 16 ANSI colours are not a palette we get to invent: `git status` picks
+   * "red" and "green" by number, and so does every tool run in the drawer. They
+   * are tokens rather than an object in TypeScript for the same reason
+   * everything else here is — the light theme needs somewhere to put a
+   * different answer, and §7 says component code never holds a literal hex.
+   *
+   * The values are GitHub's own terminal palette, matching the Shiki themes
+   * the diff viewer already uses. Two palettes that nearly agree look worse
+   * than one that does.
+   */
+  --term-bg: #0d1117;
+  --term-fg: #e2e8f0;
+  --term-cursor: #e8a838;
+  --term-selection: rgba(88, 166, 255, 0.3);
+
+  --term-black: #484f58;
+  --term-red: #ff7b72;
+  --term-green: #3fb950;
+  --term-yellow: #d29922;
+  --term-blue: #58a6ff;
+  --term-magenta: #bc8cff;
+  --term-cyan: #39c5cf;
+  --term-white: #b1bac4;
+  --term-bright-black: #6e7681;
+  --term-bright-red: #ffa198;
+  --term-bright-green: #56d364;
+  --term-bright-yellow: #e3b341;
+  --term-bright-blue: #79c0ff;
+  --term-bright-magenta: #d2a8ff;
+  --term-bright-cyan: #56d4dd;
+  --term-bright-white: #f0f6fc;
+
   /* --- shape & type --- */
   --radius: 6px;
   --font-ui: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -210,4 +245,38 @@
   /* The menubar's sheen is a highlight in dark and has to become a shade. */
   --sheen: rgba(31, 35, 40, 0.03);
   --red-strong: rgba(207, 34, 46, 0.18);
+
+  /*
+   * --- terminal ---
+   *
+   * GitHub's light ANSI palette, and the one place where "the same hue,
+   * darkened" is not optional: bright yellow on white is invisible, and shells
+   * use it for warnings. The bright variants are *darker* than their base
+   * counterparts here rather than lighter, which is what "bright" has to mean
+   * on a light background if it is to mean anything.
+   *
+   * The cursor keeps `--accent`'s light value for the same contrast reason the
+   * accent itself was changed — the mockup's gold on white is 1.9:1.
+   */
+  --term-bg: #ffffff;
+  --term-fg: #1f2328;
+  --term-cursor: #9a6700;
+  --term-selection: rgba(9, 105, 218, 0.25);
+
+  --term-black: #24292f;
+  --term-red: #cf222e;
+  --term-green: #116329;
+  --term-yellow: #4d2d00;
+  --term-blue: #0969da;
+  --term-magenta: #8250df;
+  --term-cyan: #1b7c83;
+  --term-white: #6e7781;
+  --term-bright-black: #57606a;
+  --term-bright-red: #a40e26;
+  --term-bright-green: #1a7f37;
+  --term-bright-yellow: #633c01;
+  --term-bright-blue: #218bff;
+  --term-bright-magenta: #a475f9;
+  --term-bright-cyan: #3192aa;
+  --term-bright-white: #8c959f;
 }

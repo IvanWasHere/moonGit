@@ -22,6 +22,10 @@ describe('menuConfig', () => {
    * Repository — so they sit at the end of the first menu, next to the
    * repository's own settings and where ⌘, already points. Distinct from
    * "Repository Settings" above it, which is git config and still unbuilt.
+   *
+   * **`Terminal` is the second** (Phase 6.9). The mockup has no shell at all,
+   * so there is no item it could drift from; it is in the Repository menu
+   * because the repository is the shell's working directory.
    */
   it.each([
     [
@@ -34,6 +38,7 @@ describe('menuConfig', () => {
         'Push',
         'Fetch',
         'Synchronize',
+        'Terminal',
         'Repository Settings',
         'Preferences…',
         'Exit',

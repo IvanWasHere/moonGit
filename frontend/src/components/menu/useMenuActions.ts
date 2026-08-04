@@ -30,6 +30,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const openMergeWizard = useWorkspaceStore((state) => state.openMergeWizard);
   const openStash = useWorkspaceStore((state) => state.openStash);
   const openRebaseWizard = useWorkspaceStore((state) => state.openRebaseWizard);
+  const toggleTerminal = useWorkspaceStore((state) => state.toggleTerminal);
 
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
@@ -102,6 +103,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
     // Synchronize is fetch-then-pull; the pull is what reconciles.
     'repository.synchronize': () =>
       fetch.mutate({ prune: true }, { onSuccess: doPull, onError: reportError }),
+    'repository.terminal': toggleTerminal,
     'repository.settings': soon('Repository settings'),
     'repository.preferences': openSettings,
     'repository.exit': () => showToast('Close the window to exit', 'info'),

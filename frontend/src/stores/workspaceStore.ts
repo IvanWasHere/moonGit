@@ -52,6 +52,18 @@ const REVIEW_DEFAULTS: ReviewLayout = {
   bottomRightW: 50,
 };
 
+/**
+ * Terminal drawer height, and the range a drag may put it in.
+ *
+ * Not from the mockup — it has no terminal. A third of the window is enough
+ * for a `git log` page without burying the panels the drawer is meant to be
+ * used *alongside*. The minimum keeps a prompt and its output visible, since a
+ * drawer dragged to nothing should be closed rather than left as a sliver.
+ */
+const TERMINAL_DEFAULT_H = 32;
+export const TERMINAL_MIN_H = 12;
+export const TERMINAL_MAX_H = 80;
+
 /** Which list a selected file came from — the two have separate diffs. */
 export type FileSide = 'staged' | 'worktree';
 
@@ -163,6 +175,17 @@ interface WorkspaceState {
    * row to the database every time somebody opened the dialog.
    */
   readonly settingsOpen: boolean;
+  /**
+   * The terminal drawer across the bottom of the workspace.
+   *
+   * A drawer rather than a modal like Stash or Merge, which is the point of
+   * embedding a shell at all: `git rebase --continue` is run *while* reading
+   * the file list, and a sheet over the workspace would hide the thing the
+   * command is about. It also outlives a repository switch — see `openRepo`.
+   */
+  readonly terminalOpen: boolean;
+  /** Drawer height, as a percentage of the window. */
+  readonly terminalH: number;
   readonly main: MainLayout;
   readonly review: ReviewLayout;
 
@@ -197,6 +220,10 @@ interface WorkspaceState {
   closeQuickOpen: () => void;
   openSettings: () => void;
   closeSettings: () => void;
+  openTerminal: () => void;
+  closeTerminal: () => void;
+  toggleTerminal: () => void;
+  setTerminalH: (percent: number) => void;
   setMain: (patch: Partial<MainLayout>) => void;
   setReview: (patch: Partial<ReviewLayout>) => void;
   resetLayout: () => void;
@@ -226,6 +253,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   expandedDirs: ROOT_EXPANDED,
   quickOpen: false,
   settingsOpen: false,
+  terminalOpen: false,
+  terminalH: TERMINAL_DEFAULT_H,
   main: MAIN_DEFAULTS,
   review: REVIEW_DEFAULTS,
 
@@ -261,6 +290,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       // happened to share a name in the repository being opened.
       expandedDirs: ROOT_EXPANDED,
       quickOpen: false,
+      // `terminalOpen` is deliberately absent. The drawer is a workspace
+      // affordance, not a selection: somebody who works with a terminal open
+      // wants it open in the next repository too. The *session* is still
+      // scoped — TerminalDrawer is keyed by repoPath, so the shell restarts in
+      // the new working directory.
     });
   },
 
@@ -317,6 +351,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   closeQuickOpen: () => set({ quickOpen: false }),
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
+
+  openTerminal: () => set({ terminalOpen: true }),
+  closeTerminal: () => set({ terminalOpen: false }),
+  toggleTerminal: () => set((state) => ({ terminalOpen: !state.terminalOpen })),
+  // Clamped, and hostile to nonsense: this is fed by a drag *and* by a row of
+  // unvalidated JSON out of SQLite, and a NaN would survive Math.min/max to
+  // become `height: NaNpx` on a drawer nobody could then resize back.
+  setTerminalH: (percent) =>
+    set({
+      terminalH: Number.isFinite(percent)
+        ? Math.max(TERMINAL_MIN_H, Math.min(TERMINAL_MAX_H, percent))
+        : TERMINAL_DEFAULT_H,
+    }),
 
   setMain: (patch) => set((state) => ({ main: { ...state.main, ...patch } })),
   setReview: (patch) => set((state) => ({ review: { ...state.review, ...patch } })),

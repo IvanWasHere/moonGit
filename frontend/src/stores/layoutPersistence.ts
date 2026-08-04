@@ -25,6 +25,15 @@ const MAIN_KEY = 'workspace.main';
 const REVIEW_KEY = 'workspace.review';
 /** A preference rather than a layout: it is a choice, not a pane size. */
 const DIFF_VIEW_KEY = 'diff.viewMode';
+/**
+ * The terminal drawer's height — and only its height.
+ *
+ * Whether it was *open* is deliberately not restored: opening the drawer
+ * starts a real shell process, and a launch that spawns one because of where a
+ * divider was left three sessions ago is doing something the user did not ask
+ * for on this launch.
+ */
+const TERMINAL_KEY = 'workspace.terminalHeight';
 const SAVE_DEBOUNCE_MS = 400;
 
 export function useLayoutPersistence(): void {
@@ -37,16 +46,20 @@ export function useLayoutPersistence(): void {
 
     void (async () => {
       try {
-        const { main, review, diffView, setMain, setReview, setDiffView } =
+        const { main, review, diffView, terminalH, setMain, setReview, setDiffView, setTerminalH } =
           useWorkspaceStore.getState();
-        const [savedMain, savedReview, savedDiffView] = await Promise.all([
+        const [savedMain, savedReview, savedDiffView, savedTerminalH] = await Promise.all([
           getLayout<MainLayout>(MAIN_KEY, main),
           getLayout<ReviewLayout>(REVIEW_KEY, review),
           getPreference<DiffViewMode>(DIFF_VIEW_KEY, diffView),
+          getLayout<number>(TERMINAL_KEY, terminalH),
         ]);
         if (cancelled) return;
         setMain(savedMain);
         setReview(savedReview);
+        // The setter clamps, so a value written by a build with a different
+        // range cannot restore a drawer taller than the window.
+        setTerminalH(savedTerminalH);
         // A stored value from an older build could be anything; only the two
         // modes this build knows are worth restoring.
         setDiffView(savedDiffView === 'split' ? 'split' : 'inline');
@@ -71,7 +84,8 @@ export function useLayoutPersistence(): void {
       if (
         state.main === previous.main &&
         state.review === previous.review &&
-        state.diffView === previous.diffView
+        state.diffView === previous.diffView &&
+        state.terminalH === previous.terminalH
       ) {
         return;
       }
@@ -82,6 +96,7 @@ export function useLayoutPersistence(): void {
           setLayout(MAIN_KEY, state.main),
           setLayout(REVIEW_KEY, state.review),
           setPreference(DIFF_VIEW_KEY, state.diffView),
+          setLayout(TERMINAL_KEY, state.terminalH),
         ]).catch((cause: unknown) => console.warn('could not save layout', cause));
       }, SAVE_DEBOUNCE_MS);
     });

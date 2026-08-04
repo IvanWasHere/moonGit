@@ -12,5 +12,6 @@ export * from './fs';
 export * from './watch';
 export * from './db';
 export * from './ui';
+export * from './pty';
 export * from './secrets';
 export * from './events';

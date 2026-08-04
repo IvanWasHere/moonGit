@@ -9,6 +9,7 @@ import (
 	"moongit/internal/dialogs"
 	"moongit/internal/fsapi"
 	"moongit/internal/gitexec"
+	"moongit/internal/ptyapi"
 	"moongit/internal/shellapi"
 	"moongit/internal/store"
 	"moongit/internal/watcher"
@@ -34,6 +35,7 @@ func main() {
 	shellSvc := shellapi.New()
 	storeSvc := store.New()
 	credsSvc := creds.New()
+	ptySvc := ptyapi.New()
 
 	err := wails.Run(&options.App{
 		Title:     "moonGit",
@@ -53,6 +55,7 @@ func main() {
 			watchSvc.Startup(ctx)
 			dialogSvc.Startup(ctx)
 			shellSvc.Startup(ctx)
+			ptySvc.Startup(ctx)
 			// A failed store is not fatal: the app works without persisted
 			// preferences, and refusing to launch over a settings file would be
 			// a bad trade. The frontend sees it via Store.Info().open == false.
@@ -61,6 +64,11 @@ func main() {
 			}
 		},
 		OnShutdown: func(_ context.Context) {
+			// Before the store, and unlike everything else here: a terminal
+			// session is a child *process*, and closing the window does not
+			// end it. Without this a quit leaves an orphaned shell — and
+			// whatever it was running — alive with no way back to it.
+			ptySvc.Shutdown()
 			_ = storeSvc.Close()
 		},
 
@@ -85,6 +93,7 @@ func main() {
 			shellSvc,
 			storeSvc,
 			credsSvc,
+			ptySvc,
 		},
 	})
 

@@ -32,6 +32,10 @@ export const MENUS = [
       { id: 'repository.push', label: 'Push' },
       { id: 'repository.fetch', label: 'Fetch' },
       { id: 'repository.synchronize', label: 'Synchronize' },
+      /* Not in the mockup either (Phase 6.9). It sits with the repository
+         because that is what its working directory is — a terminal opened
+         from here starts in the repository, not in $HOME. */
+      { id: 'repository.terminal', label: 'Terminal', separatorBefore: true },
       { id: 'repository.settings', label: 'Repository Settings', separatorBefore: true },
       /* Application preferences, as distinct from the repository's own config
          above. There is no app menu to put them in — the mockup's bar starts

@@ -1,0 +1,80 @@
+/*
+ * The terminal drawer. Nothing in the mockup corresponds to it — it is the one
+ * Phase 6 feature with no visual reference — so it borrows the panel chrome
+ * every other pane uses and adds only what a canvas needs.
+ */
+
+.drawer {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--term-bg);
+  border-top: 1px solid var(--border);
+  /* Below the resizer's own minimum, so a drag that undershoots still leaves
+     the header reachable rather than a sliver with no way back. */
+  min-height: 80px;
+}
+
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/*
+ * The element xterm mounts into.
+ *
+ * It measures this box and lays its grid out from it, so the padding is here
+ * rather than on `.xterm` itself — padding applied inside would be counted as
+ * usable columns and the right-hand characters would sit under the edge.
+ */
+.host {
+  flex: 1;
+  overflow: hidden;
+  padding: 6px 4px 6px 8px;
+  min-height: 0;
+}
+
+.loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* A session that has ended, or one that never started. */
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.error {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+/*
+ * xterm draws its own scrollbar via the viewport element, which defaults to
+ * the platform's. The rest of the app styles its scrollbars in global.css, and
+ * one panel with a stock macOS bar in it reads as a rendering bug.
+ */
+.host :global(.xterm-viewport)::-webkit-scrollbar {
+  width: 10px;
+}
+
+.host :global(.xterm-viewport)::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 5px;
+}
+
+.host :global(.xterm-viewport)::-webkit-scrollbar-track {
+  background: transparent;
+}

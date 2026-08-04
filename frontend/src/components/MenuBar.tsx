@@ -62,6 +62,7 @@ export function MenuBar({
   const toggleCommit = useWorkspaceStore((state) => state.toggleCommit);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
   const openMergeWizard = useWorkspaceStore((state) => state.openMergeWizard);
+  const toggleTerminal = useWorkspaceStore((state) => state.toggleTerminal);
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
 
@@ -305,6 +306,16 @@ export function MenuBar({
       label: 'Blame',
       icon: Icons.Blame,
       run: () => showToast('Blame view arrives in Phase 6', 'info'),
+    },
+    {
+      kind: 'button',
+      label: 'Terminal',
+      icon: Icons.Terminal,
+      // Deliberately not given the `active` treatment, even though it is a
+      // toggle. PLAN.md §14 records that a highlighted button in this bar
+      // means "active view" and nothing else, and the drawer sliding into the
+      // bottom of the workspace is unambiguous feedback on its own.
+      run: toggleTerminal,
     },
   ];
 
