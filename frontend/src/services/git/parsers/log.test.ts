@@ -209,6 +209,31 @@ describe('createLogParser — streaming', () => {
     parser.push(LOG_HISTORY.slice(0, nthNulIndex(LOG_HISTORY, 3) + 1));
     expect(parser.pending).toBe(3);
   });
+
+  /**
+   * Found by the Phase 7 benchmark (PLAN.md §10), not by reasoning about it.
+   *
+   * `fields.push(...parts)` passes one argument per field, so a large enough
+   * input overflowed the call stack — a `RangeError`, not a slow parse — at
+   * roughly 6,500 commits. Go's 64 KB chunks kept `execStream` far below that,
+   * so only `parseLog`, which hands over the whole output in a single call,
+   * could reach it. Paging is about to make multi-thousand-commit parses
+   * ordinary, so the ceiling is asserted here rather than left to be
+   * rediscovered.
+   *
+   * 20,000 is chosen to be comfortably past the limit rather than near it; the
+   * exact threshold is an engine detail and not worth pinning a test to.
+   */
+  it('parses a batch far larger than the argument limit in one call', () => {
+    const one = LOG_SINGLE;
+    const many = one.repeat(20_000);
+
+    const parsed = parseLog(many);
+
+    expect(parsed).toHaveLength(20_000);
+    expect(parsed[0]?.subject).toBe('multi line subject');
+    expect(parsed.at(-1)?.subject).toBe('multi line subject');
+  });
 });
 
 describe('corrupt input', () => {

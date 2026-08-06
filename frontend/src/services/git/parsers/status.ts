@@ -29,13 +29,20 @@
  * demand, and listing them on a repository with a large `node_modules` costs
  * more than everything else in this command put together.
  */
-export const STATUS_ARGS: readonly string[] = [
-  'status',
-  '--porcelain=v2',
-  '-z',
-  '--branch',
-  '--untracked-files=all',
-];
+export const STATUS_ARGS: readonly string[] = statusArgs('all');
+
+/**
+ * The same query with the untracked mode chosen at call time.
+ *
+ * `all` is what the panel wants and `normal` is what a 500k-file repository can
+ * afford — measured at 2047ms against 132ms with fsmonitor and an untracked
+ * cache in place (PLAN.md §10). Which one runs is decided per repository by
+ * `services/git/tuning.ts`, from how long the last status actually took; this
+ * function only knows how to spell both.
+ */
+export function statusArgs(untracked: 'all' | 'normal'): readonly string[] {
+  return ['status', '--porcelain=v2', '-z', '--branch', `--untracked-files=${untracked}`];
+}
 
 /**
  * The ignored-files query — a second command, not a flag on the first.

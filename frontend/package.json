@@ -13,6 +13,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "bench": "MOONGIT_BENCH=1 vitest run bench/git.bench.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },

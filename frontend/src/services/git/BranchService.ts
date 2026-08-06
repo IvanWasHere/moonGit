@@ -21,8 +21,12 @@ function toExecOptions(options: ReadOptions): ExecOptions {
   return options.signal !== undefined ? { signal: options.signal } : {};
 }
 
-/** Built here rather than in the parser so the format and its flags travel together. */
-function refArgs(patterns: readonly string[]): string[] {
+/**
+ * Built here rather than in the parser so the format and its flags travel
+ * together. Exported so the Phase 7 benchmark measures this command and not a
+ * copy of it (`bench/git.bench.test.ts`).
+ */
+export function refArgs(patterns: readonly string[]): string[] {
   return ['for-each-ref', `--format=${FOR_EACH_REF_FORMAT}`, ...patterns];
 }
 

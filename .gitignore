@@ -18,3 +18,4 @@ frontend/coverage
 
 # local env
 *.local
+frontend/bench/results.md

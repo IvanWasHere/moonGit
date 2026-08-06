@@ -1,4 +1,4 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import {
   blameService,
   branchService,
@@ -25,6 +25,7 @@ import {
   type Stash,
   type StatusEntry,
 } from '@/services/git';
+import { loadTuning, noteStatusDuration, type Tuning } from '@/services/git/tuning';
 import { readIgnoreFile, type IgnoreFileId } from '@/services/ignoreFiles';
 import { listDir, type FileInfo } from '@/services/wails';
 import { gitKeys } from './keys';
@@ -57,12 +58,58 @@ function enabled(repoPath: string | null): repoPath is string {
   return repoPath !== null && repoPath !== '';
 }
 
+/**
+ * How the repository has been tuned for its size, from SQLite.
+ *
+ * `staleTime: Infinity` because nothing outside this app changes it, and the
+ * two things that do — a slow status, or the user overriding it — invalidate
+ * this key by hand.
+ */
+export function useTuning(repoPath: string | null): UseQueryResult<Tuning, Error> {
+  return useQuery({
+    queryKey: gitKeys.tuning(repoPath ?? ''),
+    queryFn: () => loadTuning(repoPath ?? ''),
+    enabled: enabled(repoPath),
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Working tree and index state.
+ *
+ * Two things here are Phase 7 rather than Phase 5:
+ *
+ * **It waits for the tuning to load.** `untrackedMode` reads a memory cache
+ * that SQLite fills, and a status that ran before the fill would run
+ * `--untracked-files=all` on a repository already known to be too big for it —
+ * so the first refresh after every relaunch would be the slow one, forever. The
+ * gate costs one database read on the open path and removes that entirely.
+ *
+ * **It times itself and may degrade the repository.** See
+ * `services/git/tuning.ts` for why the trigger is a duration rather than a file
+ * count. The elapsed time measured here is the whole round trip, bridge
+ * included, rather than git's own `durationMs` — what matters is how long the
+ * panel waited, not how long the subprocess ran.
+ */
 export function useStatus(repoPath: string | null): UseQueryResult<RepoStatus, GitQueryError> {
+  const queryClient = useQueryClient();
+  const tuning = useTuning(repoPath);
+
   return useQuery({
     queryKey: gitKeys.status(repoPath ?? ''),
-    queryFn: async ({ signal }) =>
-      unwrap(await repositoryService(repoPath ?? '').status({ signal })),
-    enabled: enabled(repoPath),
+    queryFn: async ({ signal }) => {
+      const started = performance.now();
+      const value = unwrap(await repositoryService(repoPath ?? '').status({ signal }));
+
+      if (await noteStatusDuration(repoPath ?? '', performance.now() - started)) {
+        // The repository just degraded. Refresh what it says about itself, and
+        // let the next status run the cheaper command — this one's result is
+        // still correct, being a superset of what `normal` would have returned.
+        await queryClient.invalidateQueries({ queryKey: gitKeys.tuning(repoPath ?? '') });
+      }
+      return value;
+    },
+    enabled: enabled(repoPath) && tuning.isSuccess,
   });
 }
 

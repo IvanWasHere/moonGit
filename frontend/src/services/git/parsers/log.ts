@@ -214,12 +214,24 @@ export function createLogParser(): LogParser {
   // Finished fields not yet forming a whole commit.
   let fields: string[] = [];
 
+  /**
+   * Consume whole commits from the front of `fields`.
+   *
+   * The cursor is not a micro-optimisation. Re-slicing the array once per
+   * commit — which is what this did — copies every remaining field for every
+   * commit taken, so a batch of n commits costs O(n²) copies. Measured on the
+   * Phase 7 bench repository (PLAN.md §10) a single 20,000-commit parse spent
+   * essentially all of its time here. Advancing an index and compacting once at
+   * the end is the same logic without the quadratic term.
+   */
   function drain(): Commit[] {
     const commits: Commit[] = [];
-    while (fields.length >= FIELDS.length) {
-      commits.push(buildCommit(fields.slice(0, FIELDS.length)));
-      fields = fields.slice(FIELDS.length);
+    let cursor = 0;
+    while (fields.length - cursor >= FIELDS.length) {
+      commits.push(buildCommit(fields.slice(cursor, cursor + FIELDS.length)));
+      cursor += FIELDS.length;
     }
+    if (cursor > 0) fields = cursor === fields.length ? [] : fields.slice(cursor);
     return commits;
   }
 
@@ -232,7 +244,17 @@ export function createLogParser(): LogParser {
       const parts = (partial + chunk).split('\0');
       // The final piece has no terminating NUL yet, so it is not a field.
       partial = parts.pop() ?? '';
-      fields.push(...parts);
+      /*
+       * Appended one at a time rather than with `fields.push(...parts)`.
+       *
+       * A spread passes every element as a separate argument, and a large
+       * enough chunk overflows the call stack outright — `RangeError: Maximum
+       * call stack size exceeded`, not a slow parse. Go's 64 KB chunks keep the
+       * streaming path a long way under that, so this was never reachable
+       * through `execStream`; `parseLog` below hands over the entire output in
+       * one call, and that is the path that crashed, at roughly 6,500 commits.
+       */
+      for (const part of parts) fields.push(part);
       return drain();
     },
 

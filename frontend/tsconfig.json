@@ -31,5 +31,5 @@
     },
     "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src", "wailsjs", "vite.config.ts", "vitest.setup.ts"]
+  "include": ["src", "bench", "wailsjs", "vite.config.ts", "vitest.setup.ts"]
 }

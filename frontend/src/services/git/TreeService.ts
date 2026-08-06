@@ -28,6 +28,15 @@ function splitNul(stdout: string): string[] {
   return stdout.split('\0').filter((entry) => entry !== '');
 }
 
+/** The corpus query behind quick open. See `TreeService.listPaths`. */
+export const LS_FILES_ARGS: readonly string[] = [
+  'ls-files',
+  '-z',
+  '--cached',
+  '--others',
+  '--exclude-standard',
+];
+
 export class TreeService {
   constructor(private readonly runner: GitRunner) {}
 
@@ -70,9 +79,13 @@ export class TreeService {
    * ones that are not ignored — which is exactly the set a user expects to be
    * able to jump to. Deleted-but-still-tracked files are in `--cached` and are
    * left in: they still have history worth opening.
+   *
+   * Named rather than inline so the Phase 7 benchmark measures this command
+   * and not a copy of it that drifts (`bench/git.bench.test.ts`), which is why
+   * `STATUS_ARGS` and `LOG_BASE_ARGS` are constants too.
    */
   async listPaths(options: ReadOptions = {}): Promise<Result<string[], GitError>> {
-    const args = ['ls-files', '-z', '--cached', '--others', '--exclude-standard'];
+    const args = LS_FILES_ARGS;
     const result = await this.runner.exec(args, toExecOptions(options));
     if (!result.ok) return result;
 

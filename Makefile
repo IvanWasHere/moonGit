@@ -5,7 +5,8 @@
 # should never be built or tested.
 GO_PKGS := . ./internal/...
 
-.PHONY: dev build test test-go test-web lint typecheck check seed seed-reset fonts bindings clean
+.PHONY: dev build test test-go test-web lint typecheck check seed seed-reset \
+        seed-large seed-large-clean bench fonts bindings clean
 
 dev:            ## run the app with hot reload
 	wails dev
@@ -39,6 +40,15 @@ seed:           ## put testGitHere/test-repo{1,2} into a rich state
 
 seed-reset:     ## restore the test repos to pristine origin/main
 	./scripts/seed-test-repos.sh --reset
+
+seed-large:     ## generate the 500k-file and 1M-commit bench repos (~4 min, ~2.1G)
+	./scripts/seed-large-repo.sh
+
+seed-large-clean: ## delete them
+	./scripts/seed-large-repo.sh --clean
+
+bench:          ## time the app's own git commands against them (PLAN.md §10)
+	cd frontend && npm run bench
 
 fonts:          ## re-vendor JetBrains Mono + Space Grotesk
 	./scripts/vendor-fonts.sh

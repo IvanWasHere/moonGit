@@ -1,5 +1,9 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { StatusBadge } from '@/components/Badges';
-import { useStatus } from '@/queries/git';
+import { Icons } from '@/components/icons';
+import { useStatus, useTuning } from '@/queries/git';
+import { gitKeys } from '@/queries/keys';
+import { forceUntrackedAll } from '@/services/git/tuning';
 import { FileList } from '@/features/working-tree/FileList';
 import {
   STATUS_FILTERS,
@@ -47,8 +51,49 @@ export function FilesPane() {
             would be a control that lies. */}
         {filesTab === 'changes' && <StatusChips />}
       </div>
+      {filesTab === 'changes' && <DegradedBanner />}
       {filesTab === 'changes' ? <FileList /> : <FileTree />}
     </>
+  );
+}
+
+/**
+ * Says so when the repository degraded itself to `--untracked-files=normal`.
+ *
+ * Without this the panel would simply stop listing files inside untracked
+ * directories, and a Files panel that silently omits files is worse than a slow
+ * one — "where did my new folder's contents go" has no answer anywhere on
+ * screen. It is the same bargain, and the same banner shape, as the Journal's
+ * file-log filter: you are not seeing everything, and here is the button.
+ *
+ * The escape hatch is one-way on purpose. Someone who asks for every file back
+ * on a 500k-file repository has been told what it costs, and `forcedAll` then
+ * stops the next slow status from overriding them (`services/git/tuning.ts`).
+ */
+function DegradedBanner() {
+  const repoPath = useWorkspaceStore((state) => state.repoPath);
+  const queryClient = useQueryClient();
+  const { data: tuning } = useTuning(repoPath);
+
+  if (repoPath === null || tuning === undefined) return null;
+  if (tuning.untracked !== 'normal' || tuning.forcedAll) return null;
+
+  const listEverything = async () => {
+    await forceUntrackedAll(repoPath);
+    await queryClient.invalidateQueries({ queryKey: gitKeys.tuning(repoPath) });
+    await queryClient.invalidateQueries({ queryKey: gitKeys.status(repoPath) });
+  };
+
+  return (
+    <div className={styles.degraded}>
+      <Icons.Filter size={11} />
+      <span className={styles.degradedText}>
+        Large repository — untracked folders are collapsed
+      </span>
+      <button type="button" className={styles.degradedAction} onClick={() => void listEverything()}>
+        List every file
+      </button>
+    </div>
   );
 }
 

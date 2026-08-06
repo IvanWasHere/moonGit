@@ -1119,11 +1119,107 @@ Built: `splitPath` in `statusDisplay.ts`, `statusFilters.ts`, `IGNORED_STATUS_AR
 
 Targets are 500k files / 1M commits. Concretely:
 
-- **History**: cursor-paged `git log --skip/--max-count` (or `--since` windows), TanStack Virtual, ~200-commit pages, graph lanes computed incrementally in the Worker
-- **Status at 500k files**: enable `core.fsmonitor` + `core.untrackedCache` on open, and don't call `--untracked-files=all` on huge repos — degrade to `normal` above a file-count threshold
-- **Streaming**: everything large goes through `RunStream`, parsed incrementally, never a single giant string
-- **Rerenders**: `React.memo` + granular Zustand selectors; assert render counts in tests for the big lists
-- **Bundle**: lazy-load Monaco on first use — ~~xterm.js~~ ✅ already is, as a 333 KB chunk behind the terminal drawer (§9's Phase 6.9 entry)
+1. **History**: cursor-paged `git log --skip/--max-count` (or `--since` windows), TanStack Virtual, ~200-commit pages, ~~graph lanes computed incrementally in the Worker~~ — **the Worker is withdrawn, measured at 39ms for 20,000 commits** (below)
+2. ~~**Status at 500k files**: enable `core.fsmonitor` + `core.untrackedCache` on open, and don't call `--untracked-files=all` on huge repos — degrade to `normal` above a file-count threshold~~ ✅ (below) — built, but not as written: the two mitigations turned out to be one, and the threshold is a duration rather than a file count
+3. **Streaming**: everything large goes through `RunStream`, parsed incrementally, never a single giant string
+4. **Rerenders**: `React.memo` + granular Zustand selectors; assert render counts in tests for the big lists
+5. ~~**Bundle**: lazy-load Monaco on first use~~ — **withdrawn: Monaco was never adopted** (§14.4). xterm ✅ and Shiki ✅ are both already lazy
+
+**And one item this list does not contain, which turned out to be the largest win in the phase: the commit-graph.** See Phase 7.1.
+
+### ✅ Phase 7.0 — somewhere to measure
+
+§13a's "Also needed: a large-repo target" said to decide between cloning something huge and generating one. **Generated**, and by `git fast-import` rather than by a commit at a time — a million commits takes 93 seconds that way and roughly a day the obvious way.
+
+`scripts/genrepo` (Go, ~300 lines) emits the stream; `scripts/seed-large-repo.sh` drives it. Two repositories, because the two axes have no overlap:
+
+| | contents | built in | on disk |
+|---|---|---|---|
+| `big-files` | 500,001 files, one commit, plus 50,000 untracked | 62s | 1.9G |
+| `big-history` | 1,000,000 commits, 256 files, 1,772 refs | 93s | 217M |
+
+Four things about the generator are deliberate and were not obvious:
+
+- **Deterministic dates from a fixed epoch**, not now-relative. This is the opposite of `seed-test-repos.sh` and for the opposite reason: that script feeds a demo and wants plausible "2 hours ago" times, this one feeds a stopwatch and wants a measurement from last week to be comparable to one from today.
+- **Long-lived parallel branches, not just short topics.** Short topics alone never put more than two lanes on screen, and two lanes is lane assignment at nearly its easiest case. Up to six branches stay open across hundreds of commits, giving 4–5 concurrent lanes — and branches still open when the walk ends are left open, because unmerged feature branches are realistic *and* they are what puts lanes at the top of the graph, which is the only screenful an unscrolled measurement ever sees.
+- **16×16 nested files rather than 256 flat ones.** A commit then rewrites one 16-entry subtree instead of a 256-entry root, which over a million commits is the difference between a pack that delta-compresses and one that does not.
+- **An untracked tree is part of the fixture.** On a clean repository `--untracked-files=all` and `=normal` cost the same, because there is nothing to recurse into — so without 50,000 untracked files the threshold this phase exists to set would have had no measurement behind it at all.
+
+The stopwatch is `frontend/bench/git.bench.test.ts`, run with `npm run bench`. It **imports the argument vectors from the source the app uses** rather than restating them — `STATUS_ARGS`, `LOG_BASE_ARGS`, `refArgs`, and `LS_FILES_ARGS`, the last two exported for the purpose. A benchmark holding a copy of a command stops measuring the product the first time somebody edits a flag. It is double-gated (`MOONGIT_BENCH=1` *and* the repositories existing) so `npm test` never grows a four-minute tail.
+
+### ✅ Phase 7.1 — the commit-graph, which is not in the list above
+
+**The baseline finding, and the one that reordered the phase.** Against `big-history`, with the Journal's own query:
+
+| | time | output |
+|---|---|---|
+| `log --topo-order --max-count=200` (page 1) | 6893ms | 45K |
+| the same with `--skip=100000` | 6790ms | 45K |
+| the same with `--skip=500000` | 6834ms | 45K |
+| `log --max-count=200`, **no ordering flag** | **99ms** | 45K |
+
+Page 500 costing the same as page 1 is not a paging problem; it is the sign that **both pages were already walking the entire history**. `--topo-order` has to prove no parent is emitted before a child, and with no generation numbers to reason with git can only establish that by walking everything first — so `--max-count=200` was bounding the *output* and not the work. `--date-order` is the same at 6780ms. Only git's default ordering, which can stream as it walks, was ever cheap.
+
+A commit-graph supplies the generation numbers. Same repository, same query:
+
+| | no commit-graph | with |
+|---|---|---|
+| `log --topo-order`, page 1 | 6796ms | **275ms** |
+| `--skip=100000` | — | 159ms |
+| `--skip=500000` | — | 395ms |
+| `--topo-order --all` (search, and `logAll`) | — | 1012ms |
+
+**25× on the query the Journal runs every time it opens**, for a 60MB sidecar file that takes 13 seconds to write once. And it retroactively answers the paging design question §10 left open as "`--skip/--max-count` (or `--since` windows)": with the graph in place `--skip=500000` costs 395ms, so **`--skip` paging is viable and the `--since` windowing fallback is not needed**.
+
+### ✅ Phase 7.2 — status at 500k files, built differently than planned
+
+Two mitigations in the bullet, measured separately:
+
+| | `--untracked-files=all` | `=normal` |
+|---|---|---|
+| neither | 4442ms | 3935ms |
+| `core.fsmonitor` | 2047ms | 680ms |
+| `+ core.untrackedCache` | 2075ms | **132ms** |
+
+**The two mitigations are one.** The untracked cache holds a verdict per directory, and `--untracked-files=all` recurses into every directory by definition, so there is nothing for it to answer from — 4442ms against 4457ms is noise. It is worth nothing until you have already degraded, and then it is worth 5×. The plan lists them as independent items; a build that shipped only the cache, as the bullet's ordering invites, would have shipped a no-op.
+
+**The threshold is a duration, not a file count.** A count is a proxy for the thing actually being asked — whether the panel feels slow — and it is a proxy that means different things on an M4 and a 2015 laptop, so any constant would have been right on one machine and wrong on the next. `useStatus` times its own round trip and degrades the repository past 1000ms; `GitRunner` was already reporting durations, so nothing extra is run to find out. Decided with Ivan against a fixed count, an always-`normal` mode, and not degrading at all.
+
+**Nothing is applied to a repository that does not need it.** A daemon, a modified index format and a 60MB sidecar are a bad trade for a three-hundred-file project, and moonGit should not leave them behind in every repository a user opens. The same measurement that degrades the untracked mode is what triggers `configureRepository`.
+
+**The degrade is visible and reversible.** `normal` collapses an untracked directory to one row, so a Files panel that degraded silently would stop listing files with no answer on screen to "where did my new folder's contents go". A banner says so and offers "List every file", which sets `forcedAll` — one-way on purpose, since someone who asks for every file back has been told what it costs, and the next slow status overriding them would be the app arguing with a decision it had just surfaced. The banner is deliberately the same shape as the Journal's file-log filter bar: two different-looking answers to "you are not seeing everything, and here is the button" would be two things to learn for one idea.
+
+Verified end to end on `big-files`, from a config reset to the untuned state the app would first meet:
+
+| | |
+|---|---|
+| cold `status --untracked-files=all` | 5108ms — trips the 1000ms threshold |
+| after `configureRepository`, `=normal` | **292ms** — what the panel runs from then on |
+| after `configureRepository`, `=all` | 2719ms — what "List every file" costs |
+
+### ✅ Two bugs the benchmark found that reasoning had not
+
+Neither was reachable through the app today; both were directly in the path of the paging work about to be built.
+
+1. **`parseLog` crashed above roughly 6,500 commits.** `fields.push(...parts)` passes one argument per field, and a large enough input overflows the call stack — `RangeError`, not a slow parse. Go's 64 KB chunks kept `execStream` far below the limit, so only `parseLog`, which hands over the whole output in one call, could reach it. Paging is about to make multi-thousand-commit parses ordinary.
+2. **The streaming parser's `drain()` was quadratic.** Re-slicing the field array once per commit copies every remaining field for every commit taken. Invisible at 64 KB a time; the dominant cost of any batch parse.
+
+Both fixed, both with regression tests. The 20,000-commit parse that provoked them now runs in 56ms.
+
+### What the measurements withdrew from this phase
+
+Three of the five bullets shrank or disappeared, which is worth as much as the two that grew:
+
+- **The graph Worker is withdrawn.** `buildGraph` over 20,000 commits — a hundred pages deep, with 4–5 concurrent lanes — takes **39ms**, and over a 200-commit page it is below the timer's resolution. Moving that to a Worker would add a serialisation boundary, a second copy of every commit and an async seam through `JournalView`, to save 39ms that nobody waits for. Lane assignment stays on the main thread. Revisit only if a measurement, not an intuition, says otherwise.
+- **The Monaco bullet is void.** Monaco was never adopted (§14.4); Shiki won for the diff and is already lazy per-language, and the merge tool was built without an embedded editor. xterm has been a lazy 333 KB chunk since Phase 6.9. There is nothing left in this item.
+- **The parsers are not the bottleneck and never were.** `parseStatus` over 1.6MB of porcelain: 21ms. `parseRefs` over 1,772 refs: 3ms. `parseLog` over a page: below resolution. Every one of them is one to three orders of magnitude cheaper than the git command that produced its input. The phase's remaining effort belongs on what git is asked and how the payload crosses the bridge, not on how it is parsed.
+
+### Still open in this phase
+
+- **Cursor-paged, virtualized history.** `@tanstack/react-virtual` is a dependency and imported nowhere; `JournalView` still caps at 200 with a comment saying so. Now unblocked, and cheaper than planned — `--skip` is viable and no Worker is needed.
+- **The streaming audit.** `CommitService` is still the only service that streams. Two measured payloads argue it should not be: `ls-files` returns **11.9MB in a single buffered string** (2191ms) for quick open's corpus, and an unbounded `log` is **219MB**. The second is already streamed; the first is not.
+- **Rerender hardening.** Untouched.
+- **The Ignored chip against a genuinely large repository** — carried over from §9's Phase 6.12 entry, which deferred it here. `status --ignored` on `big-files` is 4407ms, so the pause that entry warns about is real and now has a number.
 
 ---
 
@@ -1211,9 +1307,11 @@ Two constraints worth stating up front:
 - **Nothing is pushed to GitHub.** Seeding is local-only, so it never touches the real remotes. That means it can produce *ahead* counts but not *behind* ones.
 - **Behind/diverged states use a local bare remote instead.** A generated repo with a `file://` bare remote lets us fabricate behind, diverged, and non-fast-forward cases without inventing commits on Ivan's GitHub repos.
 
-### Also needed: a large-repo target
+### ~~Also needed: a large-repo target~~ ✅ resolved in Phase 7.0
 
-Neither test repo can validate the §10 performance work — the targets are 500k files and 1M commits. Before Phase 7, clone something genuinely large (the Linux kernel, ~1.3M commits, is the standard stress case) or generate a synthetic history. Worth deciding then, not now.
+Neither test repo can validate the §10 performance work — the targets are 500k files and 1M commits. ~~Before Phase 7, clone something genuinely large (the Linux kernel, ~1.3M commits, is the standard stress case) or generate a synthetic history. Worth deciding then, not now.~~
+
+**Decided: generated, not cloned.** `make seed-large` builds both in about four minutes with no network and no multi-gigabyte clone, and the result is deterministic, so a measurement taken today is comparable to one taken next week. They are tier-2 by the rule above — generated, disposable, and nowhere near `testGitHere`. Full detail in §10's Phase 7.0 entry.
 
 ### ⚠️ moonGit itself is not a git repository
 

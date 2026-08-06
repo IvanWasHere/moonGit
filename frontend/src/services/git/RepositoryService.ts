@@ -14,11 +14,12 @@ import { getGitRunner, type ExecOptions, type GitRunner } from './GitRunner';
 import {
   IGNORED_STATUS_ARGS,
   parseStatus,
-  STATUS_ARGS,
+  statusArgs,
   type RepoStatus,
   type StatusEntry,
 } from './parsers';
 import { ok, type Result } from './result';
+import { untrackedMode } from './tuning';
 
 /** Options every read shares. Cancellation matters once a repo switch can outrun a query. */
 export interface ReadOptions {
@@ -36,11 +37,21 @@ export class RepositoryService {
     return this.runner.repoPath;
   }
 
-  /** Working tree and index state, plus the current branch's upstream position. */
+  /**
+   * Working tree and index state, plus the current branch's upstream position.
+   *
+   * The untracked mode is not fixed. A repository big enough to make
+   * `--untracked-files=all` slow degrades itself to `normal`, so which command
+   * this runs is a per-repository decision held in `services/git/tuning.ts`.
+   * Deciding it is the *query layer's* job, not this one's — the feedback loop
+   * has to invalidate a cache when it flips, and a service that knew how to do
+   * that would be a service that knows about React Query.
+   */
   async status(options: ReadOptions = {}): Promise<Result<RepoStatus, GitError>> {
-    const result = await this.runner.exec(STATUS_ARGS, toExecOptions(options));
+    const args = statusArgs(untrackedMode(this.runner.repoPath));
+    const result = await this.runner.exec(args, toExecOptions(options));
     return mapParsed(result, parseStatus, {
-      args: STATUS_ARGS,
+      args,
       repoPath: this.runner.repoPath,
     });
   }

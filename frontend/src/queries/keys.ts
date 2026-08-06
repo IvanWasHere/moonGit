@@ -26,6 +26,15 @@ export const gitKeys = {
    * same bargain `config` above makes for the same reason.
    */
   ignored: (repoPath: string): QueryKey => [repoPath, 'ignored'],
+  /**
+   * How this repository has been tuned for its size (PLAN.md §10).
+   *
+   * A query rather than a store slice because it is read from SQLite and
+   * changes from inside another query's lifecycle — `status` measures itself
+   * and may degrade the repository as a result. Absent from `keysToInvalidate`:
+   * no filesystem change can alter it, only a measurement or the user can.
+   */
+  tuning: (repoPath: string): QueryKey => [repoPath, 'tuning'],
   refs: (repoPath: string): QueryKey => [repoPath, 'refs'],
   currentBranch: (repoPath: string): QueryKey => [repoPath, 'currentBranch'],
   log: (repoPath: string, params: unknown = {}): QueryKey => [repoPath, 'log', params],

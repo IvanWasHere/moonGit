@@ -89,3 +89,45 @@
   border-color: var(--border-light);
   color: var(--text-primary);
 }
+
+/* The "this repository degraded itself" banner (PLAN.md §10).
+
+   Deliberately the same shape as the Journal's file-log filter bar: both say
+   "you are not seeing everything, and here is the button that changes that",
+   and two different-looking answers to the same sentence would be two things
+   to learn for one idea. */
+.degraded {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: var(--bg-active);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.degradedText {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.degradedAction {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.degradedAction:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
