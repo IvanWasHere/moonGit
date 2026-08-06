@@ -6,15 +6,30 @@ Derived from the PRD, grounded in what is actually in this repo today.
 
 ## 0. Current state (verified)
 
+*Last verified 2026-08-06, at commit `1a1e412`.*
+
 | Thing | Reality |
 |---|---|
-| Wails | **v2.13.0** (`go.mod`), CLI `v2.13.0` installed. PRD says v3. |
-| Go | 1.26.5 darwin/arm64, module named `myproject` |
-| Backend | `app.go` — one `Greet()` method. Nothing else. |
-| Frontend | Stock template: `App.jsx`, `main.jsx`, **plain JS, no TypeScript**, deps are only `react`/`react-dom`/`vite` |
-| Bindings | `frontend/wailsjs/go/main/App.d.ts` → `Greet(string)` |
-| UI reference | `ui-example/index.html` — single file, Mithril 2.2.2 + Dexie 3.2.7 from CDN, ~45 KB |
+| Phases | **0–6 complete. Phase 7 in progress** (§10). Phase 8 not started. |
+| Wails | **v2.13.0** (`go.mod`), CLI `v2.13.0`. PRD says v3 — a deliberate deviation (§14.1). |
+| Go | 1.26.5 darwin/arm64, module `moongit` |
+| Backend | 9 services under `internal/` — `gitexec`, `store`, `watcher`, `fsapi`, `ptyapi`, `shellapi`, `creds`, `dialogs`, `appmenu`. None of them know what a commit is (§4). |
+| Frontend | TypeScript throughout, strict + `noUncheckedIndexedAccess`. React 19, TanStack Query, Zustand, CSS Modules. |
+| Tests | 648 frontend across 43 files, plus Go tests for `fsapi`, `gitexec`, `ptyapi`, `store`, `watcher`. `make check` runs the lot. |
+| Version control | This *is* a git repository now — see §13a, where the note saying otherwise used to be. |
+| UI reference | `ui-example/index.html` — the Mithril + Dexie mockup. Ported in Phase 4; kept for comparison, with the deliberate departures listed in §14. |
 | git | 2.47.1 available on PATH |
+
+### Where this started
+
+The snapshot the plan was originally written against, kept because it is what bounds the "migration" scope — everything not listed here was net-new design rather than a port:
+
+| Thing | Reality at the time |
+|---|---|
+| Go | module named `myproject` |
+| Backend | `app.go` — one `Greet()` method. Nothing else. |
+| Frontend | Stock template: `App.jsx`, `main.jsx`, **plain JS, no TypeScript**, deps only `react`/`react-dom`/`vite` |
+| Bindings | `frontend/wailsjs/go/main/App.d.ts` → `Greet(string)` |
 
 **What the mockup actually contains** (this bounds the "migration" work — everything else in the PRD is net-new design, not a port):
 
@@ -25,7 +40,7 @@ Derived from the PRD, grounded in what is actually in this repo today.
 - Drag resizers (`createResizer`, percent-based with min/max clamps), toast system, empty states
 - A complete dark design token set (`--bg-darkest: #0d1117` … `--accent: #e8a838`), JetBrains Mono + Space Grotesk, Font Awesome 6.5.1
 
-Everything in it is **fake data from Dexie seeds**. There is no git integration anywhere yet.
+Everything in the mockup is **fake data from Dexie seeds** — it has no git integration at all, which is why §1.2 declines to recreate its `branches`/`files`/`commits` tables.
 
 ---
 
@@ -1112,6 +1127,30 @@ Built: `splitPath` in `statusDisplay.ts`, `statusFilters.ts`, `IGNORED_STATUS_AR
 
 **Not exercised**: the Ignored chip against a genuinely large repository. `vendor/` proves the collapse; it does not measure the pause the plan warns about. The honest test is this repository's own 18,163 ignored files, and it belongs with the §10 performance work, where there is somewhere to record the number.
 
+### ✅ The white flash at launch, and why `BackgroundColour` did not stop it
+
+Not a feature — a Wails platform behaviour worth writing down, because the code that was supposed to prevent this looked correct and carried a comment claiming it did.
+
+`main.go` set `BackgroundColour` to `--bg-darkest` "so there is no white flash before the webview paints". On macOS that is not what the option does. Wails v2.13's `SetBackgroundColour` is one line — `[self.mainWindow setBackgroundColor:]` — and colours the **NSWindow** only. The WKWebView laid over it keeps WebKit's default `drawsBackground: YES`, which is opaque white, so the dark window was painted and then immediately covered until the frontend's CSS painted over it. The window colour was never visible at all.
+
+Wails overrides `drawsBackground` in exactly one place:
+
+```objc
+if (webviewIsTransparent) {
+    [self.webview setValue:@(!webviewIsTransparent) forKey:@"drawsBackground"];
+}
+```
+
+So `Mac.WebviewIsTransparent` is not a cosmetic option here — **it is the switch that makes `BackgroundColour` do anything on macOS**, and it is now set. Safe because `global.css` gives html/body an opaque background, so the transparency is only ever visible in the gap before first paint.
+
+A second, smaller gap sat on top: `global.css` is imported from `main.tsx`, so under `wails dev` Vite injects it with JavaScript and the document is white until that executes — and even a production build has a gap between the document parsing and the stylesheet arriving. `index.html` now carries an inline `<style>` with the `--bg-darkest` value for each theme, keyed off `prefers-color-scheme`.
+
+Two consequences to accept rather than engineer away:
+
+- **The two hex values are duplicated in `index.html`.** A token cannot be referenced before the file that defines it has loaded, which is the entire problem being solved. If the surface ramp is ever restyled, that file is the second place to change.
+- **`prefers-color-scheme`, not the stored setting.** The real theme lives in SQLite and cannot be read synchronously, so a user whose explicit choice disagrees with their desktop still sees the wrong colour briefly — on an empty window, for the length of one indexed read. A `localStorage` cache of the last resolved theme, read by an inline script, would close it if it ever proves annoying.
+
+**Not verified visually.** The diagnosis is read off the Wails source rather than observed, and the fix has not been watched on a cold launch.
 
 ---
 
@@ -1147,7 +1186,9 @@ Four things about the generator are deliberate and were not obvious:
 
 The stopwatch is `frontend/bench/git.bench.test.ts`, run with `npm run bench`. It **imports the argument vectors from the source the app uses** rather than restating them — `STATUS_ARGS`, `LOG_BASE_ARGS`, `refArgs`, and `LS_FILES_ARGS`, the last two exported for the purpose. A benchmark holding a copy of a command stops measuring the product the first time somebody edits a flag. It is double-gated (`MOONGIT_BENCH=1` *and* the repositories existing) so `npm test` never grows a four-minute tail.
 
-### ✅ Phase 7.1 — the commit-graph, which is not in the list above
+### ◐ Phase 7.1 — the commit-graph, which is not in the list above
+
+**Measured and written, but not yet triggered on the axis it matters most for.** `configureRepository` writes the commit-graph, and the only thing that calls it is a slow *status* (Phase 7.2). A repository with a million commits and few files — `big-history` exactly — answers status quickly and would never be given one, so the 25× below never fires for it. The history axis needs its own trigger, and it belongs with the paging work rather than bolted onto the status path. Listed under "Still open" below.
 
 **The baseline finding, and the one that reordered the phase.** Against `big-history`, with the Journal's own query:
 
@@ -1216,6 +1257,7 @@ Three of the five bullets shrank or disappeared, which is worth as much as the t
 
 ### Still open in this phase
 
+- **A trigger for the commit-graph on the history axis.** The 25× is measured and `configureRepository` knows how to write one, but only a slow status calls it — see Phase 7.1 above. The natural trigger is the same shape as the status one: time the first `log` and configure the repository when it is slow. This is the highest-value item left in the phase.
 - **Cursor-paged, virtualized history.** `@tanstack/react-virtual` is a dependency and imported nowhere; `JournalView` still caps at 200 with a comment saying so. Now unblocked, and cheaper than planned — `--skip` is viable and no Worker is needed.
 - **The streaming audit.** `CommitService` is still the only service that streams. Two measured payloads argue it should not be: `ls-files` returns **11.9MB in a single buffered string** (2191ms) for quick open's corpus, and an unbounded `log` is **219MB**. The second is already streamed; the first is not.
 - **Rerender hardening.** Untouched.
@@ -1247,18 +1289,27 @@ Vitest + RTL for units and components · Playwright over `wails dev` for integra
 ## 13. Suggested sequencing
 
 ```
-Phase 0  Foundations           0.5d   ──┐
-Phase 1  Go native layer       1.5d     │  MVP: ~11 days
-Phase 2  TS git layer          3d       │  ends with moonGit
-Phase 3  State & persistence   1d       │  committing to itself
-Phase 4  Mithril → React       2.5d     │
-Phase 5  Wire real git         2.5d   ──┘
-Phase 6  Feature build-out     2–3w
-Phase 7  Performance           1w
+Phase 0  Foundations           0.5d   ──┐  ✅
+Phase 1  Go native layer       1.5d     │  ✅  MVP: ~11 days
+Phase 2  TS git layer          3d       │  ✅  ended with moonGit
+Phase 3  State & persistence   1d       │  ✅  committing to itself
+Phase 4  Mithril → React       2.5d     │  ✅
+Phase 5  Wire real git         2.5d   ──┘  ✅
+Phase 6  Feature build-out     2–3w        ✅  all 12 items, §9
+Phase 7  Performance           1w          ◐   §10 — see below
 Phase 8  Quality & release     4d
 ```
 
 Phases 2 and 4 are independent and can run in parallel (parsers need no UI; the port runs on fixtures).
+
+**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), status at 500k files (7.2), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
+
+1. A commit-graph trigger on the history axis (7.1 — measured at 25×, written, not yet triggered)
+2. Cursor-paged, virtualized history
+3. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
+4. Rerender hardening
+
+The estimate has not been revised. Four of the eight items in §10 turned out to be cheaper or void and two turned out to be worth far more than the plan implied, which roughly cancels; the honest position is that the week was never measured either.
 
 ---
 
@@ -1313,12 +1364,16 @@ Neither test repo can validate the §10 performance work — the targets are 500
 
 **Decided: generated, not cloned.** `make seed-large` builds both in about four minutes with no network and no multi-gigabyte clone, and the result is deterministic, so a measurement taken today is comparable to one taken next week. They are tier-2 by the rule above — generated, disposable, and nowhere near `testGitHere`. Full detail in §10's Phase 7.0 entry.
 
-### ⚠️ moonGit itself is not a git repository
+### ~~⚠️ moonGit itself is not a git repository~~ ✅ resolved in Phase 0
 
-`git status` in this project fails — there's no `.git` here. Two consequences:
+~~`git status` in this project fails — there's no `.git` here. Two consequences:~~
 
-1. The Phase 5 exit criterion in §8 ("moonGit can commit to its own repository") **doesn't work as written**. Retargeting it below.
-2. A Git client is being built without version control. Worth running `git init` early regardless of moonGit's own needs.
+1. ~~The Phase 5 exit criterion in §8 ("moonGit can commit to its own repository") **doesn't work as written**. Retargeting it below.~~
+2. ~~A Git client is being built without version control. Worth running `git init` early regardless of moonGit's own needs.~~
+
+`git init` was run in Phase 0, so both consequences are gone: the repository exists, and the Phase 5 exit criterion was met as originally written rather than retargeted — moonGit's own first commits were made from moonGit (§8).
+
+It has also become the app's most-used test repository, and an accidental tier-4 the strategy above does not name: unlike `testGitHere` it is safe to read from constantly, and unlike the generated repos it has real history, real renames and a real `.gitignore` covering 18,163 files. Phase 6.12's status-filter work was verified largely against it. **The tier-3 rule still applies to it in full** — no automated test may mutate it, for exactly the reasons that rule exists.
 
 ---
 
