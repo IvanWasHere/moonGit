@@ -48,7 +48,9 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		// Matches --bg-darkest so there is no white flash before the webview paints.
+		// Matches --bg-darkest. On macOS this colours the NSWindow, and it is
+		// only visible at all because Mac.WebviewIsTransparent is set below —
+		// see the note there.
 		BackgroundColour: &options.RGBA{R: 0x0d, G: 0x11, B: 0x17, A: 1},
 
 		OnStartup: func(ctx context.Context) {
@@ -83,8 +85,28 @@ func main() {
 			// The design supplies its own 60px menubar, so the native title bar
 			// is hidden and the traffic lights float over it. The frontend
 			// reserves space for them via the --titlebar-inset token.
-			TitleBar:   mac.TitleBarHiddenInset(),
-			Appearance: mac.NSAppearanceNameDarkAqua,
+			TitleBar: mac.TitleBarHiddenInset(),
+			/*
+			 * This is what makes BackgroundColour above do anything, and
+			 * without it the app opens on a white flash.
+			 *
+			 * `BackgroundColour` sets the *NSWindow* colour on macOS —
+			 * `SetBackgroundColour` in Wails' WailsContext.m is a one-line
+			 * `[self.mainWindow setBackgroundColor:]` and touches nothing
+			 * else. The WKWebView sitting on top of it keeps WebKit's default
+			 * `drawsBackground: YES`, which is opaque white, so the dark
+			 * window was painted and then immediately covered up until the
+			 * frontend's own CSS painted over it.
+			 *
+			 * Wails only overrides `drawsBackground` when this flag is set
+			 * (`if (webviewIsTransparent)` in WailsContext.m), so setting it
+			 * is the only way to let the window colour through. Safe here
+			 * because `global.css` gives html/body an opaque background, so
+			 * transparency is visible only in the gap before first paint —
+			 * which is exactly the gap being fixed.
+			 */
+			WebviewIsTransparent: true,
+			Appearance:           mac.NSAppearanceNameDarkAqua,
 			About: &mac.AboutInfo{
 				Title:   "moonGit",
 				Message: "A native macOS Git client.\nCopyright © 2026 Ivan Marinkovic",

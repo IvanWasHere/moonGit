@@ -4,6 +4,38 @@
     <meta charset="UTF-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>moonGit</title>
+    <!--
+      The first paint's background, inline and before anything is fetched.
+
+      `global.css` sets this too, but it is imported from `main.tsx`, so under
+      `wails dev` Vite injects it with JavaScript and the document is white
+      until that runs. Even in a production build there is a gap between the
+      document being parsed and the stylesheet arriving. This closes both, and
+      it costs one style block that never goes over the network.
+
+      The values are `--bg-darkest` from `tokens.css` in each theme, duplicated
+      here on purpose: a token cannot be referenced before the file defining it
+      has loaded, which is the entire problem this solves. `tuning.ts` aside,
+      this is the only place in the app where those two hex values are written
+      twice — if the surface ramp is ever restyled, this is the second place.
+
+      `prefers-color-scheme` rather than the stored setting, because the stored
+      one lives in SQLite and cannot be read synchronously. A user whose
+      explicit theme disagrees with their desktop still sees the wrong colour
+      briefly — but on an empty window, and for the length of one indexed read.
+    -->
+    <style>
+      html,
+      body {
+        background: #0d1117;
+      }
+      @media (prefers-color-scheme: light) {
+        html,
+        body {
+          background: #ffffff;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
