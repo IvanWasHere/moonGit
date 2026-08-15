@@ -34,6 +34,17 @@
  *    every repository a user happens to open. The trigger is a measurement of
  *    the repository in front of us, not a guess from its size — see
  *    `noteStatusDuration`.
+ *
+ * 4. **The two axes are measured and configured separately.** "Big" is not one
+ *    property. `big-files` is 500k files and one commit; `big-history` is a
+ *    million commits and 256 files; neither is slow at what the other is slow
+ *    at. So a slow *status* buys fsmonitor and the untracked cache, a slow *log*
+ *    buys the commit-graph, and neither infers the other. Configuring both from
+ *    one measurement would put an fsmonitor daemon on a 256-file repository and
+ *    leave a million-commit one — which answers status instantly — without the
+ *    graph that is worth 25× to it. That second half is exactly the gap this
+ *    file had until the history trigger was added: the graph was written and
+ *    measured, and the only thing that ever called for one was a slow status.
  */
 
 import { getPreference, setPreference } from '@/services/db/keyValue';
@@ -63,16 +74,38 @@ export type UntrackedMode = 'all' | 'normal';
  */
 export const SLOW_STATUS_MS = 1000;
 
+/**
+ * A log slower than this means the history is long enough to want a graph.
+ *
+ * The same number as `SLOW_STATUS_MS`, for the same reason — a second is where
+ * a panel stops reading as instant — but a separate constant, because the two
+ * measure different commands against different bottlenecks and there is no
+ * reason they should have to move together. Sharing one constant would mean a
+ * future adjustment to either silently retunes the other.
+ *
+ * The margin is wide in both directions: an ungraphed million-commit log
+ * measured 6893ms and a graphed one 275ms, so nothing plausible sits near the
+ * line.
+ */
+export const SLOW_LOG_MS = 1000;
+
 /** What has been decided about one repository. */
 export interface Tuning {
   readonly untracked: UntrackedMode;
-  /** Whether fsmonitor, the untracked cache and the commit-graph were applied. */
+  /** Whether fsmonitor and the untracked cache were applied — the file axis. */
   readonly configured: boolean;
+  /** Whether a commit-graph was written — the history axis. */
+  readonly graphed: boolean;
   /** Set when the user asked for `all` back, which stops the automatic degrade. */
   readonly forcedAll: boolean;
 }
 
-const DEFAULT_TUNING: Tuning = { untracked: 'all', configured: false, forcedAll: false };
+const DEFAULT_TUNING: Tuning = {
+  untracked: 'all',
+  configured: false,
+  graphed: false,
+  forcedAll: false,
+};
 
 /**
  * Read through a memory cache.
@@ -88,11 +121,20 @@ function key(repoPath: string): string {
   return `tuning.${repoPath}`;
 }
 
-/** Load a repository's tuning from the database into the cache. */
+/**
+ * Load a repository's tuning from the database into the cache.
+ *
+ * Spread over the defaults rather than used directly, because a row written by
+ * an earlier version predates whatever field was added since — `graphed` was
+ * the first — and would arrive as `undefined` behind a type that promises a
+ * boolean. The spread is the migration: an old row means "not yet", which for
+ * every flag here is both the truthful and the safe reading.
+ */
 export async function loadTuning(repoPath: string): Promise<Tuning> {
   const stored = await getPreference<Tuning>(key(repoPath), DEFAULT_TUNING);
-  cache.set(repoPath, stored);
-  return stored;
+  const tuning = { ...DEFAULT_TUNING, ...stored };
+  cache.set(repoPath, tuning);
+  return tuning;
 }
 
 function current(repoPath: string): Tuning {
@@ -139,6 +181,26 @@ export function nextTuning(tuning: Tuning, ms: number): Tuning | null {
 }
 
 /**
+ * The history-axis rule, as a pure function. Sibling of `nextTuning`.
+ *
+ * Deliberately simpler than its sibling, because there is no user-facing
+ * degrade on this axis to negotiate with. The commit-graph changes what git
+ * answers *with*, never what it answers — the same commits come back in the
+ * same order, only sooner — so there is nothing to surface, nothing to offer an
+ * undo for, and no override to respect. `forcedAll` is not consulted here for
+ * that reason: someone who asked to keep seeing every untracked file has said
+ * nothing whatsoever about how they would like their history read.
+ *
+ * Writes once and never again. Git keeps the graph fresh itself from then on
+ * (`fetch.writeCommitGraph`), so a second write would be a 13-second no-op.
+ */
+export function nextGraphTuning(tuning: Tuning, ms: number): Tuning | null {
+  if (ms < SLOW_LOG_MS) return null;
+  if (tuning.graphed) return null;
+  return { ...tuning, graphed: true };
+}
+
+/**
  * Feed back how long a status actually took, applying `nextTuning`.
  *
  * Returns true when something changed, so the caller can invalidate.
@@ -148,8 +210,58 @@ export async function noteStatusDuration(repoPath: string, ms: number): Promise<
   if (next === null) return false;
 
   await update(repoPath, next);
-  await configureRepository(repoPath);
+  await configureForStatus(repoPath);
   return true;
+}
+
+/**
+ * Repositories with a commit-graph write already running, so a second slow log
+ * does not start a second one.
+ *
+ * The status trigger needs no such guard: it awaits its configure inside the
+ * query, and a status is one query. A log is not — the Journal re-runs it on
+ * every search keystroke, each one slow while the graph is still missing, and
+ * each one returning before the 13-second write it started has finished. Three
+ * concurrent `commit-graph write` processes on the same object store is a way
+ * to make a slow repository slower.
+ *
+ * Keyed by path and never cleared on success, which is the same thing
+ * `graphed` records; it exists for the window before that flag is persisted,
+ * and on failure so a repository that cannot write one stops being asked
+ * within this session.
+ */
+const graphing = new Set<string>();
+
+/**
+ * Feed back how long a `log` actually took, and write a commit-graph if it was
+ * slow. The history-axis counterpart to `noteStatusDuration` (PLAN.md §10, 7.1).
+ *
+ * **Nothing waits for this**, which is the one structural difference from the
+ * status path and the reason it returns void. A degraded status changes the
+ * command the next status runs, so its caller has something to invalidate; a
+ * commit-graph changes nothing about the result already in hand. Awaiting it
+ * would hold the Journal on "Reading history…" for the thirteen seconds the
+ * write takes, to deliver commits that were parsed and ready before it started.
+ * The payoff is the *next* log, and the next log is not waiting on this either.
+ */
+export function noteLogDuration(repoPath: string, ms: number): void {
+  if (nextGraphTuning(current(repoPath), ms) === null) return;
+  if (graphing.has(repoPath)) return;
+  graphing.add(repoPath);
+
+  void (async () => {
+    // Configure first, persist after. The flag means "this repository has a
+    // graph", and setting it before the write would make a crash mid-write
+    // permanent: every future session would read the flag and never retry.
+    await configureForHistory(repoPath);
+    // Re-read rather than reusing the value from above — `update` merges into
+    // whatever the status path may have written while the graph was building.
+    await update(repoPath, { graphed: true });
+  })().catch(() => {
+    // Same bargain as `configureForHistory` itself: this is an optimisation,
+    // and a repository that cannot be sped up must still work. Left in
+    // `graphing` on purpose, so the failure is not retried on every keystroke.
+  });
 }
 
 /** Put a repository back to listing every untracked file, and keep it there. */
@@ -163,15 +275,16 @@ export async function clearUntrackedOverride(repoPath: string): Promise<void> {
 }
 
 /**
- * Apply git's own large-repository settings.
+ * Apply git's own large-repository settings for the *file* axis.
  *
- * Every failure is swallowed. These are optimisations, and a repository where
- * one of them will not apply — an older git, a filesystem the fsmonitor daemon
- * cannot watch, a read-only object store — is a repository that should still
- * open and work, just no faster than it did before. Reporting "could not write
- * a commit-graph" to someone who never asked for one would be noise.
+ * Every failure is swallowed, here and in its sibling below. These are
+ * optimisations, and a repository where one of them will not apply — an older
+ * git, a filesystem the fsmonitor daemon cannot watch, a read-only object
+ * store — is a repository that should still open and work, just no faster than
+ * it did before. Reporting "could not enable fsmonitor" to someone who never
+ * asked for it would be noise.
  */
-export async function configureRepository(repoPath: string): Promise<void> {
+export async function configureForStatus(repoPath: string): Promise<void> {
   const runner = getGitRunner(repoPath);
 
   // Local scope, never global: this is a judgement about this repository, and
@@ -182,10 +295,26 @@ export async function configureRepository(repoPath: string): Promise<void> {
   // The config alone does not create the cache; the index has to be told to
   // carry one. Without this the setting is inert and `normal` stays at 680ms.
   await runner.exec(['update-index', '--untracked-cache']);
+}
+
+/**
+ * Write a commit-graph — the *history* axis, and the largest single measured
+ * win in Phase 7 (6796ms → 275ms on the query the Journal opens with).
+ *
+ * Split out from `configureForStatus` when the history trigger was built.
+ * Before that the two lived in one function that only a slow status called,
+ * which meant the biggest win in the phase was reachable only from the axis it
+ * has nothing to do with — see note 4 in the header.
+ */
+export async function configureForHistory(repoPath: string): Promise<void> {
+  const runner = getGitRunner(repoPath);
 
   // `--reachable` rather than `--append`: it covers every ref rather than only
   // what a fetch just brought in, which matters because the repository may have
   // been sitting on disk for years before moonGit first opened it.
+  //
+  // The generous timeout is measured, not guessed: a million commits takes 13
+  // seconds, and the ceiling is there for the repository ten times that size.
   await runner.exec(['commit-graph', 'write', '--reachable'], { timeoutMs: 5 * 60_000 });
   // Keeps it fresh without a background job of our own — git updates the graph
   // as part of any fetch from here on.
@@ -195,4 +324,5 @@ export async function configureRepository(repoPath: string): Promise<void> {
 /** Test-only. */
 export function resetTuning(): void {
   cache.clear();
+  graphing.clear();
 }

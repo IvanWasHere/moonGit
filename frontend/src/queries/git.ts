@@ -25,7 +25,12 @@ import {
   type Stash,
   type StatusEntry,
 } from '@/services/git';
-import { loadTuning, noteStatusDuration, type Tuning } from '@/services/git/tuning';
+import {
+  loadTuning,
+  noteLogDuration,
+  noteStatusDuration,
+  type Tuning,
+} from '@/services/git/tuning';
 import { readIgnoreFile, type IgnoreFileId } from '@/services/ignoreFiles';
 import { listDir, type FileInfo } from '@/services/wails';
 import { gitKeys } from './keys';
@@ -171,17 +176,37 @@ export interface LogParams extends CommitSearchParams {
   readonly topoOrder?: boolean;
 }
 
+/**
+ * Commit history, and the history axis's half of the Phase 7 tuning.
+ *
+ * **It times itself and may write a commit-graph**, the mirror of what
+ * `useStatus` does for the file axis, and the reason both hooks wait on
+ * `useTuning` — a log that ran before the flag loaded would rewrite a graph the
+ * repository already has, on every relaunch, forever. The two hooks share the
+ * query key, so the gate costs one database read between them rather than two.
+ *
+ * **Nothing awaits the write.** `noteLogDuration` returns void by design: the
+ * commits below are already correct and a graph would not change them, only
+ * make the *next* log cheaper. See its docblock.
+ */
 export function useLog(
   repoPath: string | null,
   params: LogParams = {},
 ): UseQueryResult<Commit[], GitQueryError> {
+  const tuning = useTuning(repoPath);
+
   return useQuery({
     queryKey: gitKeys.log(repoPath ?? '', params),
     // The service streams internally; the promise resolves with everything.
     // Progressive rendering uses `onBatch` directly rather than this hook.
-    queryFn: async ({ signal }) =>
-      unwrap(await commitService(repoPath ?? '').list({ ...params, signal })),
-    enabled: enabled(repoPath),
+    queryFn: async ({ signal }) => {
+      const started = performance.now();
+      const value = unwrap(await commitService(repoPath ?? '').list({ ...params, signal }));
+
+      noteLogDuration(repoPath ?? '', performance.now() - started);
+      return value;
+    },
+    enabled: enabled(repoPath) && tuning.isSuccess,
   });
 }
 

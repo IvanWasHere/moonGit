@@ -1186,9 +1186,33 @@ Four things about the generator are deliberate and were not obvious:
 
 The stopwatch is `frontend/bench/git.bench.test.ts`, run with `npm run bench`. It **imports the argument vectors from the source the app uses** rather than restating them — `STATUS_ARGS`, `LOG_BASE_ARGS`, `refArgs`, and `LS_FILES_ARGS`, the last two exported for the purpose. A benchmark holding a copy of a command stops measuring the product the first time somebody edits a flag. It is double-gated (`MOONGIT_BENCH=1` *and* the repositories existing) so `npm test` never grows a four-minute tail.
 
-### ◐ Phase 7.1 — the commit-graph, which is not in the list above
+### ✅ Phase 7.1 — the commit-graph, which is not in the list above
 
-**Measured and written, but not yet triggered on the axis it matters most for.** `configureRepository` writes the commit-graph, and the only thing that calls it is a slow *status* (Phase 7.2). A repository with a million commits and few files — `big-history` exactly — answers status quickly and would never be given one, so the 25× below never fires for it. The history axis needs its own trigger, and it belongs with the paging work rather than bolted onto the status path. Listed under "Still open" below.
+~~**Measured and written, but not yet triggered on the axis it matters most for.**~~ **Triggered as of 2026-08-16.** The entry below used to end by saying the graph was written, measured at 25×, and reachable only from a slow *status* — so `big-history`, a million commits answering status instantly, was the one repository that would never be given one. That gap is closed, and closing it turned out to be a smaller change than the "belongs with the paging work" note predicted; it did not need paging at all.
+
+**The fix was to split a function, not to add a trigger to it.** `configureRepository` did the file axis and the history axis in one body, which is why one measurement had to stand for both. It is now `configureForStatus` (fsmonitor, untracked cache, `update-index`) and `configureForHistory` (`commit-graph write --reachable`, `fetch.writeCommitGraph`), each called from its own measurement: `noteStatusDuration` as before, and a new `noteLogDuration` timing `useLog` the way `useStatus` was already timed. `Tuning` gains a `graphed` flag beside `configured`, and `loadTuning` now spreads over the defaults so rows written before the field existed read as "not yet" rather than as `undefined`.
+
+**"Big" is two properties, and the split is the point.** `big-history` is 256 files; an fsmonitor daemon and a modified index format buy it nothing. `big-files` is one commit; a graph is equally beside the point. Configuring both axes from either measurement would have been the same mistake in the other direction — and note that the *old* behaviour did exactly that, writing a graph for any repository with a slow status. Three consequences worth stating:
+
+- **`forcedAll` is not consulted on the history axis.** It is a statement about untracked files. Reading it as "leave this repository untuned generally" would punish someone who asked to keep seeing their new folders' contents with a Journal that stays 25× slower — two unrelated things joined by nothing but sharing a record.
+- **Nothing waits for the write.** `noteLogDuration` returns void. A degraded status changes the command the *next* status runs, so its caller has something to invalidate; a commit-graph changes nothing about the commits already parsed and in hand. Awaiting it would hold the Journal on "Reading history…" for the thirteen seconds the write takes, to deliver rows that were ready before it started.
+- **One write, however many slow logs.** The Journal re-runs its log on every keystroke in the search box, each one slow while the graph is still missing, each one returning long before the write it would start has finished. An in-flight guard makes a typed word one write instead of a word's worth of concurrent `commit-graph write` processes against one object store. The status path never needed this — a status is one query, awaited inside itself.
+
+**Verified end to end, from a cold repository through the real app.** Not a benchmark this time: `big-history` was reset to no graph, added to the app's own SQLite, and the app launched so it would restore into that repository. Nothing was clicked. **A 57MB commit-graph appeared 25 seconds after launch** — build, restore, one slow log, trigger, write.
+
+The measured payoff on this machine, against the app's exact query (`--decorate=full`, the full field format, `--max-count=200 --topo-order`), best of three against the graph *the app itself wrote*:
+
+| | cold | after the app configured it |
+|---|---|---|
+| page 1 | 3990ms | **40ms** |
+| `--skip=500000` | — | 270ms |
+| `--topo-order --all` (search, `logAll`) | — | 680ms |
+
+Faster than the 275ms recorded below, which is a warmer OS cache rather than a better graph — the ratio is the durable part, and it is not smaller than the 25× first measured. The write itself took 7.5s.
+
+**And the split is visible in the result, which is the part worth checking.** The seed script deliberately writes `core.fsmonitor=false` and `core.untrackedCache=false` so a bench repository starts cold. After the app had configured itself, both were still `false` and the only line it had added was `[fetch] writeCommitGraph = true`. A slow log configured the history axis and nothing else — on a repository where the old single-function behaviour would have started an fsmonitor daemon over 256 files.
+
+Covered by `tuningTrigger.test.ts`, which asserts the wiring rather than the rule: which git commands come out of which measurement, that the flag is persisted only *after* the write (so an interrupted write is retried rather than made permanent), and — in both directions — that neither axis configures the other.
 
 **The baseline finding, and the one that reordered the phase.** Against `big-history`, with the Journal's own query:
 
@@ -1257,8 +1281,8 @@ Three of the five bullets shrank or disappeared, which is worth as much as the t
 
 ### Still open in this phase
 
-- **A trigger for the commit-graph on the history axis.** The 25× is measured and `configureRepository` knows how to write one, but only a slow status calls it — see Phase 7.1 above. The natural trigger is the same shape as the status one: time the first `log` and configure the repository when it is slow. This is the highest-value item left in the phase.
-- **Cursor-paged, virtualized history.** `@tanstack/react-virtual` is a dependency and imported nowhere; `JournalView` still caps at 200 with a comment saying so. Now unblocked, and cheaper than planned — `--skip` is viable and no Worker is needed.
+- ~~**A trigger for the commit-graph on the history axis.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.1 above. It was the shape the entry predicted (time the log, configure when slow) but reached by splitting `configureRepository` in two rather than by adding a caller to it.
+- **Cursor-paged, virtualized history.** `@tanstack/react-virtual` is a dependency and imported nowhere; `JournalView` still caps at 200 with a comment saying so. Now unblocked, and cheaper than planned — `--skip` is viable and no Worker is needed. **Now the highest-value item left in the phase**, and the graph trigger is what makes it worth doing: paging into a history that walks it all per page would have been paging over a 4-second query.
 - **The streaming audit.** `CommitService` is still the only service that streams. Two measured payloads argue it should not be: `ls-files` returns **11.9MB in a single buffered string** (2191ms) for quick open's corpus, and an unbounded `log` is **219MB**. The second is already streamed; the first is not.
 - **Rerender hardening.** Untouched.
 - **The Ignored chip against a genuinely large repository** — carried over from §9's Phase 6.12 entry, which deferred it here. `status --ignored` on `big-files` is 4407ms, so the pause that entry warns about is real and now has a number.
@@ -1306,12 +1330,12 @@ Phase 8  Quality & release     4d
 
 Phases 2 and 4 are independent and can run in parallel (parsers need no UI; the port runs on fixtures).
 
-**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), status at 500k files (7.2), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
+**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
 
-1. A commit-graph trigger on the history axis (7.1 — measured at 25×, written, not yet triggered)
-2. Cursor-paged, virtualized history
-3. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
-4. Rerender hardening
+1. Cursor-paged, virtualized history — now unblocked in both senses, since the graph trigger is what makes a deep page cheap
+2. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
+3. Rerender hardening
+4. The Ignored chip against a genuinely large repository
 
 The estimate has not been revised. Four of the eight items in §10 turned out to be cheaper or void and two turned out to be worth far more than the plan implied, which roughly cancels; the honest position is that the week was never measured either.
 

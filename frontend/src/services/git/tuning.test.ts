@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { nextTuning, SLOW_STATUS_MS, type Tuning } from './tuning';
+import { nextGraphTuning, nextTuning, SLOW_LOG_MS, SLOW_STATUS_MS, type Tuning } from './tuning';
 import { statusArgs, STATUS_ARGS } from './parsers';
 
-const fresh: Tuning = { untracked: 'all', configured: false, forcedAll: false };
-const degraded: Tuning = { untracked: 'normal', configured: true, forcedAll: false };
+const fresh: Tuning = { untracked: 'all', configured: false, graphed: false, forcedAll: false };
+const degraded: Tuning = {
+  untracked: 'normal',
+  configured: true,
+  graphed: false,
+  forcedAll: false,
+};
 
 describe('statusArgs', () => {
   it('spells both untracked modes', () => {
@@ -44,6 +49,7 @@ describe('nextTuning', () => {
     expect(nextTuning(fresh, SLOW_STATUS_MS)).toEqual<Tuning>({
       untracked: 'normal',
       configured: true,
+      graphed: false,
       forcedAll: false,
     });
   });
@@ -83,12 +89,78 @@ describe('nextTuning', () => {
     expect(nextTuning({ ...fresh, configured: true }, 5000)).toEqual<Tuning>({
       untracked: 'normal',
       configured: true,
+      graphed: false,
       forcedAll: false,
     });
   });
 
   it('never overrides the user asking for all back', () => {
-    const forced: Tuning = { untracked: 'all', configured: true, forcedAll: true };
+    const forced: Tuning = {
+      untracked: 'all',
+      configured: true,
+      graphed: false,
+      forcedAll: true,
+    };
     expect(nextTuning(forced, 60_000)).toBeNull();
+  });
+});
+
+describe('nextGraphTuning', () => {
+  it('leaves a fast history alone', () => {
+    expect(nextGraphTuning(fresh, 99)).toBeNull();
+    expect(nextGraphTuning(fresh, SLOW_LOG_MS - 1)).toBeNull();
+  });
+
+  it('writes a graph for a slow one', () => {
+    expect(nextGraphTuning(fresh, SLOW_LOG_MS)).toEqual<Tuning>({ ...fresh, graphed: true });
+  });
+
+  /*
+   * The measured case, from `big-history` (PLAN.md §10, 7.1). 6893ms is the
+   * ungraphed first page of `log --topo-order`; 275ms is the same query once a
+   * graph exists, and is what must *not* trigger a second write.
+   */
+  it('triggers at the duration the bench repository actually produced', () => {
+    expect(nextGraphTuning(fresh, 6893)).not.toBeNull();
+    expect(nextGraphTuning({ ...fresh, graphed: true }, 275)).toBeNull();
+  });
+
+  /*
+   * The Journal re-runs its log on every search keystroke, each one slow until
+   * the graph lands. A rule that kept returning a change would queue a
+   * 13-second `commit-graph write` per character typed.
+   */
+  it('is idempotent — the second slow log changes nothing', () => {
+    const first = nextGraphTuning(fresh, 6893);
+    expect(first).not.toBeNull();
+    expect(nextGraphTuning(first as Tuning, 6893)).toBeNull();
+  });
+
+  /*
+   * `forcedAll` is a statement about untracked files. Reading it as "leave this
+   * repository untuned in general" would punish someone who asked to keep
+   * seeing their new folders' contents with a Journal that stays 25× slower —
+   * two unrelated things joined by nothing but living in the same record.
+   */
+  it('ignores the untracked-files override, which is about a different axis', () => {
+    expect(nextGraphTuning({ ...fresh, forcedAll: true }, 6893)).not.toBeNull();
+  });
+
+  /*
+   * The whole point of splitting the trigger. `big-history` answers status
+   * instantly and `big-files` answers log instantly, so each rule has to leave
+   * the other's fields alone — otherwise one measurement configures an axis it
+   * never measured, which is the bug this pair of functions exists to fix.
+   */
+  it('is independent of the status rule in both directions', () => {
+    // A slow log must not degrade untracked mode: `big-history` has 256 files.
+    const graphed = nextGraphTuning(fresh, 6893) as Tuning;
+    expect(graphed.untracked).toBe('all');
+    expect(graphed.configured).toBe(false);
+
+    // A slow status must not claim a graph: `big-files` has one commit, and
+    // marking it graphed would suppress the write if history ever grew.
+    const slow = nextTuning(fresh, 4442) as Tuning;
+    expect(slow.graphed).toBe(false);
   });
 });
