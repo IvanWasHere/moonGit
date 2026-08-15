@@ -19,7 +19,14 @@ import styles from './Search.module.css';
  */
 const DEBOUNCE_MS = 250;
 
-export function SearchBar({ matched }: { readonly matched?: number }) {
+export function SearchBar({
+  matched,
+  hasMore,
+}: {
+  readonly matched?: number;
+  /** Whether more results remain unfetched, which makes `matched` a floor. */
+  readonly hasMore?: boolean;
+}) {
   const logQuery = useWorkspaceStore((state) => state.logQuery);
   const setLogQuery = useWorkspaceStore((state) => state.setLogQuery);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -80,7 +87,16 @@ export function SearchBar({ matched }: { readonly matched?: number }) {
         />
         {!query.isEmpty && matched !== undefined && (
           <span className={styles.count}>
-            {matched} match{matched === 1 ? '' : 'es'}
+            {matched}
+            {/*
+             * The Journal pages, so `matched` is how many results have been
+             * loaded and not how many exist. Counting the rest means a second
+             * full walk of the history to answer a question nobody asked, so
+             * the number says what it knows and the plus says there is more —
+             * which is also what stops "200 matches" turning into "400
+             * matches" under the reader as they scroll, with no explanation.
+             */}
+            {hasMore === true && '+'} match{matched === 1 && hasMore !== true ? '' : 'es'}
           </span>
         )}
         <button

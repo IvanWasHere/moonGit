@@ -100,6 +100,18 @@
   line-height: 17px;
 }
 
+/* The next page arriving. Sits under the last row, in the flow rather than in
+   the virtualizer's spacer, so it does not need an offset of its own. */
+.pageLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .footer {
   display: flex;
   align-items: center;

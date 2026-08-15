@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { PanelBody } from '@/components/Panel';
-import { useLog } from '@/queries/git';
+import { useLogPages } from '@/queries/git';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { timeAgo } from '@/utils/format';
 import { ContextMenu, ContextMenuItem, ContextMenuSeparator } from '@/components/ContextMenu';
@@ -36,11 +36,26 @@ import styles from './History.module.css';
  *   the only scrolling element in a panel, which is what keeps the header
  *   pinned; a second scroller nested inside it would scroll the header away.
  *
- * The cap stays for now at the same 200 — this change is the rendering half,
- * and `--skip` paging is the data half still to come. What has changed is that
- * the cap is no longer *load-bearing*: raising it now costs DOM nothing.
+ * **Paged, not capped.** 200 commits is now a page rather than a ceiling;
+ * scrolling toward the end fetches the next one with `--skip`. That is viable
+ * only because of the commit-graph (PLAN.md §10, 7.1) — without generation
+ * numbers every page re-walks the entire history, so page 500 costs what page
+ * 1 costs and paging buys nothing but latency.
  */
 const PAGE_SIZE = 200;
+
+/**
+ * How close to the end of the loaded rows the window gets before the next page
+ * is requested.
+ *
+ * Half a screenful or so. Large enough that the fetch is usually finished
+ * before the user reaches the bottom, and small enough that idly scrolling a
+ * few rows does not pull a page nobody was going to read. It is deliberately
+ * expressed in rows rather than pixels: rows are what the virtualizer counts,
+ * and a pixel threshold would mean something different for a Journal full of
+ * tagged commits than for one without.
+ */
+const PREFETCH_ROWS = 25;
 
 /**
  * Rows rendered beyond the viewport, above and below.
@@ -73,10 +88,13 @@ export function JournalView() {
   const paths = [...(logPath === null ? [] : [logPath]), ...(search.paths ?? [])];
 
   const {
-    data: commits,
+    data,
     isPending,
     error,
-  } = useLog(repoPath, {
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useLogPages(repoPath, {
     maxCount: PAGE_SIZE,
     // Topological, so a branch's commits stay together and the graph's lanes
     // do not zig-zag between branches that happen to interleave by date.
@@ -88,6 +106,18 @@ export function JournalView() {
     ...search,
     ...(paths.length > 0 && { paths }),
   });
+
+  /*
+   * Every page so far, as one list.
+   *
+   * Flattened here rather than in the hook because the graph, the virtualizer
+   * and the row renderer all want a single contiguous walk — page boundaries
+   * are an artefact of how the commits were fetched and mean nothing to any of
+   * them. Lane assignment in particular would be wrong if it restarted per
+   * page: a branch open across a boundary would be given a new lane on the
+   * other side of it.
+   */
+  const commits = useMemo(() => data?.pages.flat(), [data]);
 
   /*
    * Lane assignment is cheap for a page of commits — a few hundred rows of an
@@ -175,6 +205,27 @@ export function JournalView() {
     if (scrollRef.current !== null) scrollRef.current.scrollTop = 0;
   }, [listIdentity]);
 
+  /*
+   * Fetch the next page once the rendered window comes within `PREFETCH_ROWS`
+   * of the end of what is loaded.
+   *
+   * Driven off the last *virtual* row rather than a sentinel element at the
+   * bottom of the list, because in a virtualized list there is no such
+   * element — the end of the history is not in the DOM until you are already
+   * looking at it, so an intersection observer would fire only once the user
+   * had hit the bottom and was already waiting.
+   *
+   * `fetchNextPage` is safe to call repeatedly — React Query drops the call
+   * while one is in flight — so the `isFetchingNextPage` guard is about not
+   * re-running this on every scroll frame rather than about correctness.
+   */
+  const virtualRows = virtualizer.getVirtualItems();
+  const lastVisible = virtualRows[virtualRows.length - 1]?.index ?? 0;
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    if (lastVisible >= rows.length - PREFETCH_ROWS) void fetchNextPage();
+  }, [lastVisible, rows.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
   if (repoPath === null) {
     return (
       <PanelBody>
@@ -220,7 +271,7 @@ export function JournalView() {
       </div>
     );
 
-  if (commits.length === 0) {
+  if (rows.length === 0) {
     return (
       <>
         <SearchBar matched={0} />
@@ -234,7 +285,7 @@ export function JournalView() {
 
   return (
     <>
-      <SearchBar matched={commits.length} />
+      <SearchBar matched={rows.length} hasMore={hasNextPage} />
       <PanelBody ref={scrollRef}>
         {banner}
         {/*
@@ -294,6 +345,21 @@ export function JournalView() {
             );
           })}
         </div>
+        {/*
+         * Below the spacer, not inside it: the virtualizer owns every offset in
+         * there, and an extra child would be positioned at zero and land on top
+         * of the first commit.
+         *
+         * Shown only while a page is actually in flight. A permanent "scroll
+         * for more" would be on screen for the entire life of a large
+         * repository and would say nothing, since scrolling is how lists work.
+         */}
+        {isFetchingNextPage && (
+          <div className={styles.pageLoading}>
+            <Icons.Sync size={11} />
+            Loading more commits…
+          </div>
+        )}
         {menu !== null && (
           <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
             {commitMenuFor(menu.commit).map((entry, index) =>

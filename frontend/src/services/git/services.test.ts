@@ -165,6 +165,26 @@ describe('CommitService', () => {
     expect(bridge.requests[0]?.args).toContain('--decorate=full');
   });
 
+  it('pages with --skip', async () => {
+    const { runner, bridge } = runnerFor(LOG_HISTORY);
+    await new CommitService(runner).list({ maxCount: 200, skip: 400 });
+
+    expect(bridge.requests[0]?.args).toContain('--skip=400');
+  });
+
+  /*
+   * `--skip=0` and no `--skip` mean the same thing to git, and the first page
+   * is by far the most common request in the app. Emitting the flag anyway
+   * would make every fixture and Go test captured against the first page
+   * disagree with what the app actually runs, for no behaviour change.
+   */
+  it('leaves the first page unadorned', async () => {
+    const { runner, bridge } = runnerFor(LOG_HISTORY);
+    await new CommitService(runner).list({ maxCount: 200, skip: 0 });
+
+    expect(bridge.requests[0]?.args.some((arg) => arg.startsWith('--skip'))).toBe(false);
+  });
+
   it('reports batches as they arrive, before resolving', async () => {
     const { runner } = runnerFor(LOG_HISTORY);
     const batches: number[] = [];

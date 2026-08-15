@@ -1158,7 +1158,7 @@ Two consequences to accept rather than engineer away:
 
 Targets are 500k files / 1M commits. Concretely:
 
-1. **History**: cursor-paged `git log --skip/--max-count` (or `--since` windows), TanStack Virtual, ~200-commit pages, ~~graph lanes computed incrementally in the Worker~~ — **the Worker is withdrawn, measured at 39ms for 20,000 commits** (below)
+1. ~~**History**: cursor-paged `git log --skip/--max-count` (or `--since` windows), TanStack Virtual, ~200-commit pages,~~ ✅ **built in 7.3 and 7.4** — `--skip`, 200-commit pages, TanStack Virtual; ~~graph lanes computed incrementally in the Worker~~ — **the Worker is withdrawn, measured at 39ms for 20,000 commits** (below)
 2. ~~**Status at 500k files**: enable `core.fsmonitor` + `core.untrackedCache` on open, and don't call `--untracked-files=all` on huge repos — degrade to `normal` above a file-count threshold~~ ✅ (below) — built, but not as written: the two mitigations turned out to be one, and the threshold is a duration rather than a file count
 3. **Streaming**: everything large goes through `RunStream`, parsed incrementally, never a single giant string
 4. **Rerenders**: `React.memo` + granular Zustand selectors; assert render counts in tests for the big lists
@@ -1279,7 +1279,31 @@ Three of the five bullets shrank or disappeared, which is worth as much as the t
 - **The Monaco bullet is void.** Monaco was never adopted (§14.4); Shiki won for the diff and is already lazy per-language, and the merge tool was built without an embedded editor. xterm has been a lazy 333 KB chunk since Phase 6.9. There is nothing left in this item.
 - **The parsers are not the bottleneck and never were.** `parseStatus` over 1.6MB of porcelain: 21ms. `parseRefs` over 1,772 refs: 3ms. `parseLog` over a page: below resolution. Every one of them is one to three orders of magnitude cheaper than the git command that produced its input. The phase's remaining effort belongs on what git is asked and how the payload crosses the bridge, not on how it is parsed.
 
-### ◐ Phase 7.3 — the Journal, virtualized
+### ✅ Phase 7.4 — the Journal, paged
+
+The data half. 200 commits is now a page rather than a ceiling: scrolling toward the end of the loaded rows fetches the next one with `--skip`, and `JournalView` no longer caps anything.
+
+**Four decisions, none of them the obvious default:**
+
+- **The cursor is an offset, not a commit.** `--skip=n` re-walks from the tip every time, which sounds wasteful and is what the measurements endorse — with a commit-graph, page 2,500 costs 270ms, because the walk stopped being the expensive part the moment generation numbers existed. Resuming from the previous page's last commit cannot express `--topo-order`'s ordering as a revision range without re-deriving the frontier, which is more machinery for something already fast.
+- **The offset counts commits received, not pages requested.** `pages.length × pageSize` is the same number while every page is full and diverges the moment one is not — and then it skips exactly the commits the short page failed to return. `nextLogPageParam` is a pure function in `queries/logPaging.ts` with that case asserted, for the same reason `nextTuning` is one: an off-by-one here repeats a commit at every boundary, and a wrong end condition either truncates the history or fetches empty pages forever.
+- **A short page means the end.** The alternative is `rev-list --count`, which is a second full walk of the history to learn a number the last page reveals for free — the exact unbounded walk this phase exists to remove. The cost is one wasted round trip when a history divides exactly into pages.
+- **`useLog` stays.** The other four callers — `MergeWizard` twice, `RebaseWizard`, `CommitMessagesView` — want a bounded preview of a range and would be worse for being able to scroll further into it. Only the Journal is a window onto a whole history, so only the Journal got `useLogPages`.
+
+**One thing paging broke, and the fix.** The search bar's "N matches" silently became "N loaded so far", growing as the reader scrolled with no explanation. It now reads **"200+ matches"** while pages remain. Counting the rest properly would be that same second full walk.
+
+**Measured against `big-history` through the running app**, driving the real scroll and watching the DOM:
+
+| | |
+|---|---|
+| pages fetched by scrolling | 31 (~8,000 commits) |
+| rows in the DOM, ever | **30** |
+| page fetch, median | **83ms** (slowest 427ms) |
+| gap between adjacent rows, at depth | 0.0000px |
+
+**Verified against git itself, not just for smoothness.** At the page-1/page-2 boundary the app showed `7b353d0101` then `56e37742d0`; `git log --topo-order --skip=199` and `--skip=200` give exactly those, and a single uninterrupted 202-commit walk ends with the same three oids as indices 199–201. No duplicated commit at the seam, none missed — `--skip` paging reproduces one continuous walk. Row indices stayed contiguous and no oid appeared twice.
+
+### ✅ Phase 7.3 — the Journal, virtualized
 
 The rendering half of "cursor-paged, virtualized history". `@tanstack/react-virtual` had been a dependency imported nowhere since Phase 6; `JournalView` now renders only the rows in view plus twelve either side, so the DOM holds a screenful however long the history is.
 
@@ -1306,7 +1330,7 @@ Verified after both fixes with the rows measured directly in the page: heights e
 ### Still open in this phase
 
 - ~~**A trigger for the commit-graph on the history axis.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.1 above. It was the shape the entry predicted (time the log, configure when slow) but reached by splitting `configureRepository` in two rather than by adding a caller to it.
-- **Cursor-paged, virtualized history** — ◐ **the virtualized half is built** (below); `--skip` paging is what remains.
+- ~~**Cursor-paged, virtualized history**~~ ✅ **both halves built and verified 2026-08-16** — virtualized in 7.3, paged in 7.4, both above.
 - **The streaming audit.** `CommitService` is still the only service that streams. Two measured payloads argue it should not be: `ls-files` returns **11.9MB in a single buffered string** (2191ms) for quick open's corpus, and an unbounded `log` is **219MB**. The second is already streamed; the first is not.
 - **The Files panel, virtualized.** `FileList` renders every entry — 500,000 rows on `big-files`. Discovered while building 7.3 and left alone deliberately; doing it now gives the shared list component two real callers instead of one guessed-at abstraction.
 - **Rerender hardening.** Untouched.
@@ -1355,13 +1379,12 @@ Phase 8  Quality & release     4d
 
 Phases 2 and 4 are independent and can run in parallel (parsers need no UI; the port runs on fixtures).
 
-**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
+**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), its paging (7.4), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
 
-1. `--skip` paging for the Journal — the data half of 7.3, whose rendering half is built
-2. The Files panel, virtualized — `FileList` renders all 500k rows today
-3. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
-4. Rerender hardening
-5. The Ignored chip against a genuinely large repository
+1. The Files panel, virtualized — `FileList` renders all 500k rows today
+2. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
+3. Rerender hardening
+4. The Ignored chip against a genuinely large repository
 
 The estimate has not been revised. Four of the eight items in §10 turned out to be cheaper or void and two turned out to be worth far more than the plan implied, which roughly cancels; the honest position is that the week was never measured either.
 

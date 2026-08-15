@@ -46,8 +46,24 @@ function commitAt(index: number): Commit {
 
 const commits = Array.from({ length: COMMIT_COUNT }, (_unused, index) => commitAt(index));
 
+/**
+ * One page of everything, and no next page.
+ *
+ * The paging itself is not what these tests are about — they exist to prove
+ * the list renders a window rather than all of it, and that claim is the same
+ * whether the rows arrived in one fetch or ten. Handing over the whole 2,000
+ * up front keeps the fixture about virtualization.
+ */
+const fetchNextPage = vi.fn();
 vi.mock('@/queries/git', () => ({
-  useLog: () => ({ data: commits, isPending: false, error: null }),
+  useLogPages: () => ({
+    data: { pages: [commits], pageParams: [0] },
+    isPending: false,
+    error: null,
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage,
+  }),
 }));
 vi.mock('./useCommitMenuActions', () => ({ useCommitMenuActions: () => vi.fn() }));
 

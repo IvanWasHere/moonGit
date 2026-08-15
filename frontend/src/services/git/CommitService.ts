@@ -50,6 +50,17 @@ export interface CommitSearchParams {
 export interface LogOptions extends ReadOptions, CommitSearchParams {
   /** Commits to stop after. Omit only when the history is known to be small. */
   readonly maxCount?: number;
+  /**
+   * Commits to pass over before emitting any — the Journal's page cursor.
+   *
+   * Viable only because of the commit-graph (PLAN.md §10, 7.1). Without
+   * generation numbers `--topo-order` walks the entire history before it can
+   * emit anything, so page 1 and page 500 cost the same six-and-a-half
+   * seconds; with a graph, `--skip=500000` is 270ms. The paging design §10
+   * left open as "`--skip/--max-count` (or `--since` windows)" resolves to the
+   * former, and the windowing fallback is not needed.
+   */
+  readonly skip?: number;
   /** Revision range, e.g. `['main']` or `['origin/main..HEAD']`. Defaults to HEAD. */
   readonly revisions?: readonly string[];
   /** Follow only the first parent, which flattens merge bubbles. */
@@ -68,6 +79,9 @@ export interface LogOptions extends ReadOptions, CommitSearchParams {
 function logArgs(options: LogOptions): string[] {
   const args = [...LOG_BASE_ARGS];
   if (options.maxCount !== undefined) args.push(`--max-count=${options.maxCount}`);
+  // Before `--max-count` in the argument list purely for readability; git
+  // applies `--skip` first regardless of the order the two are written in.
+  if (options.skip !== undefined && options.skip > 0) args.push(`--skip=${options.skip}`);
   if (options.firstParent === true) args.push('--first-parent');
   // Keeps a branch's commits together instead of interleaving them by date,
   // which is what stops the graph's lanes zig-zagging. `git log --graph`

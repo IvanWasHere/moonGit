@@ -1,4 +1,11 @@
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import {
   blameService,
   branchService,
@@ -34,6 +41,7 @@ import {
 import { readIgnoreFile, type IgnoreFileId } from '@/services/ignoreFiles';
 import { listDir, type FileInfo } from '@/services/wails';
 import { gitKeys } from './keys';
+import { nextLogPageParam } from './logPaging';
 
 /**
  * React Query bindings for the git services.
@@ -206,6 +214,55 @@ export function useLog(
       noteLogDuration(repoPath ?? '', performance.now() - started);
       return value;
     },
+    enabled: enabled(repoPath) && tuning.isSuccess,
+  });
+}
+
+/**
+ * The Journal's paged history.
+ *
+ * Separate from `useLog` rather than replacing it: the other four callers
+ * (`MergeWizard` twice, `RebaseWizard`, `CommitMessagesView`) all want a
+ * bounded preview of a range and would be actively worse for being able to
+ * scroll further into it. Only the Journal is a window onto the whole history.
+ *
+ * **The cursor is an offset, not a commit.** `--skip=n` re-walks from the tip
+ * each time, which sounds wasteful and is what the measurements endorse: with
+ * a commit-graph in place, page 2,500 costs 270ms — the walk is not the
+ * expensive part once generation numbers exist. The alternative, resuming from
+ * the last commit of the previous page, cannot express `--topo-order`'s
+ * ordering as a revision range without re-deriving the frontier, which is more
+ * machinery for something already fast enough.
+ *
+ * **A page can disagree with the one before it.** Commits arriving between two
+ * fetches shift every subsequent offset, so a row can repeat or be missed at a
+ * page boundary. That is inherent to offset paging, and the invalidation that
+ * follows any mutation resets the whole list — so the window in which it can
+ * happen is a background fetch landing mid-scroll, and the cost is one
+ * duplicated row rather than anything incorrect.
+ */
+export function useLogPages(
+  repoPath: string | null,
+  params: LogParams = {},
+): UseInfiniteQueryResult<InfiniteData<Commit[]>, GitQueryError> {
+  const tuning = useTuning(repoPath);
+
+  return useInfiniteQuery({
+    queryKey: gitKeys.log(repoPath ?? '', params),
+    initialPageParam: 0,
+    queryFn: async ({ signal, pageParam }) => {
+      const started = performance.now();
+      const value = unwrap(
+        await commitService(repoPath ?? '').list({ ...params, skip: pageParam, signal }),
+      );
+
+      // Only the first page is a fair measurement of the history axis. A later
+      // one has already paid for whatever tuning the first page triggered, and
+      // timing it would just re-confirm the answer at the cost of noise.
+      if (pageParam === 0) noteLogDuration(repoPath ?? '', performance.now() - started);
+      return value;
+    },
+    getNextPageParam: (_lastPage, allPages) => nextLogPageParam(allPages, params.maxCount),
     enabled: enabled(repoPath) && tuning.isSuccess,
   });
 }
