@@ -10,12 +10,29 @@
 }
 
 /* Fills the row whatever height it turned out to be; the viewBox scales with
-   it, which is why the strokes are non-scaling and the node is not in here. */
+   it, which is why the strokes are non-scaling and the node is not in here.
+
+   The extra pixel covers `.entry`'s bottom border. That border is outside the
+   content box this column stretches to, so without the overhang every line
+   stops one pixel short and the separator runs straight through it — a graph
+   chopped into per-row segments rather than one continuous set of lanes. One
+   pixel is the border's own width; the two are the same number and have to
+   stay so.
+
+   It has to be spelled as a height. Anchoring the bottom edge instead
+   (`bottom: -1px` with no height) collapses the whole graph: an absolutely
+   positioned `<svg>` with `height: auto` takes its intrinsic default of 150px
+   rather than resolving a height from its offsets, so every row gets the same
+   oversized SVG. Do not "simplify" this back to an inset.
+
+   Extending the SVG and not `.graph` is deliberate: the node is positioned
+   against `.graph`, and growing that would nudge every node half a pixel off
+   the row it marks. */
 .lines {
   position: absolute;
   inset: 0;
   width: 100%;
-  height: 100%;
+  height: calc(100% + 1px);
   overflow: visible;
 }
 

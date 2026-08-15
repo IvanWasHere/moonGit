@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import styles from './Panel.module.css';
 
 /**
@@ -63,6 +63,23 @@ export function PanelAction({ title, onClick, children }: PanelActionProps) {
   );
 }
 
-export function PanelBody({ children }: { readonly children: ReactNode }) {
-  return <div className={styles.body}>{children}</div>;
+export interface PanelBodyProps {
+  readonly children: ReactNode;
+  /**
+   * The scrolling element itself, for a virtualized list to attach to.
+   *
+   * Exposed rather than left to callers to build their own scroll container,
+   * because `PanelBody` being the *only* scrolling element is what pins every
+   * panel header in the app. A pane that rolled its own would have two nested
+   * scrollers and a header that scrolled away with the content.
+   */
+  readonly ref?: Ref<HTMLDivElement>;
+}
+
+export function PanelBody({ children, ref }: PanelBodyProps) {
+  return (
+    <div className={styles.body} ref={ref}>
+      {children}
+    </div>
+  );
 }

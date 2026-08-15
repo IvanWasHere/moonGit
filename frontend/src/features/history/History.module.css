@@ -2,7 +2,23 @@
 
 /* A flex row so the graph column can sit beside the text. The vertical padding
    moved to `.entryBody`: with it here, the graph column would be inset at the
-   top and bottom of every row and its lines would not reach the next one. */
+   top and bottom of every row and its lines would not reach the next one.
+
+   **Every row must be a whole number of pixels tall.** The Journal is
+   virtualized, and the virtualizer measures with `offsetHeight` — an integer —
+   while positioning rows at the running total of those measurements. A row
+   that is really 72.8px tall gets recorded as 73, so the next one starts 0.2px
+   after this one ends and a transparent hairline appears under every row. In
+   the text column that is invisible; through the commit graph it slices a
+   vertical lane once per row, which is the difference between one continuous
+   line and a column of dashes. (It showed on a single branch and not on
+   `--all` for the same reason: a curve crosses the gap diagonally and hides
+   it, a vertical stroke cannot.)
+
+   Three rules below exist only to hold that invariant, and are marked. The
+   fractions they replace were `line-height: normal` and `1.4`, which resolve
+   against font metrics to things like 16.5px and 16.7969px. If you change the
+   type here, re-check that a row still lands on a whole pixel. */
 .entry {
   display: flex;
   align-items: stretch;
@@ -11,6 +27,25 @@
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background 0.1s;
+}
+
+/* The virtualized list's spacer: as tall as the whole history, holding a
+   screenful of absolutely-positioned rows. `position: relative` is what those
+   rows' offsets are relative to. */
+.viewport {
+  position: relative;
+  width: 100%;
+}
+
+/* Applied alongside `.entry`, not instead of it — the row keeps its flex
+   layout, borders and hover, and gains only its place in the spacer. The
+   vertical offset is an inline `translateY`, which the virtualizer recomputes
+   per row; only what is constant across rows belongs here. */
+.virtualRow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
 }
 
 .entryBody {
@@ -32,6 +67,9 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
+  /* Whole-pixel rule (see `.entry`): `line-height: normal` on the hash chip
+     resolved this row to 16.5px. */
+  height: 17px;
 }
 
 .hash {
@@ -57,7 +95,9 @@
 .message {
   font-size: 12px;
   color: var(--text-secondary);
-  line-height: 1.4;
+  /* Whole-pixel rule (see `.entry`): 1.4 × 12px is 16.8. 17px is the same
+     line to the eye and a whole one to the layout. */
+  line-height: 17px;
 }
 
 .footer {
@@ -84,6 +124,10 @@
 
 .ref {
   font-size: 9px;
+  /* Whole-pixel rule (see `.entry`): 12px plus the 2px of padding below makes
+     each chip 14px, so one line of refs — or three wrapped ones — stays
+     integral. */
+  line-height: 12px;
   padding: 1px 6px;
   border-radius: 3px;
   font-weight: 600;

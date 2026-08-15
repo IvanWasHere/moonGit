@@ -1279,11 +1279,36 @@ Three of the five bullets shrank or disappeared, which is worth as much as the t
 - **The Monaco bullet is void.** Monaco was never adopted (§14.4); Shiki won for the diff and is already lazy per-language, and the merge tool was built without an embedded editor. xterm has been a lazy 333 KB chunk since Phase 6.9. There is nothing left in this item.
 - **The parsers are not the bottleneck and never were.** `parseStatus` over 1.6MB of porcelain: 21ms. `parseRefs` over 1,772 refs: 3ms. `parseLog` over a page: below resolution. Every one of them is one to three orders of magnitude cheaper than the git command that produced its input. The phase's remaining effort belongs on what git is asked and how the payload crosses the bridge, not on how it is parsed.
 
+### ◐ Phase 7.3 — the Journal, virtualized
+
+The rendering half of "cursor-paged, virtualized history". `@tanstack/react-virtual` had been a dependency imported nowhere since Phase 6; `JournalView` now renders only the rows in view plus twelve either side, so the DOM holds a screenful however long the history is.
+
+**Rows are measured, not assumed, and that was not the cheap choice.** A fixed row height makes virtualization trivial — every offset is arithmetic and nothing needs measuring. It also means truncating ref decorations, and `CommitGraph` is explicitly built around *not* doing that: its SVG carries `preserveAspectRatio="none"` so the lines stretch to whatever height the row turned out to be, with the node drawn as CSS on top so it does not stretch into an ellipse. Fixing the row height would have quietly undone a decision Phase 6 made deliberately. So `estimateSize` is only a starting guess and every rendered row reports its real height back.
+
+**What the estimate is actually for.** Nothing on screen — those rows are measured. It governs the rows that are *not*: the scrollbar's length, and where a given offset lands. Wrong enough and the thumb resizes as you scroll, which is the characteristic tell of a virtualized list guessing. `rowHeight.ts` holds it as a pure function (53px, plus 18px for a commit carrying refs) with the derivation from `History.module.css` written down, because a number like that decays silently the first time somebody edits the stylesheet. It deliberately does **not** scale with the number of refs: labels wrap, so the true height needs the pane width and every ref's name, and under-estimating the rare heavily tagged commit beats over-estimating the common bare one — the common one is what a scrollbar is mostly made of.
+
+**Two smaller things the build turned up:**
+
+- **The scroll position needed resetting.** The virtualizer holds its offset across a count change, which is right for appending a page and wrong for a new search, a File Log filter, or a different repository — all of which replace the list outright. Narrowing a search from a scrolled position otherwise lands you somewhere arbitrary in the results, or past the end of them looking at nothing.
+- **`PanelBody` now takes a `ref`.** It is the only scrolling element in a panel, which is what pins every header in the app; the virtualizer had to attach to *it* rather than to a container of its own, or the Journal would have had two nested scrollers and a header that scrolled away with the content.
+
+**This is the codebase's first component test**, which Phase 8 lists as its own work but which this change could not honestly go in without. jsdom has no layout, so a virtualized list that silently renders everything looks identical to one that works — the same shape of failure as 7.1's trigger that was written but never fired. The test supplies the two things virtual-core reads (`offsetHeight`, a `ResizeObserver`) and asserts what a screenshot cannot: **24 rows in the DOM out of 2,000**, the window starting at the newest commit rather than the middle, the spacer sized for all 2,000 so the scrollbar is honest, and every row carrying a distinct offset — because absolutely positioned rows with the translate dropped would all stack on the first and still "render".
+
+**Two bugs that only a real browser found, both invisible to the test suite and to a screenshot.** Both were caught by driving the running app through `wails dev`'s browser endpoint and measuring `getBoundingClientRect` on the rendered rows — jsdom has no layout to be wrong, and at a glance a fifth of a pixel is nothing.
+
+1. **Rows must be a whole number of pixels tall.** The virtualizer measures with `offsetHeight`, an integer, and positions rows at the running total of those measurements. Rows were 72.797px — `line-height: 1.4` on a 12px subject is 16.8, and `normal` on the hash chip resolved to 16.5 — so each was recorded as 73 and the next one began 0.2px after the previous ended. A transparent hairline under every row. Invisible in the text column; through the graph it slices a vertical lane once per row, which is one continuous line versus a column of dashes. **It showed on a single branch and not on `--all` for the same reason:** a curve crosses the gap diagonally and hides it, a vertical stroke cannot. Fixed by pinning three line-heights so rows land on 55px and 74px exactly, marked as such in `History.module.css`. Measuring fractionally instead was tried first and is worse — the fractional rect and the settled row disagree by 2–3px, turning a hairline gap into an outright overlap.
+2. **The size cache must be keyed by commit, not by row number.** virtual-core keys measurements by index by default, and the index is not stable here: `--all`, a search, or a file filter replaces what sits at every position. A tall decorated commit at index 3 left its 74px behind for the 55px commit that replaced it, and the list laid out with **±19px gaps and overlaps** — exactly the difference between the two row heights — until each row happened to be re-measured. `getItemKey` now returns the oid, which is the right key for the same reason it is the React key: a commit's height is a property of the commit.
+
+Verified after both fixes with the rows measured directly in the page: heights exactly 55 and 74, and **the largest gap between any two adjacent rows is 0.0000px** — in the single-branch view, in `--all` with 38 graph segments on screen, scrolled deep, and scrolled back.
+
+**Found on the way, not fixed:** `features/working-tree/FileList.tsx` maps over its entries with no cap and no virtualization. On the 500k-file repository that is 500,000 DOM rows. It is the obvious second consumer of this work, but extracting a shared list component from one caller would be guessing at the abstraction — worth doing when it has two real users, which is now next door. Added to the list below.
+
 ### Still open in this phase
 
 - ~~**A trigger for the commit-graph on the history axis.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.1 above. It was the shape the entry predicted (time the log, configure when slow) but reached by splitting `configureRepository` in two rather than by adding a caller to it.
-- **Cursor-paged, virtualized history.** `@tanstack/react-virtual` is a dependency and imported nowhere; `JournalView` still caps at 200 with a comment saying so. Now unblocked, and cheaper than planned — `--skip` is viable and no Worker is needed. **Now the highest-value item left in the phase**, and the graph trigger is what makes it worth doing: paging into a history that walks it all per page would have been paging over a 4-second query.
+- **Cursor-paged, virtualized history** — ◐ **the virtualized half is built** (below); `--skip` paging is what remains.
 - **The streaming audit.** `CommitService` is still the only service that streams. Two measured payloads argue it should not be: `ls-files` returns **11.9MB in a single buffered string** (2191ms) for quick open's corpus, and an unbounded `log` is **219MB**. The second is already streamed; the first is not.
+- **The Files panel, virtualized.** `FileList` renders every entry — 500,000 rows on `big-files`. Discovered while building 7.3 and left alone deliberately; doing it now gives the shared list component two real callers instead of one guessed-at abstraction.
 - **Rerender hardening.** Untouched.
 - **The Ignored chip against a genuinely large repository** — carried over from §9's Phase 6.12 entry, which deferred it here. `status --ignored` on `big-files` is 4407ms, so the pause that entry warns about is real and now has a number.
 
@@ -1330,12 +1355,13 @@ Phase 8  Quality & release     4d
 
 Phases 2 and 4 are independent and can run in parallel (parsers need no UI; the port runs on fixtures).
 
-**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
+**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
 
-1. Cursor-paged, virtualized history — now unblocked in both senses, since the graph trigger is what makes a deep page cheap
-2. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
-3. Rerender hardening
-4. The Ignored chip against a genuinely large repository
+1. `--skip` paging for the Journal — the data half of 7.3, whose rendering half is built
+2. The Files panel, virtualized — `FileList` renders all 500k rows today
+3. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
+4. Rerender hardening
+5. The Ignored chip against a genuinely large repository
 
 The estimate has not been revised. Four of the eight items in §10 turned out to be cheaper or void and two turned out to be worth far more than the plan implied, which roughly cancels; the honest position is that the week was never measured either.
 
