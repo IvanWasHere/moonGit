@@ -1,14 +1,6 @@
 <div align="center">
 
-<!--
-  The icon goes here. Drop a square PNG at docs/icon.png and it appears
-  automatically — nothing else needs editing. Until then this renders as a
-  broken image, which is deliberate: an empty space is easy to forget about.
-
-  Note this is NOT the application icon. build/appicon.png is what the built
-  .app uses, and it is still the stock Wails logo. See docs/README.md.
--->
-<img src="docs/icon.png" alt="" width="128" height="128">
+<img src="build/appicon.png" alt="" width="128" height="128">
 
 # moonGit
 
