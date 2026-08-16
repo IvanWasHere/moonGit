@@ -83,16 +83,32 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
 
+      # The frontend goes first, and the order is load-bearing.
+      #
+      # `main.go` has `//go:embed all:frontend/dist`, so **every** Go command
+      # that compiles the root package — vet, test, the cross-compile check —
+      # fails on a clean checkout with "pattern all:frontend/dist: no matching
+      # files found". `frontend/dist` is a build artefact and gitignored, so a
+      # CI runner never has one until something builds it. This ran Go first
+      # and failed exactly there.
+      - name: Frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm run test
+          npm run build   # produces frontend/dist for the embed below
+
       # The full check the Makefile runs, before spending time on a build that
       # would ship a failing test.
-      - name: Test
+      - name: Go
         run: |
           go vet . ./internal/...
           # The Go side is kept compiling for Windows and Linux even though
           # neither is shipped (PLAN.md §11, 8.15).
           for os in windows linux; do GOOS=$os GOARCH=amd64 go build . ./internal/...; done
           go test . ./internal/...
-          cd frontend && npm ci && npm run lint && npm run typecheck && npm run test
 
       # Universal, not the runner's own architecture. Only affordable because
       # the project is CGO-free by decision (§1.2, modernc.org/sqlite).

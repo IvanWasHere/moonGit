@@ -1952,6 +1952,25 @@ Asked for ⌘A to select all in the file changes. The Files list had **single** 
 
 **Verified end to end on a throwaway repository**: five modified files, ⌘A, one press of Stage, and `git status` reported all five staged. Right-clicking inside a selection keeps it; right-clicking outside replaces it, so a context-menu action on one of five selected files does not silently narrow to one.
 
+
+### ✅ Phase 8.18 — the release workflow's first run, which failed
+
+```
+main.go:24:12: pattern all:frontend/dist: no matching files found
+```
+
+`main.go` carries `//go:embed all:frontend/dist`, so **every Go command that compiles the root package** — `go vet .`, `go test .`, the cross-compile check from 8.15 — needs that directory to exist. It is a build artefact and gitignored, so a fresh checkout never has one. The workflow ran Go before the frontend and died exactly there.
+
+**It passed locally for the worst possible reason: `frontend/dist` was sitting in the working tree from an earlier build.** 8.13 claimed every packaging step had been run locally before committing, and that was true — but the steps were run on a machine that had already built the app, which is the one condition CI never has. Reproduced properly by moving the directory aside, at which point `go vet` failed here too, with the same message.
+
+**`make check` had the same hole**, and worse: a fresh clone of this repository could not run it at all. The Makefile now has a `dist` target that builds the bundle when it is missing, and `lint`, `test-go` and `crosscheck` depend on it. The error it replaces names neither the cause nor the fix.
+
+**The workflow now runs the frontend first** — install, lint, typecheck, test, then `npm run build` to produce the embed target — and Go second. The two steps are named `Frontend` and `Go` rather than one `Test` step, so a future failure says which half.
+
+**Verified by cloning the repository to a fresh directory and running the CI sequence against it**, rather than against this working tree: `dist` absent, frontend step, then vet, both cross-builds and the Go tests, all green. That is the check 8.13 should have made.
+
+**The pattern, for the third time in this phase.** 8.11 was code that worked in the browser it was developed in and not in the WebKit it ships in. 8.16 was a menu that worked on the platform it was written on. This is a build that worked on the machine it was written on. Each time the environment doing the verifying was more forgiving than the environment doing the running.
+
 ---
 
 ## 12. Risk register
