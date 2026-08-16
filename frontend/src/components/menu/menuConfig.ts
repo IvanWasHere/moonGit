@@ -111,9 +111,14 @@ export const MENUS = [
     id: 'help',
     label: 'Help',
     items: [
+      /* No "Check for Updates" (PLAN.md §11, 8.9). Auto-update is cut — an
+         unsigned updater is an unverified download replacing the running app
+         (§11) — so the item could only ever report that there is no updater.
+         Removed rather than left saying so, on the same grounds as Git-flow
+         and Investigate (§14): a control that cannot do anything costs a click
+         to discover that. */
       { id: 'help.documentation', label: 'Documentation' },
       { id: 'help.whatsNew', label: "What's New" },
-      { id: 'help.checkForUpdates', label: 'Check for Updates' },
       { id: 'help.license', label: 'License', separatorBefore: true },
       { id: 'help.about', label: 'About' },
     ],

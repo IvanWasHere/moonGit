@@ -4,6 +4,7 @@ import { Icons } from '@/components/icons';
 import { Panel, PanelAction, PanelHeader } from '@/components/Panel';
 import { Resizer } from '@/components/Resizer';
 import { BranchList } from '@/features/branches/BranchList';
+import { useBranchActions } from '@/features/branches/useBranchActions';
 import { DiffPane } from '@/features/diff/DiffPane';
 import { useCopyDiff } from '@/features/diff/useCopyDiff';
 import { JournalView } from '@/features/history/JournalView';
@@ -11,6 +12,10 @@ import { RepoList } from '@/features/repositories/RepoList';
 import { CommitBox } from '@/features/working-tree/CommitBox';
 import { FilesPane } from '@/features/explorer/FilesPane';
 
+import { useQueryClient } from '@tanstack/react-query';
+import { gitKeys } from '@/queries/keys';
+import { useFetch, useStageAll } from '@/queries/mutations';
+import { useOpenRepository } from '@/queries/repositories';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import styles from './Layout.module.css';
@@ -41,6 +46,23 @@ export function MainView() {
   const setLogQuery = useWorkspaceStore((state) => state.setLogQuery);
   const panelFilters = useWorkspaceStore((state) => state.panelFilters);
   const togglePanelFilter = useWorkspaceStore((state) => state.togglePanelFilter);
+  const repoPath = useWorkspaceStore((state) => state.repoPath);
+
+  /*
+   * These four were toasts (PLAN.md §11, 8.8).
+   *
+   * Every one of them had a working implementation elsewhere in the app and
+   * called `showToast('…')` instead of it — "All files staged" was reported as
+   * a *success* while staging nothing, which is worse than a button that
+   * visibly does nothing.
+   */
+  const queryClient = useQueryClient();
+  const openRepository = useOpenRepository();
+  const stageAll = useStageAll(repoPath);
+  const fetch = useFetch(repoPath);
+  const branch = useBranchActions();
+  const collapseDirs = useWorkspaceStore((state) => state.collapseDirs);
+  const reportError = (error: Error) => showToast(error.message, 'error');
 
   return (
     <div className={styles.content} ref={containerRef}>
@@ -50,13 +72,16 @@ export function MainView() {
             title="Repositories"
             actions={
               <>
-                <PanelAction
-                  title="Add Repository"
-                  onClick={() => showToast('Add a repository', 'info')}
-                >
+                <PanelAction title="Add Repository" onClick={() => openRepository.mutate()}>
                   <Icons.Stage size={11} />
                 </PanelAction>
-                <PanelAction title="Refresh" onClick={() => showToast('Refreshing…', 'info')}>
+                <PanelAction
+                  title="Refresh"
+                  onClick={() => {
+                    if (repoPath === null) return;
+                    void queryClient.invalidateQueries({ queryKey: gitKeys.repo(repoPath) });
+                  }}
+                >
                   <Icons.Sync size={11} />
                 </PanelAction>
               </>
@@ -78,10 +103,7 @@ export function MainView() {
             title="Branches"
             actions={
               <>
-                <PanelAction
-                  title="New Branch"
-                  onClick={() => showToast('Create new branch', 'info')}
-                >
+                <PanelAction title="New Branch" onClick={branch.create}>
                   <Icons.Stage size={11} />
                 </PanelAction>
                 <PanelAction
@@ -95,7 +117,15 @@ export function MainView() {
                 </PanelAction>
                 <PanelAction
                   title="Fetch"
-                  onClick={() => showToast('Fetching from remote...', 'info')}
+                  onClick={() =>
+                    fetch.mutate(
+                      { prune: true },
+                      {
+                        onSuccess: () => showToast('Fetched and pruned', 'success'),
+                        onError: reportError,
+                      },
+                    )
+                  }
                 >
                   <Icons.Pull size={11} />
                 </PanelAction>
@@ -122,7 +152,12 @@ export function MainView() {
               <>
                 <PanelAction
                   title="Stage All"
-                  onClick={() => showToast('All files staged', 'success')}
+                  onClick={() =>
+                    stageAll.mutate(undefined, {
+                      onSuccess: () => showToast('Staged every change', 'success'),
+                      onError: reportError,
+                    })
+                  }
                 >
                   <Icons.Stage size={11} />
                 </PanelAction>
@@ -135,7 +170,7 @@ export function MainView() {
                     {...(panelFilters.files !== null && { color: 'var(--accent)' })}
                   />
                 </PanelAction>
-                <PanelAction title="Collapse All">
+                <PanelAction title="Collapse All" onClick={collapseDirs}>
                   <Icons.CollapseAll size={11} />
                 </PanelAction>
               </>

@@ -119,6 +119,21 @@ interface WorkspaceState {
    * so one field carries both rather than a boolean that can disagree with it.
    */
   readonly tagPromptOid: string | null;
+  /**
+   * The file the Blame view is open on, or null when it is closed.
+   *
+   * The path rather than a boolean, for the same reason as `tagPromptOid`
+   * above: an "open" flag beside a separate value can disagree with it, and
+   * "open, but on nothing" is not a state worth being able to represent.
+   */
+  readonly blamePath: string | null;
+  /** The commit a pending reset would move the branch to, or null when closed. */
+  readonly resetTarget: string | null;
+  readonly licenseOpen: boolean;
+  readonly cloneOpen: boolean;
+  /** The remote branch highlighted in the Review view's Origin Branch panel. */
+  readonly selectedRemoteBranch: string | null;
+  readonly compareOpen: boolean;
   /** Stash stack, modal over the workspace like the merge tools. */
   readonly stashOpen: boolean;
   /** The rebase wizard. The *stopped* state is read from git, not stored. */
@@ -227,6 +242,17 @@ interface WorkspaceState {
   closeMergeWizard: () => void;
   openTagPrompt: (oid: string) => void;
   closeTagPrompt: () => void;
+  openBlame: (path: string) => void;
+  closeBlame: () => void;
+  openReset: (oid: string) => void;
+  closeReset: () => void;
+  openLicense: () => void;
+  closeLicense: () => void;
+  openClone: () => void;
+  closeClone: () => void;
+  selectRemoteBranch: (name: string) => void;
+  openCompare: () => void;
+  closeCompare: () => void;
   openStash: () => void;
   closeStash: () => void;
   openRebaseWizard: () => void;
@@ -242,6 +268,8 @@ interface WorkspaceState {
   toggleStatusFilter: (id: StatusFilter) => void;
   setStatusFilters: (ids: readonly StatusFilter[]) => void;
   toggleDir: (path: string) => void;
+  /** Collapse every directory back to the root. */
+  collapseDirs: () => void;
   openQuickOpen: () => void;
   closeQuickOpen: () => void;
   openSettings: () => void;
@@ -268,6 +296,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   mergeOpen: false,
   mergeWizardOpen: false,
   tagPromptOid: null,
+  blamePath: null,
+  resetTarget: null,
+  licenseOpen: false,
+  cloneOpen: false,
+  selectedRemoteBranch: null,
+  compareOpen: false,
   stashOpen: false,
   rebaseWizardOpen: false,
   // Inline by default: it is the mockup's layout, and the Changes pane is
@@ -309,6 +343,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       mergeOpen: false,
       mergeWizardOpen: false,
       tagPromptOid: null,
+      blamePath: null,
+      resetTarget: null,
+      licenseOpen: false,
+      cloneOpen: false,
+      selectedRemoteBranch: null,
+      compareOpen: false,
       stashOpen: false,
       rebaseWizardOpen: false,
       logPath: null,
@@ -352,6 +392,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   openTagPrompt: (tagPromptOid) => set({ tagPromptOid }),
   closeTagPrompt: () => set({ tagPromptOid: null }),
+  openBlame: (blamePath) => set({ blamePath }),
+  closeBlame: () => set({ blamePath: null }),
+  openReset: (resetTarget) => set({ resetTarget }),
+  closeReset: () => set({ resetTarget: null }),
+  openLicense: () => set({ licenseOpen: true }),
+  closeLicense: () => set({ licenseOpen: false }),
+  openClone: () => set({ cloneOpen: true }),
+  closeClone: () => set({ cloneOpen: false }),
+  selectRemoteBranch: (selectedRemoteBranch) => set({ selectedRemoteBranch }),
+  openCompare: () => set({ compareOpen: true }),
+  closeCompare: () => set({ compareOpen: false }),
   openStash: () => set({ stashOpen: true }),
   closeStash: () => set({ stashOpen: false }),
   openRebaseWizard: () => set({ rebaseWizardOpen: true }),
@@ -385,6 +436,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         : [...state.statusFilters, id],
     })),
   setStatusFilters: (ids) => set({ statusFilters: [...ids] }),
+  // Back to ROOT_EXPANDED rather than an empty list: the root is what the tree
+  // renders *from*, so collapsing it too would empty the panel rather than
+  // collapse it.
+  collapseDirs: () => set({ expandedDirs: ROOT_EXPANDED }),
+
   toggleDir: (path) =>
     set((state) => ({
       expandedDirs: state.expandedDirs.includes(path)

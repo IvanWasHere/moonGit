@@ -161,7 +161,7 @@ function formatTime(at: number): string {
  * unwrapped rather than stringified to `{}` — which is what `JSON.stringify`
  * does to an Error and is worse than useless in a log.
  */
-export function formatDetail(detail: unknown): string {
+function formatDetail(detail: unknown): string {
   if (detail instanceof Error) return detail.message;
   if (typeof detail === 'string') return detail;
   try {

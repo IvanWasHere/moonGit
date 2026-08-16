@@ -63,6 +63,8 @@ export function MenuBar({
   const openMerge = useWorkspaceStore((state) => state.openMerge);
   const openMergeWizard = useWorkspaceStore((state) => state.openMergeWizard);
   const toggleTerminal = useWorkspaceStore((state) => state.toggleTerminal);
+  const setLogPath = useWorkspaceStore((state) => state.setLogPath);
+  const openBlame = useWorkspaceStore((state) => state.openBlame);
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
 
@@ -299,13 +301,21 @@ export function MenuBar({
       kind: 'button',
       label: 'Log',
       icon: Icons.Log,
-      run: () => showToast('Log view arrives in Phase 6', 'info'),
+      // The Journal is the log and is always on screen, so this clears the
+      // file filter rather than opening a second view of the same thing.
+      run: () => {
+        setLogPath(null);
+        showToast('Showing the full history', 'info');
+      },
     },
     {
       kind: 'button',
       label: 'Blame',
       icon: Icons.Blame,
-      run: () => showToast('Blame view arrives in Phase 6', 'info'),
+      run: () =>
+        selectedFile === null
+          ? needsSelection()
+          : openBlame(selectedFile.path),
     },
     {
       kind: 'button',

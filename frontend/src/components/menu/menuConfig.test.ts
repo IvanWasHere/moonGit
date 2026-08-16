@@ -56,7 +56,9 @@ describe('menuConfig', () => {
     ],
     ['Remote', ['Fetch', 'Pull', 'Push', 'Manage Remotes', 'Pull Requests']],
     ['Query', ['Log', 'File History', 'Blame', 'Show Changes', 'Search']],
-    ['Help', ['Documentation', "What's New", 'Check for Updates', 'License', 'About']],
+    // No "Check for Updates": removed in 8.9 because auto-update is cut, so
+    // the item could only ever report that there is no updater.
+    ['Help', ['Documentation', "What's New", 'License', 'About']],
   ])('%s holds exactly its specified items', (label, expected) => {
     const menu = MENUS.find((candidate) => candidate.label === label);
     expect(menu?.items.map((item) => item.label)).toEqual(expected);

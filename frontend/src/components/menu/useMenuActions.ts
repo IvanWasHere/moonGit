@@ -1,20 +1,30 @@
 import { useNavigate } from 'react-router-dom';
 import { useRemotes, useStatus } from '@/queries/git';
-import { useFetch, usePull, usePush, useStage, useUnstage } from '@/queries/mutations';
+import {
+  useFetch,
+  usePull,
+  usePush,
+  useStage,
+  useUnstage,
+} from '@/queries/mutations';
 import { pushTarget } from '@/queries/pushTarget';
 import { useOpenRepository } from '@/queries/repositories';
-import { isConflicted } from '@/services/git';
+import { isConflicted, pullRequestsUrl, releasesUrl } from '@/services/git';
 import { openExternal } from '@/services/wails';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useBranchActions } from '@/features/branches/useBranchActions';
 import type { MenuItemId } from './menuConfig';
 
 /**
  * Maps every application-menu item to what it does.
  *
- * Items whose feature has not been built yet say so by name rather than doing
- * nothing — a menu item that silently no-ops is indistinguishable from a bug,
- * and there are enough of them here that the difference matters.
+ * **Every entry now does something real** (PLAN.md §11, 8.8–8.9). Until then
+ * fourteen of them raised "arrives in Phase 6" — a message that was true when
+ * written and became a lie the moment Phase 6 shipped, while several of the
+ * features it apologised for already existed elsewhere in the app with no wire
+ * to them. There is no `notBuilt` helper here any more, and that absence is
+ * the point: adding one back is how the last set rotted.
  *
  * The map is typed `Record<MenuItemId, …>`, so adding an item to the config
  * without wiring it here does not compile.
@@ -32,6 +42,14 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const openRebaseWizard = useWorkspaceStore((state) => state.openRebaseWizard);
   const toggleTerminal = useWorkspaceStore((state) => state.toggleTerminal);
   const openRepoSettings = useWorkspaceStore((state) => state.openRepoSettings);
+  const setLogPath = useWorkspaceStore((state) => state.setLogPath);
+  const toggleLogSearch = useWorkspaceStore((state) => state.toggleLogSearch);
+  const selectFile = useWorkspaceStore((state) => state.selectFile);
+  const openBlame = useWorkspaceStore((state) => state.openBlame);
+  const openReset = useWorkspaceStore((state) => state.openReset);
+  const openLicense = useWorkspaceStore((state) => state.openLicense);
+  const openClone = useWorkspaceStore((state) => state.openClone);
+  const selectedCommit = useWorkspaceStore((state) => state.selectedCommit);
 
   const { data: status } = useStatus(repoPath);
   const { data: remotes } = useRemotes(repoPath);
@@ -42,8 +60,8 @@ export function useMenuActions(): (id: MenuItemId) => void {
   const fetch = useFetch(repoPath);
   const pull = usePull(repoPath);
   const push = usePush(repoPath);
+  const branch = useBranchActions();
 
-  const soon = (feature: string) => () => showToast(`${feature} arrives in Phase 6`, 'info');
   const reportError = (error: Error) => showToast(error.message, 'error');
   const needsFile = () => showToast('Select a file first', 'error');
 
@@ -76,6 +94,22 @@ export function useMenuActions(): (id: MenuItemId) => void {
     });
   };
 
+  /*
+   * Open something about this repository on the web.
+   *
+   * moonGit has no host integration and is not getting one; what these items
+   * can honestly do is take you there. `remoteWeb` returns null when the
+   * remote is a local path or an unknown scheme, and this says so rather than
+   * opening a browser on a URL it invented.
+   */
+  const openForRemote = (build: (url: string) => string | null, what: string) => () => {
+    const origin = remotes?.find((r) => r.name === 'origin') ?? remotes?.[0];
+    if (origin === undefined) return showToast('No remote configured', 'error');
+    const url = build(origin.url);
+    if (url === null) return showToast(`This remote has no web page to open`, 'error');
+    void openExternal(url).catch(() => showToast(`Could not open ${what}`, 'error'));
+  };
+
   const doFetch = () =>
     fetch.mutate(
       { prune: true },
@@ -91,7 +125,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
   // `Record<MenuItemId, …>`: a missing entry is a type error, not dead UI.
   const handlers: Record<MenuItemId, () => void> = {
     // --- Repository -------------------------------------------------------
-    'repository.clone': soon('Clone'),
+    'repository.clone': openClone,
     'repository.open': () => openRepository.mutate(),
     // Returns to the dashboard for the rest of this session. The remembered
     // repository is deliberately *not* cleared: closing a view is not the same
@@ -131,9 +165,9 @@ export function useMenuActions(): (id: MenuItemId) => void {
     'local.ignore': () => openRepoSettings('ignore'),
 
     // --- Branch -----------------------------------------------------------
-    'branch.checkout': soon('Branch checkout'),
-    'branch.create': soon('Branch create'),
-    'branch.rename': soon('Branch rename'),
+    'branch.checkout': branch.checkout,
+    'branch.create': branch.create,
+    'branch.rename': branch.rename,
     'branch.merge': openMergeTool,
     'branch.rebase': openRebaseWizard,
     // Cherry-picking needs a commit, and the Journal's context menu is where
@@ -141,22 +175,43 @@ export function useMenuActions(): (id: MenuItemId) => void {
     // second route to the same operation.
     'branch.cherryPick': () =>
       showToast('Right-click a commit in the Journal to cherry-pick it', 'info'),
-    'branch.reset': soon('Reset'),
-    'branch.delete': soon('Branch delete'),
+    // Resets onto the commit selected in the Journal, which is the only place
+    // in the app where a commit is in front of you — the same reasoning as
+    // cherry-pick above.
+    'branch.reset': () =>
+      selectedCommit === null
+        ? showToast('Select a commit in the Journal to reset onto', 'error')
+        : openReset(selectedCommit),
+    'branch.delete': branch.remove,
 
     // --- Remote -----------------------------------------------------------
     'remote.fetch': doFetch,
     'remote.pull': doPull,
     'remote.push': doPush,
     'remote.manage': () => openRepoSettings('remotes'),
-    'remote.pullRequests': soon('Pull requests'),
+    'remote.pullRequests': openForRemote(pullRequestsUrl, 'pull requests'),
 
     // --- Query ------------------------------------------------------------
-    'query.log': soon('Log view'),
-    'query.fileHistory': soon('File history'),
-    'query.blame': soon('Blame view'),
-    'query.showChanges': soon('Show changes'),
-    'query.search': soon('Search'),
+    // The Journal *is* the log. This clears any file filter and search so the
+    // panel shows the whole history, which is what "Log" can usefully mean in
+    // an app where the log is always on screen.
+    'query.log': () => {
+      setLogPath(null);
+      showToast('Showing the full history', 'info');
+    },
+    // History filtered to the selected file — the Journal's own file filter,
+    // reached from the menu instead of the file's context menu.
+    'query.fileHistory': () =>
+      selectedFile === null ? needsFile() : setLogPath(selectedFile.path),
+    'query.blame': () =>
+      selectedFile === null ? needsFile() : openBlame(selectedFile.path),
+    // "Show changes" means the diff for the selected file, which is what
+    // selecting it in the Changes pane already does.
+    'query.showChanges': () =>
+      selectedFile === null
+        ? needsFile()
+        : selectFile({ path: selectedFile.path, side: selectedFile.side }),
+    'query.search': toggleLogSearch,
 
     // --- Help -------------------------------------------------------------
     // `openExternal` rejects anything that is not http/https/mailto.
@@ -165,9 +220,8 @@ export function useMenuActions(): (id: MenuItemId) => void {
         showToast('Could not open the browser', 'error'),
       );
     },
-    'help.whatsNew': soon("What's new"),
-    'help.checkForUpdates': soon('Update checks'),
-    'help.license': soon('License'),
+    'help.whatsNew': openForRemote(releasesUrl, 'the releases page'),
+    'help.license': openLicense,
     'help.about': () => showToast('moonGit 0.1.0 — a native macOS Git client', 'info'),
   };
 

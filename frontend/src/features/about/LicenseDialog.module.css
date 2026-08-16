@@ -1,0 +1,71 @@
+/* The licence dialog. Same shell as every other overlay, including the z-index:
+   **1000, because it has to clear the top menu at 200 and the icon toolbar
+   at 100.** Shipped at 60 first, which put both of those on top of the
+   modal's own header — the geometry was right and the paint order was not,
+   so `getBoundingClientRect` reported the header exactly where it should be
+   while the toolbar drew over it (PLAN.md §11, 8.10). */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, 92vw);
+  max-height: 80vh;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.close {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text-primary);
+}
+
+.text {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  /* Wrapped, not scrolled sideways: a licence read one horizontal scroll at a
+     time is a licence nobody reads. */
+  white-space: pre-wrap;
+  word-break: break-word;
+}

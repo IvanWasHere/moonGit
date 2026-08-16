@@ -1,0 +1,119 @@
+/* The reset dialog. Same shell as every other overlay, including the z-index:
+   **1000, because it has to clear the top menu at 200 and the icon toolbar
+   at 100.** Shipped at 60 first, which put both of those on top of the
+   modal's own header — the geometry was right and the paint order was not,
+   so `getBoundingClientRect` reported the header exactly where it should be
+   while the toolbar drew over it (PLAN.md §11, 8.10). */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  width: min(520px, 92vw);
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.target {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.close {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text-primary);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+}
+
+/* A grid so the hint aligns under the mode name rather than beside the radio,
+   which is what makes the three consequences readable as a column. */
+.option {
+  display: grid;
+  grid-template-columns: 16px 60px 1fr;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: var(--bg-hover);
+}
+
+.optionOn {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.optionName {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.optionHint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* The destructive one is marked before it is chosen, not after. */
+.destructive .optionName {
+  color: var(--red);
+}
+
+.destructive.optionOn {
+  border-color: var(--red);
+  background: var(--red-dim);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}

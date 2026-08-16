@@ -100,6 +100,28 @@ export class BranchService {
   }
 
   /**
+   * Move the current branch (and the working tree, for `hard`) to a commit.
+   *
+   * The three modes differ only in how much they take with them, and the
+   * difference is the whole safety story:
+   *
+   * - `soft` moves the branch pointer; index and working tree are untouched,
+   *   so the changes appear staged.
+   * - `mixed` (git's default) also resets the index, leaving the changes as
+   *   unstaged edits.
+   * - `hard` also overwrites the working tree, **discarding uncommitted work
+   *   with no way back through git**. Callers must confirm that one.
+   */
+  async reset(
+    target: string,
+    mode: 'soft' | 'mixed' | 'hard' = 'mixed',
+    options: ReadOptions = {},
+  ): Promise<Result<void, GitError>> {
+    const result = await this.runner.exec(['reset', `--${mode}`, target], toExecOptions(options));
+    return result.ok ? ok(undefined) : result;
+  }
+
+  /**
    * Delete a branch.
    *
    * Unforced by default, so git refuses to drop unmerged work. `force` maps to

@@ -1,0 +1,124 @@
+/* The clone dialog. Same shell as every other overlay, including the z-index:
+   **1000, because it has to clear the top menu at 200 and the icon toolbar
+   at 100.** Shipped at 60 first, which put both of those on top of the
+   modal's own header — the geometry was right and the paint order was not,
+   so `getBoundingClientRect` reported the header exactly where it should be
+   while the toolbar drew over it (PLAN.md §11, 8.10). */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  width: min(560px, 92vw);
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.close {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text-primary);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.input {
+  width: 100%;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview,
+.problem {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.preview {
+  color: var(--text-secondary);
+}
+
+.preview code {
+  color: var(--accent);
+}
+
+.problem {
+  color: var(--red);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}

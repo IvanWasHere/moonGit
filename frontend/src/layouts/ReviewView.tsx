@@ -9,6 +9,7 @@ import { useCopyDiff } from '@/features/diff/useCopyDiff';
 import { CommitMessagesView } from '@/features/history/CommitMessagesView';
 import { RepoList } from '@/features/repositories/RepoList';
 import { FilesPane } from '@/features/explorer/FilesPane';
+import { useStageAll } from '@/queries/mutations';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import styles from './Layout.module.css';
@@ -32,6 +33,10 @@ export function ReviewView() {
   const copyDiff = useCopyDiff();
   const panelFilters = useWorkspaceStore((state) => state.panelFilters);
   const togglePanelFilter = useWorkspaceStore((state) => state.togglePanelFilter);
+  const repoPath = useWorkspaceStore((state) => state.repoPath);
+  const openCommit = useWorkspaceStore((state) => state.openCommit);
+  const stageAll = useStageAll(repoPath);
+  const openCompare = useWorkspaceStore((state) => state.openCompare);
 
   return (
     <div className={`${styles.content} ${styles.vertical}`} ref={containerRef}>
@@ -67,7 +72,12 @@ export function ReviewView() {
                 </PanelAction>
                 <PanelAction
                   title="Stage All"
-                  onClick={() => showToast('All files staged', 'success')}
+                  onClick={() =>
+                    stageAll.mutate(undefined, {
+                      onSuccess: () => showToast('Staged every change', 'success'),
+                      onError: (error: Error) => showToast(error.message, 'error'),
+                    })
+                  }
                 >
                   <Icons.Stage size={11} />
                 </PanelAction>
@@ -91,7 +101,7 @@ export function ReviewView() {
           <PanelHeader
             title="Commit Messages"
             actions={
-              <PanelAction title="New Commit">
+              <PanelAction title="New Commit" onClick={openCommit}>
                 <Icons.NewCommit size={11} />
               </PanelAction>
             }
@@ -123,7 +133,7 @@ export function ReviewView() {
                     {...(panelFilters.remotes !== null && { color: 'var(--accent)' })}
                   />
                 </PanelAction>
-                <PanelAction title="Compare">
+                <PanelAction title="Compare with the current branch" onClick={openCompare}>
                   <Icons.ReviewView size={11} />
                 </PanelAction>
               </>

@@ -1,0 +1,114 @@
+/* The compare dialog. Same shell as every other overlay, including the z-index:
+   **1000, because it has to clear the top menu at 200 and the icon toolbar
+   at 100.** Shipped at 60 first, which put both of those on top of the
+   modal's own header — the geometry was right and the paint order was not,
+   so `getBoundingClientRect` reported the header exactly where it should be
+   while the toolbar drew over it (PLAN.md §11, 8.10). */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 92vw);
+  height: min(600px, 82vh);
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pair {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The direction, called out — a comparison with the sides swapped looks
+   exactly like a correct one until you act on it. */
+.arrow {
+  color: var(--accent);
+}
+
+.close {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text-primary);
+}
+
+.summary {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 20px 1fr 52px 52px;
+  gap: 10px;
+  align-items: center;
+  padding: 3px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.row:hover {
+  background: var(--bg-hover);
+}
+
+.status {
+  color: var(--text-muted);
+}
+
+.path {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.added {
+  color: var(--green);
+  text-align: right;
+}
+
+.removed {
+  color: var(--red);
+  text-align: right;
+}

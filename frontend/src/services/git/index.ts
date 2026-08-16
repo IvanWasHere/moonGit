@@ -24,3 +24,5 @@ export * from './ConfigService';
 export * from './IgnoreService';
 export * from './WorkingTreeService';
 export * from './TreeService';
+export * from './remoteWeb';
+export * from './clone';

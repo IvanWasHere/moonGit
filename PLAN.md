@@ -1323,7 +1323,7 @@ Attribute-only events inside `.git` are now dropped. **Only inside `.git`** — 
 
 One edit still produces 2 events and then settles to nothing, so detection was not traded away for quiet.
 
-**Still open: `Degraded` is reported to nobody.** `WatchInfo` has carried the flag since Phase 1 and `useRepoWatcher` discards the result. It matters much less now that a normal repository is watched in full, but a tree genuinely too large still stops updating silently, which is the one failure a user cannot diagnose. The status panel's own degrade banner (7.2) is the shape to copy.
+~~**Still open: `Degraded` is reported to nobody.**~~ ✅ **closed 2026-08-16** — see 7.6's banner entry and 7.10's verification. `WatchInfo` had carried the flag since Phase 1 and `useRepoWatcher` discarded the result. It matters much less now that a normal repository is watched in full, but a tree genuinely too large still stops updating silently, which is the one failure a user cannot diagnose. The status panel's own degrade banner (7.2) is the shape to copy.
 
 ### ✅ Phase 7.5 — the Files panel, and the shared list
 
@@ -1508,13 +1508,15 @@ Done in the browser, not the native window: `wails dev` serves the same frontend
 
 ## 11. Phase 8 — Quality, packaging, release *(~4 days)*
 
-Vitest + RTL for units and components · Playwright over `wails dev` for integration flows against tier-2 generated repos (§13a) — never against `testGitHere` · Go tests for `gitexec` (spawn, stream, cancel, timeout) · a11y pass (focus management, ARIA, keyboard nav, high contrast) · central logger with Debug/Info/Warning/Error and a developer-mode log viewer · light/dark/system + custom accent (the token file already makes this a variable swap) · ~~code signing, notarization~~ · universal binary · ~~auto-update~~.
+Vitest + RTL for units and components · ~~Playwright over `wails dev` for integration flows against tier-2 generated repos (§13a) — never against `testGitHere`~~ · Go tests for `gitexec` (spawn, stream, cancel, timeout) · a11y pass (focus management, ARIA, keyboard nav, high contrast) · central logger with Debug/Info/Warning/Error and a developer-mode log viewer · light/dark/system + custom accent (the token file already makes this a variable swap) · ~~code signing, notarization~~ · universal binary · ~~auto-update~~.
 
 **Two struck items, and the decision behind them (2026-08-16, with Ivan).** Apple Developer enrolment is declined — moonGit ships unsigned and un-notarized, and the Gatekeeper warning on first open is accepted. That is a coherent position for a tool whose audience is its author, but it takes **auto-update down with it**: an updater without a signature is an unverified download replacing the running application, which is a worse thing to ship than no updater at all. Both are therefore out of Phase 8 rather than deferred inside it. If the audience ever widens, they come back as a pair — never the updater alone.
 
 What survives is the part that was always the point: the tests, the a11y pass, the logger, the accent, and a universal binary, none of which need a certificate.
 
-**Progress (2026-08-16).** ✅ the a11y pass — contrast in 8.1, focus and dialog semantics in 8.3 · ✅ the logger and its viewer (8.4) · ✅ the custom accent (8.5) · ✅ the universal binary (8.6) · ✅ menu-label parity, which was not on the list until it was reported (8.2). **Remaining: Playwright integration flows.** Vitest and the Go tests were already in place; what is missing is the end-to-end layer over `wails dev`.
+**Phase 8, complete (2026-08-16).** ✅ the a11y pass — contrast in 8.1, focus and dialog semantics in 8.3 · ✅ the logger and its viewer (8.4) · ✅ the custom accent (8.5) · ✅ the universal binary (8.6) · ✅ menu-label parity, which was not on the list until it was reported (8.2) · ~~Playwright~~ **cut, see 8.7**.
+
+**A third struck item: Playwright (2026-08-16, with Ivan).** The unit layer was already there — 740 frontend tests and Go tests covering `gitexec` spawn, stream, cancel and timeout. What Playwright would have added is the outer ring: the running app driven end to end. It is cut on the same reasoning as the certificate. The scaffolding is most of the cost — launching and stopping `wails dev` around each run, throwaway repositories per test, a new toolchain in the project — and it buys early warning of breakage for a product whose sole user runs it daily and would notice a broken commit button within minutes. **Cut, not deferred**, so that future reviews do not re-derive this. It returns if the audience does, alongside signing and the updater.
 
 ---
 
@@ -1564,7 +1566,11 @@ None is fixable by a brighter grey; they are a badge-tint problem and a syntax-t
 
 **The cost, stated so nobody rediscovers it as a bug:** the gap between `--text-muted` and `--text-secondary` narrows from **2.50x to 1.43x**. The three tiers still read as three, verified on screen, but there is little room left. Any future proposal to brighten muted again should move `--text-secondary` and `--text-primary` first.
 
-**The light theme's 30 badge failures are untouched** and remain open — coloured text on a 12%-alpha tint of itself, plus Shiki over the 0.28-alpha word marks. They need a decision of their own about the badge system, not a token nudge.
+**The light theme's 30 badge failures: decided, and the decision is to keep them (2026-08-16, with Ivan).** Coloured text on a 12%-alpha tint of itself — green on pale green, orange on pale orange — scoring 3.6–4.2 against the 4.5 bar. Asked in plain terms rather than by standard, and the answer was to leave the design as the mockup drew it and record the numbers as a deliberate position.
+
+**The same answer settles the three stragglers left over from the dark theme**, rather than asking three more times about the same shape of problem: the status-chip letters on `--bg-input` (4.16), a green branch tag on a selected row's composite (4.09), and Shiki's `#ff7b72` over an added-line word mark (4.18). All are small chrome, all sit just under the bar, and none is fixable by the token nudge that worked for `--text-muted`.
+
+**Why this is a coherent position rather than a shrug.** The failures that were fixed in 8.1 were *body text* — panel headings, file paths, timestamps, the things you read continuously and cannot guess at. What is left is small colour-coded chrome whose meaning is carried by shape and position as much as by colour, on a product whose audience is its author (§14 decision 12). If that audience ever widens, this reopens with the certificate and the updater, and the numbers are recorded here so nobody has to measure them twice.
 
 ---
 
@@ -1667,6 +1673,100 @@ Architectures in the fat file: … are: x86_64 arm64
 
 The packaged app was launched and its native menu read back — `moonGit · Edit · Repository · Local · Branch · Remote · Query · Help`, the same eight 8.2 verified in dev, confirming the menu is installed in a real packaged build and not only under `wails dev`. 42MB, self-signed by Wails, unsigned and un-notarized by decision (§11).
 
+### ✅ Phase 8.7 — the plan is closed
+
+All nine phases are built or deliberately cut. What is *not* built, and the reason in each case, matters more than the list of what is:
+
+| Cut | Why |
+|---|---|
+| code signing, notarization, **auto-update** | audience is the author; an unsigned updater is an unverified download replacing the running app, so the three move together (§11) |
+| hooks, LFS, submodules | asked in plain language, and the answer was that none of the three are part of how this person works (§14) |
+| Playwright integration flows | the scaffolding is most of the cost, and it buys early warning for a user who would notice within minutes (8.7) |
+| the light theme's badge contrast, and three dark stragglers | small colour-coded chrome whose meaning is carried by shape and position; the *body* text failures were fixed in 8.1 (8.1) |
+| the graph Worker, the Monaco bundle item, parser optimisation | withdrawn on measurement, not on taste (§10) |
+| `useCommitDiff` / `useCommit` and their query keys | dead code that would have carried 187.6MB if anyone wired it up (7.7) |
+| Git-flow, Investigate | never defined by the PRD, only ever fired a toast (§14) |
+
+Every one of those was a decision taken with a reason recorded, not a thing forgotten. **The pattern worth carrying forward is that most of them were settled by measuring rather than arguing** — the Worker at 39ms, the Ignored chip at 35ms marginal, `ls-files` at 11.9MB, `git show` at 187.6MB, the contrast ramp hitting the tier above it. Four items in Phase 7 shrank or vanished once someone put a number on them, and two turned out to be worth far more than the plan implied.
+
+**The honest state of the thing:** it opens repositories, stages, commits, pushes, merges, rebases, cherry-picks, stashes, tags, searches, blames, diffs with syntax highlighting and hunk-level staging, runs a terminal, and survives 500k files and a million commits. It has 740 frontend tests, Go tests over the process layer, and a benchmark harness with recorded numbers. It ships as an unsigned universal binary that shows a Gatekeeper warning the first time it is opened, which is the accepted cost of not paying $99 to distribute software to one person.
+
+---
+
+### ✅ Phase 8.8 — the dead controls, found by pulling one thread
+
+Reported by Ivan: the Blame button does nothing. It did not, and it was not alone. An audit of all **74** interactive controls found **25** that did nothing real, in three quite different states.
+
+**Ten had a working implementation the button simply did not call.** This is the worst category, because the code existed, was tested, and had been sitting unreachable since Phase 5:
+
+| Control | What was already there |
+|---|---|
+| Add Repository (panel) | the Dashboard's own `useOpenRepository` |
+| Refresh (panel) | query invalidation |
+| Fetch (panel) | `useFetch` |
+| Stage All (Main **and** Review) | `useStageAll` |
+| New Branch · Checkout · Delete branch | `useCreateBranch` / `useCheckoutBranch` / `useDeleteBranch` |
+| Search commits · File history · Show changes (menu) | the search bar, the Journal's file filter, the file menu |
+
+**The worst of these: there was no way to check out a branch.** `useCheckoutBranch` was written and tested in Phase 5 and called by nothing; clicking a branch only ever selected it. A git client shipped for three phases without branch switching, and no test noticed, because every test that existed tested the mutation rather than a route to it. The three branch operations now live in `useBranchActions`, shared by the menu and the panel header so the second caller cannot grow its own idea of whether deleting asks first.
+
+**One was half-built: Blame.** `BLAME_BASE_ARGS`, `parseBlame`, `BlameService` **and `useBlame`** all shipped in Phase 6 with tests, and the only caller was a dev panel. The missing piece was the screen. `features/blame/` adds it: virtualized on the shared `VirtualList`, with runs collapsed — git reports a commit per line, and drawn literally a file edited in blocks repeats one hash down forty rows, so metadata is drawn only where authorship *changes*. That rule is `toBlameRows`, in its own module with seven tests, including the case that catches the tempting wrong implementation (a commit that appears, disappears and returns must start a *new* run, so comparing against "seen before" instead of "the line above" fails).
+
+**Three had no handler whatsoever** — Collapse All, New Commit, Compare. Two are now wired (`collapseDirs` on the store; the commit box); Compare remains.
+
+**The message on what is left was itself a bug.** Every stub said "arrives in Phase 6", written when that was true and false the moment Phase 6 shipped. The remainder now say "is not built yet".
+
+**The remaining eight were settled in 8.9 below** — one deleted, seven built.
+
+**Verification.** All 747 tests pass, and in the running app the Blame view opened on `src/components/Header.tsx`, reported `15 lines · 2 commits`, rendered fifteen rows, and collapsed runs correctly with uncommitted lines showing as `0000000 Not Committed Yet`. Its header did not appear, which was a real bug and is fixed in 8.10.
+
+
+### ✅ Phase 8.9 — the last eight, and the end of "arrives in Phase 6"
+
+Ivan's call: delete what can never work, build the rest. One deleted, seven built.
+
+**Deleted: Check for Updates.** Auto-update is cut (§11), so the item could only ever report that there is no updater. Removed from the config, the handler map and the test's expected Help menu — the §14 precedent that took Git-flow and Investigate.
+
+**Built, in rough order of how much was already there:**
+
+| | What it needed |
+|---|---|
+| **Branch rename** | nothing but a wire — `BranchService.rename` already existed, like checkout and delete before it |
+| **What's New**, **Pull Requests** | `remoteWeb`, a tested parser turning a git remote into a browsable URL |
+| **License** | a dialog, and `LICENSE.md` inlined at build time |
+| **Branch reset** | a service method, a mutation, and a dialog — the only one that earned one |
+| **Clone** | the first git command in the app that runs *outside* a repository |
+| **Compare** | remote-branch selection, which did not exist, plus the first caller of `DiffService.between` |
+
+**`remoteWeb` exists because the naive version is wrong on the common case.** `git@github.com:owner/repo.git` is the scp-like form — no scheme, colon instead of slash — so `new URL()` throws on the exact string every SSH clone leaves behind. It also returns null rather than guessing for local paths and unknown schemes, because a caller that cannot build a link should say so, not open a browser on something invented. Thirteen tests, including GitLab's `-/merge_requests` (pointing GitLab at `/pulls` is a 404, which is worse than no link).
+
+**The licence is imported, not retyped.** `import licenseText from '…/LICENSE.md?raw'` — one licence in the repository, rendered by the dialog. It has to be inlined at build time rather than read at runtime: a packaged Wails app serves from an embedded filesystem where the repository is not present, so `readFile` would work in development and fail in the build people run. Verified by grepping the production bundle for the text rather than assuming Vite reached outside its root.
+
+**Reset is the one place a dialog was not over-engineering.** Three modes that differ only in how much they take with them, one of which destroys uncommitted work irrecoverably, and names that give no hint which. So each states its consequence in plain words next to it — "Throw away all uncommitted changes. This cannot be undone." rather than "resets the index", which only means something to somebody who already knows which mode they want. The destructive one is styled as destructive before it is chosen and confirms again after.
+
+**Clone is the only git operation with no work tree.** Every service takes a `GitRunner` bound to a repository; this binds one to the *parent directory* and runs there. Its timeout is an hour rather than the 30-second default — killing a large clone partway leaves a half-written directory, which is worse than waiting. It does not stream progress, and that is written down rather than left to be discovered: git reports progress on stderr, which the buffered path does not surface until the command exits.
+
+**Compare could not have been wired before, whatever anyone typed.** Remote branch rows were not selectable, so there was no way to name the other side. Rows are selectable now, and the dialog lists what differs with counts rather than opening a second diff viewer beside the real one. Direction is stated on screen — a comparison with the sides swapped looks exactly like a correct one until you act on it.
+
+**And the helper is gone.** There is no `notBuilt` in `useMenuActions` any more. Its absence is the point: every one of the 39 handlers now does something real, and reintroducing a "coming soon" helper is precisely how the last set rotted into promising a phase that had already shipped.
+
+**Verified against the running app**, not only in tests: License showed the real MIT text, Clone opened, **Checkout switched `test-repo1` to `develop` and back to `main`** — the operation that had no route at all through three phases — Reset rendered its three modes and was closed without running against a live repository, and Compare reported `origin/main → main, 7 files differ` with per-file counts, plus the right message when no remote branch is selected. `test-repo1` was left on `main` with its ten working-tree changes intact.
+
+**Final sweep: zero controls whose only action is a toast, zero `PanelAction`s without a handler, and the only remaining mentions of "arrives in Phase 6" are three comments describing the bug.** 760 tests pass.
+
+
+### ✅ Phase 8.10 — the modal that hid under the toolbar
+
+Ivan, in seven words: *"blame modal shows below toolbar of the app"*. That is the bug 8.8 could not identify and wrongly leaned toward blaming on the screenshot harness.
+
+**Every overlay in the app is `z-index: 1000`. All five written in 8.8–8.9 were `60`** — below the icon toolbar at 100 and the in-window menu bar at 200 — so the chrome painted over the top of each modal, taking its header with it.
+
+**Why measuring the DOM proved the wrong thing.** `getBoundingClientRect` put the Blame header at 46–85 with `visibility: visible`, and that was *correct*: layout was right, and only the paint order was wrong. Every probe available from inside the page — rects, computed styles, forcing an 80px magenta header — reports geometry, and geometry was never the problem. So each measurement came back clean while the screenshots kept showing the header missing, and the screenshots were right. **The conclusion drawn from that was the wrong one:** rather than treating a repeated disagreement between two instruments as evidence that the *question* was wrong, it was attributed to a stale capture pipeline. A person looking at the screen named it immediately.
+
+**The rule existed, in the only place that cannot enforce it.** Five stylesheets carry a comment saying the z-index "has to clear the top menu at 200". A comment repeated five times is a convention nobody can check, and the five new files were written from the newest examples rather than the oldest. `components/overlayLayering.test.ts` now asserts it across all thirteen overlays: each above the menu bar, all of them below the toasts at 9999 — a modal that covered the toasts would hide the result of what it had just done. Confirmed non-vacuous by putting the bug back and watching it fail.
+
+A source-text assertion rather than a rendered one, because jsdom has no compositor and cannot answer "what covers what" at all. That is the same gap that made this bug invisible to the whole test suite while it was live, and it is worth naming: **nothing in this project can test stacking except a person looking at it.**
+
 ---
 
 ## 12. Risk register
@@ -1695,7 +1795,7 @@ Phase 4  Mithril → React       2.5d     │  ✅
 Phase 5  Wire real git         2.5d   ──┘  ✅
 Phase 6  Feature build-out     2–3w        ✅  all 12 items, §9
 Phase 7  Performance           1w          ✅  §10 — all items closed or withdrawn
-Phase 8  Quality & release     4d
+Phase 8  Quality & release     4d          ✅  §11 — all items built or deliberately cut
 ```
 
 Phases 2 and 4 are independent and can run in parallel (parsers need no UI; the port runs on fixtures).
@@ -1805,7 +1905,7 @@ Three places where this plan knowingly diverges — worth a second look before P
 
 ### Still open (not blocking — decide by the phase noted)
 
-- ~~**Light theme**~~ — **resolved: built in Phase 6.8**, and its contrast re-audited in 8.1, which found that 6.8's fix holds for `--text-muted` but that the badge system fails on its own tints (30 pairs, still open). ~~Custom accent is still open.~~ ✅ **built in 8.5**, ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. Custom accent is still open. See §9's Phase 6.8 entry, including the dark theme's own measured contrast failure now waiting on Phase 8.
+- ~~**Light theme**~~ — **resolved: built in Phase 6.8**, and its contrast re-audited in 8.1, which found that 6.8's fix holds for `--text-muted` but that the badge system fails on its own tints (30 pairs, still open). ~~Custom accent is still open.~~ ✅ **built in 8.5**, ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. See §9's Phase 6.8 entry; the dark theme's own contrast failure that it flagged for Phase 8 was measured and fixed in 8.1.
 - ~~**Git-flow / Index Editor / Investigate**~~ — **all three resolved.** Index Editor was built (§9, hunk and line staging). **Git-flow and Investigate were removed**: the PRD never defined either, both only ever fired a toast, and a control that does nothing is worse than an absent one — it costs a click to discover that. Their icons went with them, since an icon with no caller is a mapping to nothing. `icons.test.ts` records the reason.
 - ~~**Merge/diff tool integration**~~ — **resolved: built in.** A three-way modal with per-region choices; the escape hatch is the user's own editor, not a configured external differ. See §9.3 above.
 - ~~**Hooks, LFS and submodules**~~ — **resolved 2026-08-16: all three cut.** Asked plainly rather than by feature name — do you work with projects nested inside projects, with huge binary files, with scripts that run on every save — and the answer was none of the three. So the LFS blocker (§13a, no LFS repository to verify against) never needs resolving, and submodules stays a feature nobody here has asked for. **Cut, not deferred**: leaving them on a list makes every future review re-read three entries to reach the same conclusion. They return only if the audience does (see below), and then as new work with a real repository behind them.

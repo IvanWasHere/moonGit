@@ -272,6 +272,34 @@ export function useDeleteBranch(repoPath: string | null) {
   });
 }
 
+export function useRenameBranch(repoPath: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation<void, GitQueryError, { from: string; to: string }>({
+    mutationFn: async ({ from, to }) => {
+      unwrap(await branchService(repoPath ?? '').rename(from, to));
+    },
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
+/**
+ * Move the current branch to another commit (PLAN.md §11, 8.9).
+ *
+ * `hard` discards uncommitted work irrecoverably, which is why the mode is an
+ * explicit argument with no default here — the service defaults to `mixed`,
+ * but a mutation that silently picked one would make the most destructive
+ * option reachable by omission.
+ */
+export function useResetBranch(repoPath: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation<void, GitQueryError, { target: string; mode: 'soft' | 'mixed' | 'hard' }>({
+    mutationFn: async ({ target, mode }) => {
+      unwrap(await branchService(repoPath ?? '').reset(target, mode));
+    },
+    onSettled: () => (repoPath === null ? undefined : refresh(queryClient, repoPath)),
+  });
+}
+
 // --- remotes ----------------------------------------------------------------
 
 export function useFetch(repoPath: string | null) {

@@ -14,6 +14,11 @@ import { MergeWizard } from '@/features/merge/MergeWizard';
 import { RebaseBanner } from '@/features/rebase/RebaseBanner';
 import { RebaseWizard } from '@/features/rebase/RebaseWizard';
 import { RepoSettingsModal } from '@/features/repo-settings/RepoSettingsModal';
+import { BlameView } from '@/features/blame/BlameView';
+import { ResetDialog } from '@/features/branches/ResetDialog';
+import { LicenseDialog } from '@/features/about/LicenseDialog';
+import { CloneDialog } from '@/features/repositories/CloneDialog';
+import { CompareDialog } from '@/features/branches/CompareDialog';
 import { StashModal } from '@/features/stash/StashModal';
 import { TagPrompt } from '@/features/tags/TagPrompt';
 import { TerminalDrawer } from '@/features/terminal/TerminalDrawer';
@@ -60,6 +65,16 @@ export function Workspace({
   const closeRebaseWizard = useWorkspaceStore((state) => state.closeRebaseWizard);
   const tagPromptOid = useWorkspaceStore((state) => state.tagPromptOid);
   const closeTagPrompt = useWorkspaceStore((state) => state.closeTagPrompt);
+  const blamePath = useWorkspaceStore((state) => state.blamePath);
+  const closeBlame = useWorkspaceStore((state) => state.closeBlame);
+  const resetTarget = useWorkspaceStore((state) => state.resetTarget);
+  const closeReset = useWorkspaceStore((state) => state.closeReset);
+  const licenseOpen = useWorkspaceStore((state) => state.licenseOpen);
+  const closeLicense = useWorkspaceStore((state) => state.closeLicense);
+  const cloneOpen = useWorkspaceStore((state) => state.cloneOpen);
+  const closeClone = useWorkspaceStore((state) => state.closeClone);
+  const compareOpen = useWorkspaceStore((state) => state.compareOpen);
+  const closeCompare = useWorkspaceStore((state) => state.closeCompare);
   const openRepo = useWorkspaceStore((state) => state.openRepo);
   const openQuickOpen = useWorkspaceStore((state) => state.openQuickOpen);
   const quickOpen = useWorkspaceStore((state) => state.quickOpen);
@@ -144,6 +159,11 @@ export function Workspace({
       {stashOpen && <StashModal onClose={closeStash} />}
       {rebaseWizardOpen && <RebaseWizard onClose={closeRebaseWizard} />}
       {tagPromptOid !== null && <TagPrompt oid={tagPromptOid} onClose={closeTagPrompt} />}
+      {blamePath !== null && <BlameView path={blamePath} onClose={closeBlame} />}
+      {resetTarget !== null && <ResetDialog target={resetTarget} onClose={closeReset} />}
+      {licenseOpen && <LicenseDialog onClose={closeLicense} />}
+      {cloneOpen && <CloneDialog onClose={closeClone} />}
+      {compareOpen && <CompareDialog onClose={closeCompare} />}
       {quickOpen && <QuickOpen />}
       {settingsOpen && <SettingsModal onClose={closeSettings} />}
       {repoSettingsTab !== null && (
