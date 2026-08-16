@@ -1,0 +1,186 @@
+# Build the macOS app and a DMG, and attach both to a GitHub release.
+#
+# Runs on macOS because the build is a macOS app bundle: `wails build` invokes
+# the platform toolchain, and the DMG is made with `hdiutil`, which exists
+# nowhere else.
+#
+# **Nothing here signs or notarizes.** That is a decision, not an omission
+# (PLAN.md §11): Apple Developer enrolment is declined, so the app ships with
+# only the ad-hoc signature Wails applies. The consequence is real and is
+# spelled out in the release notes step below — a downloaded, quarantined,
+# unsigned app is *blocked* by Gatekeeper rather than merely warned about, and
+# whoever downloads it needs to know the one command that clears it.
+name: Release
+
+on:
+  release:
+    types: [published]
+  # So the whole thing can be exercised without cutting a release. Uploads the
+  # same two files as build artifacts instead of attaching them to anything.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to stamp into the bundle, e.g. 0.2.0
+        required: false
+        default: 0.0.0-dev
+
+permissions:
+  contents: write # required to attach files to the release
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Pinned to the version the project is built and tested against (§1.1
+      # chose Wails v2 over the v3 alpha deliberately). `@latest` here would
+      # mean the build changing under the project without a commit saying so.
+      - name: Install the Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+
+      - name: Work out the version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # Tags are conventionally v1.2.3; CFBundleVersion wants 1.2.3.
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version $VERSION"
+
+      # `build/darwin/Info.plist` templates CFBundleVersion and
+      # CFBundleShortVersionString from `wails.json`'s productVersion, so the
+      # tag has to reach the bundle through that file. Without this every
+      # release reports whatever is committed there — 0.1.0 forever.
+      - name: Stamp the version into wails.json
+        run: |
+          python3 - <<'PY'
+          import json, os
+          version = os.environ["VERSION"]
+          with open("wails.json") as f:
+              config = json.load(f)
+          config.setdefault("info", {})["productVersion"] = version
+          with open("wails.json", "w") as f:
+              json.dump(config, f, indent=2)
+              f.write("\n")
+          print(f"wails.json productVersion -> {version}")
+          PY
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      # The full check the Makefile runs, before spending time on a build that
+      # would ship a failing test.
+      - name: Test
+        run: |
+          go vet . ./internal/...
+          go test . ./internal/...
+          cd frontend && npm ci && npm run lint && npm run typecheck && npm run test
+
+      # Universal, not the runner's own architecture. Only affordable because
+      # the project is CGO-free by decision (§1.2, modernc.org/sqlite).
+      - name: Build
+        run: wails build -platform darwin/universal
+
+      # Asserts the outcome rather than trusting the flag, the same way
+      # `make archcheck` does locally. A silently single-architecture build is
+      # exactly the kind of thing nobody notices until an Intel Mac cannot open
+      # the download.
+      - name: Verify the binary is universal
+        run: |
+          BIN="build/bin/moonGit.app/Contents/MacOS/moonGit"
+          lipo -info "$BIN"
+          lipo -info "$BIN" | grep -q "x86_64 arm64" \
+            || { echo "::error::not a universal binary"; exit 1; }
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+            "build/bin/moonGit.app/Contents/Info.plist"
+
+      # `ditto` rather than `zip`: it is the tool that preserves resource forks,
+      # symlinks and the executable bit inside a bundle. A bundle zipped with
+      # plain `zip` can arrive unopenable.
+      - name: Package the .app
+        run: |
+          cd build/bin
+          ditto -c -k --sequesterRsrc --keepParent moonGit.app \
+            "moonGit-${{ steps.version.outputs.version }}-universal.zip"
+
+      # `hdiutil` rather than create-dmg: it ships with macOS, so there is no
+      # third-party action in the release path. The staging folder gets an
+      # /Applications symlink so the DMG opens with the usual drag target.
+      - name: Package the DMG
+        run: |
+          STAGE="$(mktemp -d)/moonGit"
+          mkdir -p "$STAGE"
+          cp -R build/bin/moonGit.app "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create \
+            -volname "moonGit ${{ steps.version.outputs.version }}" \
+            -srcfolder "$STAGE" \
+            -ov -format UDZO \
+            "build/bin/moonGit-${{ steps.version.outputs.version }}.dmg"
+          hdiutil verify "build/bin/moonGit-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            "build/bin/moonGit-${{ steps.version.outputs.version }}.dmg" \
+            "build/bin/moonGit-${{ steps.version.outputs.version }}-universal.zip" \
+            --clobber
+
+      # The unsigned-download problem, said where somebody will actually read
+      # it. macOS quarantines anything downloaded from a browser, and an
+      # unsigned quarantined app is refused outright — "moonGit is damaged and
+      # can't be opened" — which reads as a corrupt download rather than a
+      # missing certificate.
+      - name: Add the Gatekeeper note to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTE=$(cat <<'EOF'
+
+          ---
+
+          **Opening it the first time.** moonGit is not signed with an Apple
+          Developer certificate, so macOS quarantines the download and refuses
+          to open it — the message says the app is damaged, which it is not.
+          Clear the quarantine flag after moving it to Applications:
+
+          ```
+          xattr -dr com.apple.quarantine /Applications/moonGit.app
+          ```
+
+          The `.dmg` and the `.zip` hold the same universal (Intel + Apple
+          Silicon) build; take whichever you prefer.
+          EOF
+          )
+          gh release view "${GITHUB_REF_NAME}" --json body -q .body > /tmp/body.md
+          printf '%s' "$NOTE" >> /tmp/body.md
+          gh release edit "${GITHUB_REF_NAME}" --notes-file /tmp/body.md
+
+      - name: Upload as artifacts instead
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: moonGit-${{ steps.version.outputs.version }}
+          path: |
+            build/bin/*.dmg
+            build/bin/*.zip
+          if-no-files-found: error

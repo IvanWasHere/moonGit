@@ -2,7 +2,7 @@
 
 <img src="build/appicon.png" alt="" width="128" height="128">
 
-# moonGit
+# 🌙 moonGit
 
 **A native macOS Git client.**
 
@@ -12,12 +12,7 @@ Wails v2 · React 19 · TypeScript · SQLite · no Electron
 
 ---
 
-## Screenshots
-
-<!--
-  Four PNGs under docs/screenshots/. See docs/README.md for specs and for how
-  to capture them.
--->
+## 📸 Screenshots
 
 | | |
 |:---:|:---:|
@@ -28,17 +23,16 @@ Wails v2 · React 19 · TypeScript · SQLite · no Electron
 
 ---
 
-## What it does
+## ✨ What it does
 
-### Working tree
+### 📝 Working tree
 
 - **Stage and unstage by file, by hunk, or by individual line.** The index editor builds a patch and applies it with `git apply --cached`, so the staged result is git's own, not an approximation.
 - **Status columns** — `STATUS | FILE | PATH`, with the path truncating from the left so the leaf directory stays readable, and renames split correctly across the two columns.
 - **Seven status filter chips** — staged, unstaged, added, untracked, deleted, conflicted, ignored — combinable with a text filter.
-- **Discard**, with a native confirmation.
-- **Commit** with a composer, amend, and `⌘↵` to commit.
+- **Stage all**, **discard**, and **commit** with a composer, amend, and `⌘↵`.
 
-### Diff
+### 🔍 Diff
 
 - Side-by-side and inline views.
 - Syntax highlighting via **Shiki**, loaded per language on demand, following the active theme.
@@ -46,66 +40,87 @@ Wails v2 · React 19 · TypeScript · SQLite · no Electron
 - **Image diff** for binary image files.
 - A **large-file guard**, so opening a 40MB generated file does not lock the window.
 
-### History
+### 🕰️ History
 
 - **Commit graph** with lane assignment, branch colours and merge visualisation.
+- **Blame** — per-line authorship, with runs collapsed so a label appears only where authorship actually changes.
 - **Search** with the qualifier syntax every code host has trained people on — `author:`, `path:`, `since:`, `until:`, with quoting. An unrecognised `key:value` is searched as literal text rather than rejected.
 - **File log** — history filtered to one path, from the file's context menu or a commit.
 - Commit context menu: show changes, cherry-pick (with or without committing), create a tag here, history from here, copy SHA or subject.
 
-### Branching and integration
+### 🌿 Branching and integration
 
+- **Branches** — checkout, create, rename and delete, from the Branch menu or the panel header.
 - **Merge** — a wizard with conflict detection, plus a three-way conflict resolver with per-region choices and an escape hatch to your own editor.
 - **Rebase** — interactive, with a todo editor supporting pick, edit, squash, fixup, drop and reorder, and continue/skip/abort while the rebase is in progress. `reword` is deliberately absent — it would open `GIT_EDITOR` on the message, which here is a no-op, so `edit` offers the same power honestly.
+- **Reset** — soft, mixed or hard onto any commit, with each mode's consequence spelled out and the destructive one confirmed twice.
 - **Cherry-pick** — onto the current branch, with or without committing.
 - **Stash** — push, apply, pop and drop.
 - **Tags** — create at HEAD or at any commit.
+- **Compare** — what differs between the current branch and any remote branch, as a file list with counts.
+- **Clone** — from a URL, with the destination folder shown before anything is written.
 - **Remotes** — fetch, pull, push, and remote management. Credential and SSH prompts become UI rather than a hung process.
 
-### Around the edges
+### 🧭 Around the edges
 
 - **File explorer** with a lazily-loaded tree and **quick open** (`⌘P`).
 - **Terminal** (`⌃\``) — a real pty in a bottom drawer, scoped to the repository, so you can run `git rebase --continue` while reading the file list rather than instead of it.
 - **Repository settings** — ignore rules with an explainer for which rule matches, and git config for the local scope against the effective one.
-- **Settings** (`⌘,`) — light, dark or system theme, and the git binary path.
-- **Native macOS menu bar**, driven from the same structure as the in-window menubar.
+- **Settings** (`⌘,`) — light, dark or system theme, a **custom accent colour** with a live readability figure, the git binary path, and your editor command.
+- **Native macOS menu bar**, driven from the same structure as the in-window menubar — the two cannot disagree, and a test enforces that no label is one macOS silently rewrites.
 - **Live refresh from a file watcher.** No polling, no refresh button — a Go-side watcher debounces filesystem noise into one event carrying *which* areas changed, and that maps onto the exact queries those areas affect. Saving a file does not re-read the ref list.
 - **Adaptive tuning for large repositories.** A repository whose status is slow gets `core.fsmonitor`, an untracked cache and a commit-graph, and degrades to collapsed untracked directories — measured at 4442ms → 132ms on 500k files. It says so on screen and the degrade is reversible.
+- **An application log** at `#/dev/log` — a ring buffer that records every level regardless of what reaches the console, because a packaged app has no devtools window to read.
 
 ---
 
-## Not yet wired up
+## 🚧 Not built
 
-Kept honest on purpose. Each of these has a working service layer and no path to it from the interface:
+Kept honest on purpose.
 
-| | Status |
+| | Why |
 |---|---|
-| **Branch checkout, create, rename, delete** | `BranchService` and the mutations exist and are tested; the branch list only selects, and the menu items are stubs. **You cannot currently switch branches from the UI.** |
-| **Blame** | `BlameService` and `useBlame` exist; nothing renders them. |
-| **Clone** | Menu stub. Repositories are added by opening an existing directory. |
-| **Pull requests** | Menu stub. No forge integration. |
-| **Hooks, LFS, submodules** | Deliberately excluded from repository settings, each for a reason recorded in `PLAN.md` §9. |
-| **Content search** (`git grep`) | Search covers commits, not file contents. |
+| **Content search** (`git grep`) | Search covers commits, not file contents — it needs a results surface of its own rather than a commit list. |
+| **Pull request review** | The menu opens your host's pull requests in a browser. There is no forge integration and none planned. |
+| **Hooks, LFS, submodules** | **Cut**, not deferred — none of the three matched how this app's author works. `PLAN.md` §14. |
+| **Keybindings editor** | The app has four shortcuts. An editor for rebinding four things is a settings page for nothing. |
+| **Code signing, notarization, auto-update** | Declined, and they move as a group: an unsigned updater is an unverified download replacing the running app. See **Installing** below. |
+| **End-to-end tests** | The unit layer is there; the scaffolding for driving the whole app costs more than it saves at one user. |
 
-Phases 0–6 are complete and Phase 7 (performance) is in progress. `PLAN.md` is the real record — it documents what was built, what was measured, and the places where the result argued with the plan.
+All nine phases in `PLAN.md` are complete. It is the real record — what was built, what was measured, and the places where the measurement argued with the plan and won.
 
 ---
 
-## Building
+## 📥 Installing
 
-Requires macOS, Go 1.25+, Node 20+, and the [Wails v2 CLI](https://wails.io/docs/gettingstarted/installation).
+Download the `.dmg` or the `.zip` from [Releases](https://github.com/IvanWasHere/moonGit/releases). Both hold the same universal build (Intel + Apple Silicon).
+
+> ⚠️ **moonGit is not signed with an Apple Developer certificate.** macOS quarantines anything downloaded through a browser, and refuses to open an unsigned quarantined app — the message says the app is *damaged*, which it is not. After moving it to Applications:
+>
+> ```sh
+> xattr -dr com.apple.quarantine /Applications/moonGit.app
+> ```
+
+---
+
+## 🔨 Building
+
+Requires macOS, Go 1.25+, Node 22+, and the [Wails v2 CLI](https://wails.io/docs/gettingstarted/installation).
 
 ```sh
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
 
-make dev      # run with hot reload
-make build    # produce a packaged .app in build/bin
+make dev        # run with hot reload
+make build      # universal .app in build/bin
+make archcheck  # assert the built binary really is universal
 ```
 
-## Development
+Releases are built by `.github/workflows/release.yml` when a release is published: it runs the full check, builds universal, verifies with `lipo`, and attaches a DMG and a zip.
+
+## 🧪 Development
 
 ```sh
-make check         # everything CI would run: lint, typecheck, tests
+make check         # everything CI runs: lint, typecheck, tests
 make test          # Go + frontend tests
 make lint          # go vet + eslint
 make typecheck     # tsc --noEmit
@@ -133,11 +148,11 @@ The benchmark imports its argument vectors from the application source rather th
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 The one rule everything else follows: **Go knows nothing about git.**
 
-`internal/gitexec` spawns a process and returns `{stdout, stderr, exitCode}`. It has no concept of a commit, a branch or a diff. Every parser, every domain service and every decision lives in TypeScript, which means the interesting logic is testable without a running application — and it is: 648 frontend tests, most of them over parsers fed real captured git output.
+`internal/gitexec` spawns a process and returns `{stdout, stderr, exitCode}`. It has no concept of a commit, a branch or a diff. Every parser, every domain service and every decision lives in TypeScript, which means the interesting logic is testable without a running application — and it is: **782 frontend tests**, most of them over parsers fed real captured git output, plus Go tests over the process layer.
 
 ```
 internal/          Go — 9 services, one native capability each
@@ -155,10 +170,14 @@ frontend/src/
 
 **SQLite stores app state only** — window layout, preferences, the repository list. Never refs, HEAD, status or ahead/behind counts. Git is the source of truth for git data; a cache of it would be a cache that goes stale in ways the user notices.
 
-Full rationale, including four deliberate deviations from the original PRD, is in `PLAN.md`.
+**No CGO**, which is why a universal binary is one flag rather than a cross-toolchain project.
+
+Two rules are enforced by tests rather than by convention, because both were broken by copying an example that was already wrong: every overlay must paint above the menu bar, and nothing may call `window.prompt` or `window.confirm` — in a packaged Wails app they silently return `null` and `false`.
+
+Full rationale, including the deliberate deviations from the original PRD, is in `PLAN.md`.
 
 ---
 
-## License
+## 📄 License
 
-Not yet chosen.
+[MIT](LICENSE.md) © 2026 Ivan Marinkovic

@@ -1008,7 +1008,7 @@ Item 10, and the last of Phase 6. `services/git/ConfigService.ts`, `services/ign
 
 **One rough edge found while verifying, not a bug**: the config and remote queries are cached, so a change made on the command line while the panel is open is not noticed until some mutation invalidates them. The watcher covers the working tree, not `.git/config`. Left as is — a panel that refetched on every `.git` write would be re-running `git config` during a rebase.
 
-**Not built, and why**: **hooks** — listing and toggling them is easy, but the useful version opens and edits a shell script, which is an editor feature and not a settings one. **LFS** — untestable here: no LFS repository exists in `testGitHere`, and shipping a panel verified only against a repository without the thing it manages is worse than not shipping it. **Submodules** — init, update, sync and their failure modes are a feature in their own right, not a tab; it belongs beside the branch and merge work, not under Settings. All three keep their `soon()` stubs, which say what they are rather than pretending to exist.
+**Not built, and why**: **hooks** — listing and toggling them is easy, but the useful version opens and edits a shell script, which is an editor feature and not a settings one. **LFS** — untestable here: no LFS repository exists in `testGitHere`, and shipping a panel verified only against a repository without the thing it manages is worse than not shipping it. **Submodules** — init, update, sync and their failure modes are a feature in their own right, not a tab; it belongs beside the branch and merge work, not under Settings. *All three were later **cut** rather than deferred (§14, 2026-08-16), and the `soon()` stubs they had here went with the helper itself in 8.9.*
 
 608 frontend tests pass (66 new, in `config.test.ts` and `ignoreFiles.test.ts`), and `tsc --noEmit` is clean.
 
@@ -1160,7 +1160,7 @@ Targets are 500k files / 1M commits. Concretely:
 
 1. ~~**History**: cursor-paged `git log --skip/--max-count` (or `--since` windows), TanStack Virtual, ~200-commit pages,~~ ✅ **built in 7.3 and 7.4** — `--skip`, 200-commit pages, TanStack Virtual; ~~graph lanes computed incrementally in the Worker~~ — **the Worker is withdrawn, measured at 39ms for 20,000 commits** (below)
 2. ~~**Status at 500k files**: enable `core.fsmonitor` + `core.untrackedCache` on open, and don't call `--untracked-files=all` on huge repos — degrade to `normal` above a file-count threshold~~ ✅ (below) — built, but not as written: the two mitigations turned out to be one, and the threshold is a duration rather than a file count
-3. **Streaming**: everything large goes through `RunStream`, parsed incrementally, never a single giant string — ◐ `log` and `ls-files` both stream as of 7.7 (below); **the audit found a third payload nobody had listed**, `git show` on a commit, which is still buffered and still unbounded
+3. ~~**Streaming**: everything large goes through `RunStream`, parsed incrementally, never a single giant string~~ ✅ **closed in 7.7** — `log` and `ls-files` stream; the audit's third payload, `git show` on a commit (187.6MB), was resolved by deleting the dead query that would have run it rather than by streaming it
 4. ~~**Rerenders**: `React.memo` + granular Zustand selectors; assert render counts in tests for the big lists~~ ✅ **done in 7.8, and two of its three clauses were withdrawn on measurement** — `React.memo` is not warranted (23 rows), the selectors were already granular, and the render-count tests found the real cost somewhere else entirely (below)
 5. ~~**Bundle**: lazy-load Monaco on first use~~ — **withdrawn: Monaco was never adopted** (§14.4). xterm ✅ and Shiki ✅ are both already lazy
 
@@ -1811,6 +1811,38 @@ Against a disposable repository generated for the purpose (§13a's tier 2 — ne
 `cloneRepository` binds its runner to the parent directory, so a parent that does not exist fails inside `fork/exec` and Go reports **"fork/exec /opt/homebrew/bin/git: no such file or directory"** — which reads as "git is not installed". It now checks the directory first and says which folder is missing.
 
 **And one thing the run did not correct**, because it turned out to be the fixture: the first clone produced an empty checkout. The bare repository's HEAD pointed at `master` while the branches pushed were `main`. Plain `git clone` from the command line does exactly the same thing with a warning, so the app was right and the test repository was wrong.
+
+
+### ✅ Phase 8.13 — a release workflow that builds the .app and a DMG
+
+`.github/workflows/release.yml`, the repository's first CI. Fires when a GitHub release is published, and has a `workflow_dispatch` trigger so the whole thing can be exercised without cutting one — that run uploads the same two files as build artifacts instead.
+
+**What it produces:** `moonGit-<version>.dmg` and `moonGit-<version>-universal.zip`, both holding the same universal build, both attached to the release.
+
+**Choices worth the words:**
+
+| | |
+|---|---|
+| `macos-latest` | the build is a macOS bundle and `hdiutil` exists nowhere else |
+| Wails CLI pinned to `v2.13.0` | `@latest` would let the build change under the project with no commit saying so — §1.1 chose v2 over the v3 alpha deliberately |
+| `hdiutil`, not `create-dmg` | it ships with macOS, so no third-party action sits in the release path |
+| `ditto`, not `zip` | it preserves the resource forks, symlinks and executable bit inside a bundle; a plain `zip` can produce a bundle that will not open |
+| tests run before the build | so a failing suite cannot ship |
+| `lipo` assertion after the build | the same check as `make archcheck` |
+
+**The version has to be stamped, or every release says 0.1.0.** `build/darwin/Info.plist` templates `CFBundleVersion` from `wails.json`'s `productVersion`, so the tag reaches the bundle only by rewriting that file in CI. The step strips the conventional leading `v`.
+
+**Nothing signs or notarizes, and the workflow says so where it matters.** The app carries only Wails' ad-hoc signature (`Signature=adhoc`, confirmed on the built bundle). macOS quarantines anything downloaded through a browser, and a quarantined *unsigned* app is refused outright with **"moonGit is damaged and can't be opened"** — which reads as a corrupt download rather than a missing certificate. A step appends the one-line fix (`xattr -dr com.apple.quarantine`) to the release notes, because that message is otherwise indistinguishable from a broken build.
+
+**Every packaging step was run locally before committing the workflow**, rather than trusted to a first release:
+
+- the version-stamp script, verbatim — `productVersion -> 0.0.0-dev`, then restored
+- `lipo` assertion — **it failed first**, correctly, because the tree still held an arm64-only probe build; passing only after a real universal build
+- `hdiutil create` and `verify` — 17MB, checksum valid
+- the DMG *mounted*: `Applications` symlink present, and the app inside universal and ad-hoc signed
+- the zip extracted with `ditto`: universal, executable bit preserved, signature intact
+
+The zip round trip caught one thing worth recording, though it was a mistake in the testing rather than in the workflow: the first extraction showed an arm64-only binary, because the zip had been made *before* the universal rebuild. Sequencing, not a bug — but it is the same shape as every other error in this phase, and it was found by checking the artifact instead of assuming the command had done what it said.
 
 ---
 
