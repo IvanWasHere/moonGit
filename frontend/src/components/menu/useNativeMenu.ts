@@ -2,6 +2,9 @@ import { useEffect, useRef } from 'react';
 import { onMenuAction, setApplicationMenu } from '@/services/wails';
 import type { NativeMenu } from '@/services/wails';
 import { isMenuItemId, MENUS, type MenuItemId } from './menuConfig';
+import { logger } from '@/services/log';
+
+const log = logger('menu');
 
 /**
  * Mirrors the application menu into the native macOS menu bar.
@@ -34,7 +37,7 @@ export function useNativeMenu(onAction: (id: MenuItemId) => void): void {
       // Not fatal, and deliberately not a toast: the in-window menubar still
       // has every one of these items, so the app is fully usable with the
       // native bar left at whatever Wails defaulted to.
-      console.warn('failed to set the native application menu', cause);
+      log.warn('failed to set the native application menu', cause);
     });
   }, []);
 

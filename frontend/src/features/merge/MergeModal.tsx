@@ -21,6 +21,7 @@ import {
   type MergeRegion,
 } from './threeWay';
 import styles from './MergeModal.module.css';
+import { useDialog } from '@/components/useDialog';
 
 /**
  * The three-way merge tool (PLAN.md §9.3).
@@ -42,6 +43,7 @@ import styles from './MergeModal.module.css';
  * two sources of truth for one file is worse than either.
  */
 export function MergeModal({ onClose }: { readonly onClose: () => void }) {
+  const dialog = useDialog('Resolve merge conflicts', onClose);
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const { data: status } = useStatus(repoPath);
 
@@ -55,8 +57,7 @@ export function MergeModal({ onClose }: { readonly onClose: () => void }) {
     <div className={styles.backdrop} onClick={onClose}>
       <div
         className={styles.modal}
-        role="dialog"
-        aria-label="Resolve merge conflicts"
+        {...dialog}
         onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.header}>

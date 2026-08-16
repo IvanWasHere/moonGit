@@ -5,6 +5,7 @@ import { useCreateTag } from '@/queries/mutations';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import styles from './TagPrompt.module.css';
+import { useDialog } from '@/components/useDialog';
 
 /**
  * Naming a new tag (PLAN.md §9.5).
@@ -28,6 +29,7 @@ export function TagPrompt({
 }) {
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const createTag = useCreateTag(repoPath);
+  const dialog = useDialog('Create tag', onClose);
 
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
@@ -59,8 +61,7 @@ export function TagPrompt({
     <div className={styles.backdrop} onClick={onClose}>
       <div
         className={styles.modal}
-        role="dialog"
-        aria-label="Create tag"
+        {...dialog}
         onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.header}>

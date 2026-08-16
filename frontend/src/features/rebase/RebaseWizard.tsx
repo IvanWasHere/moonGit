@@ -21,6 +21,7 @@ import {
   type TodoEntry,
 } from './rebaseTodo';
 import styles from './RebaseWizard.module.css';
+import { useDialog } from '@/components/useDialog';
 
 /** How many commits may be replayed before the list stops being a list. */
 const MAX_REPLAY = 200;
@@ -38,6 +39,7 @@ const ACTIONS: readonly RebaseAction[] = ['pick', 'edit', 'squash', 'fixup', 'dr
  * the only order in which "fold into the commit above" means anything.
  */
 export function RebaseWizard({ onClose }: { readonly onClose: () => void }) {
+  const dialog = useDialog('Rebase', onClose);
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
   const { data: refs } = useRefs(repoPath);
@@ -70,8 +72,7 @@ export function RebaseWizard({ onClose }: { readonly onClose: () => void }) {
     <div className={styles.backdrop} onClick={onClose}>
       <div
         className={styles.modal}
-        role="dialog"
-        aria-label="Rebase"
+        {...dialog}
         onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.header}>

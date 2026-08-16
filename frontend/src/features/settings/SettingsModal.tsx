@@ -5,6 +5,8 @@ import { gitInfo, setGitPath, keychainAvailable, type GitInfo } from '@/services
 import { showToast } from '@/stores/notificationStore';
 import { useSettingsStore, type ThemeChoice } from '@/stores/settingsStore';
 import styles from './SettingsModal.module.css';
+import { useDialog } from '@/components/useDialog';
+import { accentContrast, AA_NORMAL } from '@/services/theme/accent';
 
 /**
  * Application settings (PLAN.md §9 item 8).
@@ -24,10 +26,15 @@ import styles from './SettingsModal.module.css';
  */
 export function SettingsModal({ onClose }: { readonly onClose: () => void }) {
   const settings = useSettingsStore();
+  const dialog = useDialog('Settings', onClose);
 
   return (
     <div className={styles.backdrop} onClick={onClose}>
-      <div className={styles.panel} onClick={(event) => event.stopPropagation()}>
+      <div
+        className={styles.panel}
+        {...dialog}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className={styles.header}>
           <span>Settings</span>
           <button type="button" className={styles.close} onClick={onClose} title="Close">
@@ -59,6 +66,9 @@ export function SettingsModal({ onClose }: { readonly onClose: () => void }) {
             {settings.theme === 'system' && (
               <p className={styles.note}>Currently showing the {settings.resolved} theme.</p>
             )}
+            <Field label="Accent">
+              <AccentPicker />
+            </Field>
           </Section>
 
           <GitSection />
@@ -89,6 +99,83 @@ const LABELS: Record<ThemeChoice, string> = {
   dark: 'Dark',
   light: 'Light',
 };
+
+/**
+ * Presets plus a colour well, and a live readability figure (PLAN.md §11, 8.5).
+ *
+ * The readout is the part worth defending. 8.1 measured the app's own accent
+ * failing WCAG AA on some surfaces, so *refusing* a dim colour would hold the
+ * user to a standard the product does not meet — but offering a colour well
+ * with no feedback at all invites picking a navy that renders the active tab
+ * invisible against a dark panel. It reports; it does not enforce.
+ *
+ * Measured against `--bg-panel`, because accent-coloured text in this app is
+ * overwhelmingly panel furniture: headers, the active tab, branch labels.
+ */
+function AccentPicker() {
+  const settings = useSettingsStore();
+  const current = settings.accent;
+  const ratio = current === '' ? null : accentContrast(current, settings.resolved);
+
+  return (
+    <div className={styles.accentRow}>
+      <button
+        type="button"
+        aria-pressed={current === ''}
+        className={`${styles.segment} ${current === '' ? styles.segmentActive : ''}`}
+        onClick={() => settings.set({ accent: '' })}
+      >
+        Default
+      </button>
+
+      {ACCENT_PRESETS.map((preset) => (
+        <button
+          key={preset.hex}
+          type="button"
+          title={preset.name}
+          aria-label={preset.name}
+          aria-pressed={current.toLowerCase() === preset.hex}
+          className={`${styles.swatch} ${
+            current.toLowerCase() === preset.hex ? styles.swatchOn : ''
+          }`}
+          style={{ background: preset.hex }}
+          onClick={() => settings.set({ accent: preset.hex })}
+        />
+      ))}
+
+      {/* The escape hatch from the presets. `value` needs a concrete colour, so
+          "default" shows the theme's own rather than a black well. */}
+      <input
+        type="color"
+        aria-label="Custom accent"
+        className={styles.colorWell}
+        value={current === '' ? THEME_ACCENT[settings.resolved] : current}
+        onChange={(event) => settings.set({ accent: event.target.value })}
+      />
+
+      {ratio !== null && (
+        <span className={ratio >= AA_NORMAL ? styles.note : styles.error}>
+          {ratio.toFixed(1)}:1{ratio >= AA_NORMAL ? '' : ' — dim against the panel'}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** The shipped accents, so the colour well opens on the current colour. */
+const THEME_ACCENT: Record<'dark' | 'light', string> = {
+  dark: '#e8a838',
+  light: '#9a6700',
+};
+
+const ACCENT_PRESETS = [
+  { name: 'Amber', hex: '#e8a838' },
+  { name: 'Blue', hex: '#58a6ff' },
+  { name: 'Green', hex: '#3fb950' },
+  { name: 'Purple', hex: '#bc8cff' },
+  { name: 'Red', hex: '#f85149' },
+  { name: 'Cyan', hex: '#56d4dd' },
+] as const;
 
 /**
  * The git binary, and proof that it works.

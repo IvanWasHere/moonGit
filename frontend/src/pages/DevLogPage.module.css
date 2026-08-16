@@ -1,0 +1,134 @@
+.page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--titlebar-inset) / 2 + 16px) 24px 16px;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+
+.chip {
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.chipOn {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* The log itself scrolls; the controls above it stay put. */
+.list {
+  flex: 1;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.entry {
+  display: grid;
+  grid-template-columns: 78px 52px 90px 1fr;
+  gap: 10px;
+  padding: 1px 0;
+  border-bottom: 1px solid transparent;
+}
+
+.entry:hover {
+  background: var(--bg-hover);
+}
+
+.at,
+.scope {
+  color: var(--text-muted);
+}
+
+.scope {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.level {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.debug {
+  color: var(--text-muted);
+}
+.info {
+  color: var(--blue);
+}
+.warn {
+  color: var(--accent);
+}
+.error {
+  color: var(--red);
+}
+
+.message {
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.detail {
+  color: var(--text-secondary);
+}
+
+.empty {
+  padding: 32px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}

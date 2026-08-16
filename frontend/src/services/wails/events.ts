@@ -1,5 +1,8 @@
 import { EventsOn } from '../../../wailsjs/runtime/runtime';
 import type { RepoChangeEvent } from './types';
+import { logger } from '@/services/log';
+
+const log = logger('wails');
 
 /**
  * Typed wrapper over the Wails event bus.
@@ -27,7 +30,7 @@ export function onEvent<T>(event: string, handler: (payload: T) => void): () => 
     try {
       off();
     } catch (cause) {
-      console.warn(`failed to unsubscribe from "${event}"`, cause);
+      log.warn(`failed to unsubscribe from "${event}"`, cause);
     }
   };
 }

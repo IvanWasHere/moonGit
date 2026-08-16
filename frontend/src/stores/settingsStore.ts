@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getPreference, setPreference } from '@/services/db/keyValue';
+import { accentTokens } from '@/services/theme/accent';
 
 /**
  * Application settings — the PRD's `Settings` and `Theme` stores, which Phase 3
@@ -38,6 +39,15 @@ export interface Settings {
    * middle one is something a file picker could have produced.
    */
   readonly editor: string;
+  /**
+   * A custom accent as `#rrggbb`, or '' for the theme's own.
+   *
+   * Empty rather than the shipped colour so that "default" keeps following the
+   * theme: dark and light have *different* accents, chosen for contrast against
+   * their own backgrounds, and storing one of them would pin the other theme to
+   * a colour picked for the opposite background.
+   */
+  readonly accent: string;
 }
 
 const DEFAULTS: Settings = {
@@ -47,6 +57,7 @@ const DEFAULTS: Settings = {
   theme: 'system',
   gitPath: '',
   editor: '',
+  accent: '',
 };
 
 const PREFERENCE_KEY = 'settings';
@@ -85,6 +96,38 @@ export function applyTheme(resolved: ResolvedTheme): void {
   document.documentElement.dataset['theme'] = resolved;
 }
 
+/**
+ * Write a custom accent onto <html>, or clear it back to the theme's own.
+ *
+ * Inline custom properties on the root element, which beat `tokens.css`'s
+ * `:root` rules by specificity — so "no custom accent" is *removing* them
+ * rather than writing the shipped values back. That distinction is what lets
+ * the default keep following the theme: dark and light ship different accents,
+ * each picked against its own background, and writing one of them down would
+ * pin the other theme to a colour chosen for the opposite surface.
+ *
+ * Lives beside `applyTheme` and is called from the same three places, because
+ * the hover variant is derived per theme — following the OS into light has to
+ * recompute it, not merely leave it.
+ */
+export function applyAccent(accent: string, resolved: ResolvedTheme): void {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  const tokens = accent === '' ? null : accentTokens(accent, resolved);
+
+  if (tokens === null) {
+    for (const name of ['--accent', '--accent-dim', '--accent-glow', '--accent-hover']) {
+      root.style.removeProperty(name);
+    }
+    return;
+  }
+
+  root.style.setProperty('--accent', tokens.accent);
+  root.style.setProperty('--accent-dim', tokens.accentDim);
+  root.style.setProperty('--accent-glow', tokens.accentGlow);
+  root.style.setProperty('--accent-hover', tokens.accentHover);
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   ...DEFAULTS,
   loaded: false,
@@ -98,6 +141,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const settings: Settings = { ...DEFAULTS, ...stored };
     const resolved = resolveTheme(settings.theme);
     applyTheme(resolved);
+    applyAccent(settings.accent, resolved);
     set({ ...settings, resolved, loaded: true });
   },
 
@@ -106,9 +150,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       theme: patch.theme ?? get().theme,
       gitPath: patch.gitPath ?? get().gitPath,
       editor: patch.editor ?? get().editor,
+      accent: patch.accent ?? get().accent,
     };
     const resolved = resolveTheme(next.theme);
     applyTheme(resolved);
+    applyAccent(next.accent, resolved);
     set({ ...next, resolved });
     void setPreference(PREFERENCE_KEY, next);
   },
@@ -119,6 +165,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (get().theme !== 'system') return;
     const resolved = systemTheme();
     applyTheme(resolved);
+    // Re-derived, not merely re-applied: the hover variant depends on which
+    // theme is showing, so following the OS into light has to recompute it.
+    applyAccent(get().accent, resolved);
     set({ resolved });
   },
 }));

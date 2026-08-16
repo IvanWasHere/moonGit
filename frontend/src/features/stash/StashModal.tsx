@@ -10,6 +10,7 @@ import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { timeAgo } from '@/utils/format';
 import styles from './StashModal.module.css';
+import { useDialog } from '@/components/useDialog';
 
 /**
  * The stash stack (PLAN.md §9.5).
@@ -29,6 +30,7 @@ import styles from './StashModal.module.css';
  *    the wrong row.
  */
 export function StashModal({ onClose }: { readonly onClose: () => void }) {
+  const dialog = useDialog('Stashes', onClose);
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const { data: stashes, isPending, error } = useStashes(repoPath);
   const { data: status } = useStatus(repoPath);
@@ -94,8 +96,7 @@ export function StashModal({ onClose }: { readonly onClose: () => void }) {
     <div className={styles.backdrop} onClick={onClose}>
       <div
         className={styles.modal}
-        role="dialog"
-        aria-label="Stashes"
+        {...dialog}
         onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.header}>

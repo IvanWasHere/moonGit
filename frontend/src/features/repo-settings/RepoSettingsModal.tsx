@@ -17,6 +17,7 @@ import {
   type ConfigKeySpec,
 } from './configKeys';
 import styles from './RepoSettingsModal.module.css';
+import { useDialog } from '@/components/useDialog';
 
 /**
  * Repository settings (PLAN.md §9 item 10).
@@ -40,6 +41,7 @@ export function RepoSettingsModal({
 }) {
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const openRepoSettings = useWorkspaceStore((state) => state.openRepoSettings);
+  const dialog = useDialog('Repository Settings', onClose);
 
   // Escape closes, as it does for every other overlay. On `window` because the
   // focus may be inside a textarea that would otherwise swallow it.
@@ -55,7 +57,11 @@ export function RepoSettingsModal({
 
   return (
     <div className={styles.backdrop} onClick={onClose}>
-      <div className={styles.panel} onClick={(event) => event.stopPropagation()}>
+      <div
+        className={styles.panel}
+        {...dialog}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className={styles.header}>
           <span>Repository Settings</span>
           <span className={styles.repoName}>{fileName(repoPath)}</span>

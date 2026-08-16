@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/Badges';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { fileDir, fileName } from '@/utils/format';
 import styles from './QuickOpen.module.css';
+import { useDialog } from '@/components/useDialog';
 
 /**
  * Jump to any file by name (⌘P).
@@ -38,6 +39,7 @@ export function QuickOpen() {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialog = useDialog('Go to file', close);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -69,7 +71,11 @@ export function QuickOpen() {
 
   return (
     <div className={styles.backdrop} onClick={close}>
-      <div className={styles.panel} onClick={(event) => event.stopPropagation()}>
+      <div
+        className={styles.panel}
+        {...dialog}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className={styles.inputRow}>
           <Icons.Search size={13} />
           <input

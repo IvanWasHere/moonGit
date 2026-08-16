@@ -1,6 +1,7 @@
 import { createHashRouter, Navigate } from 'react-router-dom';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { DevBridgePage } from '@/pages/DevBridgePage';
+import { DevLogPage } from '@/pages/DevLogPage';
 import { MainPage } from '@/pages/MainPage';
 import { ReviewPage } from '@/pages/ReviewPage';
 
@@ -17,5 +18,7 @@ export const router = createHashRouter([
   { path: '/repo/:repoId/review', element: <ReviewPage /> },
   // Development harness for the native bridge — not linked from the product UI.
   { path: '/dev/bridge', element: <DevBridgePage /> },
+  // The log viewer, for the packaged build where there is no devtools window.
+  { path: '/dev/log', element: <DevLogPage /> },
   { path: '*', element: <Navigate to="/" replace /> },
 ]);

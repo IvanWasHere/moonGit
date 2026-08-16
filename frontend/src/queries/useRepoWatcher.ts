@@ -4,6 +4,9 @@ import { ignoreService } from '@/services/git';
 import { useWatchStore } from '@/stores/watchStore';
 import { onRepoChanged, unwatchRepo, watchRepo } from '@/services/wails';
 import { keysToInvalidate } from './keys';
+import { logger } from '@/services/log';
+
+const log = logger('watcher');
 
 /**
  * Keeps a repository's queries fresh from the file watcher.
@@ -60,7 +63,7 @@ export function useRepoWatcher(repoPath: string | null): void {
         // A repository that cannot be watched is still usable — it just will
         // not refresh by itself, which is better than refusing to open it.
         // Recorded as `null` so the panel can say so instead of looking live.
-        console.warn(`could not watch ${repoPath}`, cause);
+        log.warn(`could not watch ${repoPath}`, cause);
         if (!cancelled) useWatchStore.getState().record(repoPath, null);
       }
     })();

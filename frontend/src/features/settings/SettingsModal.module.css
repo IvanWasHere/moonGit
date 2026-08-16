@@ -179,3 +179,43 @@
   color: var(--red);
   line-height: 1.5;
 }
+
+/* The accent row: presets, a colour well, and the readability figure
+   (PLAN.md §11, 8.5). Wraps because the panel is narrow and six swatches plus
+   a well plus a ratio do not fit on one line at every width. */
+.accentRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.swatch:hover {
+  border-color: var(--text-secondary);
+}
+
+/* Ring rather than a border swap, so the swatch's own colour is not covered by
+   the indicator that it is selected. */
+.swatchOn {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 3px var(--text-primary);
+}
+
+.colorWell {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}

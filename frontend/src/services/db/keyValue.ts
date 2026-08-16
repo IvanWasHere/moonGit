@@ -11,6 +11,9 @@
  */
 
 import { dbExec, dbQuery, toRecords } from '../wails';
+import { logger } from '@/services/log';
+
+const log = logger('db');
 
 type Table = 'preferences' | 'layout_state';
 
@@ -22,7 +25,7 @@ async function readJson<T>(table: Table, key: string, fallback: T): Promise<T> {
   try {
     return JSON.parse(raw) as T;
   } catch {
-    console.warn(`${table}.${key} holds unparseable JSON; using the default`);
+    log.warn(`${table}.${key} holds unparseable JSON; using the default`);
     return fallback;
   }
 }

@@ -40,8 +40,22 @@ export const MENUS = [
       /* Application preferences, as distinct from the repository's own config
          above. There is no app menu to put them in — the mockup's bar starts
          at Repository — so they sit here, which is also where macOS users
-         reach for ⌘, out of habit. */
-      { id: 'repository.preferences', label: 'Preferences…' },
+         reach for ⌘, out of habit.
+
+         **Labelled `Settings…`, not `Preferences…`, so the two menu bars read
+         the same.** 6.11 called the divergence a free win: macOS silently
+         retitles a menu item named `Preferences…` to `Settings…` on Ventura
+         and later, so each bar matched its own convention from one source.
+         In practice it is the *only* label out of forty that differs between
+         the in-window bar and the native one, and one word that changes
+         depending on where you look reads as a bug rather than as etiquette.
+         Naming it `Settings…` here means macOS has nothing to retitle and
+         both bars agree.
+
+         The id stays `repository.preferences`: it is internal, `useMenuActions`
+         and every test key off it, and renaming it would churn those for no
+         visible gain. */
+      { id: 'repository.preferences', label: 'Settings…' },
       { id: 'repository.exit', label: 'Exit', separatorBefore: true },
     ],
   },

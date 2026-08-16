@@ -1,6 +1,9 @@
 import { migrate } from '@/services/db/migrations';
 import { useSettingsStore, watchSystemTheme } from '@/stores/settingsStore';
 import { setGitPath } from '@/services/wails';
+import { logger } from '@/services/log';
+
+const log = logger('app');
 
 /**
  * Work that must finish before the first render.
@@ -38,7 +41,7 @@ export async function bootstrap(): Promise<BootstrapResult> {
       // has to be pushed back to it before the first command runs.
       if (gitPath !== '') await setGitPath(gitPath);
     } catch (cause) {
-      console.warn('settings could not be loaded; using defaults', cause);
+      log.warn('settings could not be loaded; using defaults', cause);
     }
 
     const detail =
@@ -48,7 +51,7 @@ export async function bootstrap(): Promise<BootstrapResult> {
     return { ok: true, detail };
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
-    console.error('database migration failed', cause);
+    log.error('database migration failed', cause);
     return { ok: false, detail: message };
   }
 }

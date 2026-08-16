@@ -17,11 +17,16 @@ describe('menuConfig', () => {
    * These lists are the mockup's menus, item for item, and the point of the
    * assertion is that they do not quietly drift from it.
    *
-   * **`Preferences…` is the one deliberate addition** (Phase 6.8). Application
+   * **`Settings…` is the one deliberate addition** (Phase 6.8). Application
    * settings need a home and the mockup's bar has no app menu — it starts at
    * Repository — so they sit at the end of the first menu, next to the
    * repository's own settings and where ⌘, already points. Distinct from
    * "Repository Settings" above it, which is git config and still unbuilt.
+   *
+   * It read `Preferences…` until 8.2, and the rename is the whole point of
+   * that entry: macOS retitles `Preferences…` to `Settings…` by itself, which
+   * made this the only one of the forty item labels that differed between the
+   * two menu bars. Asserted here so it cannot drift back.
    *
    * **`Terminal` is the second** (Phase 6.9). The mockup has no shell at all,
    * so there is no item it could drift from; it is in the Repository menu
@@ -40,7 +45,7 @@ describe('menuConfig', () => {
         'Synchronize',
         'Terminal',
         'Repository Settings',
-        'Preferences…',
+        'Settings…',
         'Exit',
       ],
     ],
@@ -69,6 +74,33 @@ describe('menuConfig', () => {
         expect(item.id.startsWith(`${menu.id}.`)).toBe(true);
       }
     }
+  });
+
+  /*
+   * Labels macOS rewrites behind the app's back (PLAN.md §11, 8.2).
+   *
+   * `MENUS` draws both menu bars, so the two can never differ in *structure* —
+   * but they can still differ in *wording*, because macOS retitles certain
+   * menu items by convention once they reach the native bar. `Preferences…`
+   * becoming `Settings…` on Ventura and later is the one this app hit, and it
+   * went unnoticed for two phases: the in-window bar said one word, the menu
+   * bar at the top of the screen said another, from a single source of truth.
+   *
+   * Nothing in TypeScript can see the native bar, so this asserts the property
+   * that actually prevents it — that no label is one of the names macOS is
+   * known to rewrite. A future `Preferences…` fails here rather than on
+   * somebody's screen.
+   */
+  const RETITLED_BY_MACOS = [/^preferences(…|\.\.\.)?$/i];
+
+  it('uses no label that macOS would silently retitle in the native bar', () => {
+    const offenders = MENUS.flatMap((menu) =>
+      menu.items
+        .filter((item) => RETITLED_BY_MACOS.some((pattern) => pattern.test(item.label)))
+        .map((item) => `${menu.label} → ${item.label}`),
+    );
+
+    expect(offenders).toEqual([]);
   });
 
   /*

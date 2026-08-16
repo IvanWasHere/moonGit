@@ -1,12 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { getLayout, getPreference, setLayout, setPreference } from '@/services/db/keyValue';
 import { parseStatusFilters } from '@/features/working-tree/statusFilters';
+import { logger } from '@/services/log';
 import {
   useWorkspaceStore,
   type DiffViewMode,
   type MainLayout,
   type ReviewLayout,
 } from './workspaceStore';
+
+const log = logger('layout');
 
 /**
  * Persists pane sizes to SQLite, not localStorage (PLAN.md §6).
@@ -89,7 +92,7 @@ export function useLayoutPersistence(): void {
       } catch (cause) {
         // A layout that will not load is a cosmetic problem; the defaults are
         // perfectly usable and refusing to open the workspace is not.
-        console.warn('could not restore layout', cause);
+        log.warn('could not restore layout', cause);
       } finally {
         if (!cancelled) loaded.current = true;
       }
@@ -122,7 +125,7 @@ export function useLayoutPersistence(): void {
           setPreference(DIFF_VIEW_KEY, state.diffView),
           setLayout(TERMINAL_KEY, state.terminalH),
           setPreference(STATUS_FILTERS_KEY, state.statusFilters),
-        ]).catch((cause: unknown) => console.warn('could not save layout', cause));
+        ]).catch((cause: unknown) => log.warn('could not save layout', cause));
       }, SAVE_DEBOUNCE_MS);
     });
 

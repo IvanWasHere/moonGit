@@ -1038,7 +1038,7 @@ A control ruled out the obvious alternative explanation: ⌃` sent the same way 
 
 **Verified live** against the running app, read back through the accessibility API rather than by eye: the bar reads `moonGit · Edit · Repository · Local · Branch · Remote · Query · Help`; every menu's items match `menuConfig.ts` item for item, separators included; **Repository → Terminal** clicked from the native bar opened the drawer and spawned a real `zsh`, which is the whole path — Go callback → `menu:action` → guard → handler map.
 
-**One free win.** macOS retitles a menu item called `Preferences…` to `Settings…` on Ventura and later, so the native menu says `Settings…` while the in-window one still says `Preferences…`. Each bar matches its own convention, from one source.
+~~**One free win.** macOS retitles a menu item called `Preferences…` to `Settings…` on Ventura and later, so the native menu says `Settings…` while the in-window one still says `Preferences…`. Each bar matches its own convention, from one source.~~ — **reversed in 8.2 (§11). It was not a win; it was the only thing on screen that disagreed with itself.**
 
 615 frontend tests pass (7 new, for `isMenuItemId`), `tsc --noEmit`, `go build ./...` and `go vet ./...` are clean.
 
@@ -1514,6 +1514,8 @@ Vitest + RTL for units and components · Playwright over `wails dev` for integra
 
 What survives is the part that was always the point: the tests, the a11y pass, the logger, the accent, and a universal binary, none of which need a certificate.
 
+**Progress (2026-08-16).** ✅ the a11y pass — contrast in 8.1, focus and dialog semantics in 8.3 · ✅ the logger and its viewer (8.4) · ✅ the custom accent (8.5) · ✅ the universal binary (8.6) · ✅ menu-label parity, which was not on the list until it was reported (8.2). **Remaining: Playwright integration flows.** Vitest and the Go tests were already in place; what is missing is the end-to-end layer over `wails dev`.
+
 ---
 
 ### ✅ Phase 8.1 — the contrast audit, and the dark theme's dim grey
@@ -1563,6 +1565,107 @@ None is fixable by a brighter grey; they are a badge-tint problem and a syntax-t
 **The cost, stated so nobody rediscovers it as a bug:** the gap between `--text-muted` and `--text-secondary` narrows from **2.50x to 1.43x**. The three tiers still read as three, verified on screen, but there is little room left. Any future proposal to brighten muted again should move `--text-secondary` and `--text-primary` first.
 
 **The light theme's 30 badge failures are untouched** and remain open — coloured text on a 12%-alpha tint of itself, plus Shiki over the 0.28-alpha word marks. They need a decision of their own about the badge system, not a token nudge.
+
+---
+
+### ✅ Phase 8.2 — the two menu bars, compared label by label
+
+Reported by Ivan: the menus at the top of the screen and the ones in the window do not read the same. 6.11 built both from `menuConfig.ts` precisely so they could not diverge, and verified them item for item — so the first job was to find out whether something had drifted since, or whether the divergence was one the design had chosen.
+
+**It was chosen.** Dumping both sides and diffing them byte for byte — the in-window labels evaluated straight out of `MENUS`, the native ones read back through the accessibility API — gives **one difference across all forty items**:
+
+```
+Repository  Preferences…      (in-window)
+Repository  Settings…         (native)
+```
+
+Everything else is identical, down to the curly apostrophe in `What's New` and the `…` characters. The structure was never the problem.
+
+That one difference is 6.11's "free win": macOS silently retitles a menu item named `Preferences…` to `Settings…` on Ventura and later, and the entry read this as each bar matching its own platform convention from a single source. **That reasoning is wrong in this app**, and the reason is worth keeping. The convention argument holds when the two bars are never seen together — a Mac app's menu bar and a Windows build's, say. Here both are on screen at once, eighteen pixels apart, in the same window. One word that changes depending on which of two adjacent bars you read is not etiquette; it is the sort of thing that makes someone check whether they are looking at two different builds.
+
+**Fixed by naming it `Settings…` in the config.** macOS then has nothing to retitle and both bars agree. The id stays `repository.preferences` — internal, keyed on by `useMenuActions` and the tests, and renaming it would churn those for nothing visible.
+
+**A test for the property, since TypeScript cannot see the native bar.** Nothing in the frontend can compare itself against an NSMenu, so the guard asserts what actually prevents the divergence: that no label is one macOS is known to rewrite. A future `Preferences…` fails in CI rather than on screen. That this went unnoticed for two phases — the plan even recorded it as a *feature* — is the argument for pinning it rather than trusting the next reader to remember.
+
+**Verified live**: all forty labels now diff clean against the native bar, and `moonGit · Edit · Repository · Local · Branch · Remote · Query · Help` is unchanged above them.
+
+---
+
+### ✅ Phase 8.3 — focus management, and what eight overlays had in common
+
+The contrast half of the a11y pass is 8.1. This is the keyboard half, and it found the same shape of problem: eight overlays had grown by copying one another — a backdrop that closes on click, a panel inside it — and had drifted on everything the copied shape does not make visible.
+
+| | before |
+|---|---|
+| `role="dialog"` + a name | 5 of 8 (Settings, Repository Settings and Quick Open had neither) |
+| `aria-modal` | **0 of 8** |
+| traps Tab | **0 of 8** |
+| returns focus when closed | **0 of 8** |
+
+None of it shows in a screenshot, which is why it survived Phase 6 with every one of these overlays "verified live".
+
+**What each of the three does, since they are easy to wave through as box-ticking.** `aria-modal` is what marks the rest of the app inert; without it a screen reader wanders off behind the backdrop and reads out a file list the user cannot reach. The Tab trap is what stops focus landing on a control *behind* the overlay — still covered, still unreachable by mouse, and now holding the focus ring, so the user is typing into something invisible. Focus restoration is what stops the next Tab after closing a dialog starting from the top of the window instead of from the button just pressed.
+
+**A hook, not a `<Dialog>` component.** Each overlay owns its backdrop and panel classes, its header, its layout; a component would have had to absorb all of that or take every piece as a prop. What the eight genuinely share is behaviour. `useDialog(label, onClose)` returns one flat object spread onto the panel — flat rather than `{ref, props}` because React 19 treats `ref` as an ordinary prop and because `eslint-plugin-react-hooks` reads any member access on an object holding a `ref` as touching a ref during render, which tripped `react-hooks/refs` at all eight call sites.
+
+**The bug the tests caught, which is the same bug jsdom caused in Phase 7.3.** The first implementation filtered candidates with `offsetParent !== null`, the standard "is this visible" check. **jsdom performs no layout, so `offsetParent` is null for everything** — every candidate was filtered out, the trap silently degraded to "keep focus on the panel", and three tests failed. Had the tests asserted only that focus stayed *somewhere inside*, they would have passed against a hook that does nothing. They assert *which* control has focus, which is why it surfaced. Replaced with an ancestor walk over `getComputedStyle`, which jsdom and browsers both answer honestly.
+
+**Verified in the running app**, not only in jsdom: Settings reports `aria-modal="true"` and the name `Settings`, focus moves inside on open, and — opening the merge wizard from the toolbar — Escape closed it and focus returned to the Merge button that opened it.
+
+**One thing that could not be verified this way, stated rather than glossed.** The Tab trap itself: the browser automation's synthetic key events do not drive the browser's own focus traversal, so pressing Tab fourteen times produced zero focus changes with `document.hasFocus()` true. That is a limitation of the harness, not evidence about the code. The trap is covered by unit tests (wrap forward, wrap backward, and a dialog with nothing focusable in it); confirming it by hand is one Tab-key press away for anyone who wants it.
+
+**Known and deliberate:** an overlay opened from the in-window menu cannot restore focus to the menu item that opened it, because the menu closes and that element is gone. The hook checks `isConnected` and skips rather than throwing focus at a detached node. Opened from a toolbar button — which stays mounted — restoration works, as verified above.
+
+---
+
+### ✅ Phase 8.4 — the central log, and the viewer that makes it worth having
+
+Before this the app had eight `console.warn` calls, and they were all at the same moment: something degraded and the app carried on anyway. The watcher that could not attach, the layout that would not restore, the preferences row holding unparseable JSON, the native menu that failed to install. Those are the events most worth a record — and **in a packaged Wails app there is no devtools window, so in the build that actually ships every one of those messages went nowhere at all.**
+
+**Two sinks, and keeping them separate is the whole design.**
+
+| | records | filtered by |
+|---|---|---|
+| ring buffer (500 entries) | **everything, every level** | nothing |
+| console | what passes the threshold | threshold, default `info` |
+
+The temptation is one threshold checked once on the way in, which is simpler and wrong: the moment anyone wants the log is *after* the strange thing has happened, and a threshold at record time throws away exactly the debug lines that would explain it. Filtering the *view* can never lose anything; raising the threshold cannot recover what was never printed. The ring is bounded because this is a desktop client that stays open for days with a watcher firing on every keystroke.
+
+Loggers are scoped — `logger('watcher')`, `logger('git')` — so every line says where it came from without the caller repeating itself, and the viewer can filter by subsystem, which is the first thing anyone does when reading a log. All eight call sites are migrated; `grep console\.` over `src/` now returns one hit, and it is inside a comment.
+
+**The viewer** lives at `#/dev/log`, beside the bridge harness and equally unlinked from product UI. Levels are colour-coded, scopes are discovered from the entries themselves rather than declared, and an `Error` in the detail field is unwrapped to its message — `JSON.stringify` renders an Error as `{}`, which in a log is worse than printing nothing. The level chips refuse to all turn off: an empty viewer reads as broken rather than as filtered.
+
+**Verified in the running app.** Vite serves source modules in dev, so the real logger singleton could be driven from the console rather than a copy of it: four entries across two scopes rendered correctly, the scope filter cut 4 rows to 2, warn+error cut them to 2, and clearing every level chip left 1 — the last chip refusing to turn off, as intended.
+
+**Not included, deliberately: Go's own log.** `main.go` writes to stderr through the standard library, and bridging that into this ring means a second channel, a second format and a decision about what to do when the frontend is not up yet. The frontend's degradations are what a user can actually act on; Go's are a crash log. Worth doing if the need appears, not before.
+
+---
+
+### ✅ Phase 8.5 — the custom accent, which is four tokens rather than one
+
+§14 predicted this would be "a variable swap, the token file already makes it one". Nearly: `tokens.css` does not hold *an* accent, it holds a small family — the colour, a 12% wash behind badges (`--accent-dim`), a 25% glow, and a hover variant. Setting only `--accent` puts an orange wash behind a blue badge, so all four are derived from the choice.
+
+**The hover variant moves in opposite directions per theme, and that is the part a single implementation would get wrong in one of them.** The shipped tokens go *lighter* on hover in dark (#e8a838 → #f0b44a) and *darker* in light (#9a6700 → #7a5200), because hover should move away from the background either way. Deriving it one direction makes one theme's hover state approach its own background and disappear — in the theme nobody happened to test. A test pins both directions.
+
+**"Default" is stored as `''`, not as the shipped colour.** The two themes ship *different* accents, each chosen against its own background; writing one of them down as the default would pin the other theme to a colour picked for the opposite surface. So the custom accent is applied as inline custom properties on `<html>`, which beat `tokens.css` by specificity, and clearing it *removes* them rather than writing values back. Following the OS from dark into light re-derives rather than merely re-applies, since the hover variant depends on which theme is showing.
+
+**A readability figure beside the picker, and it reports rather than enforces.** 8.1 measured the app's own accent failing AA on some surfaces, so refusing a dim colour would hold the user to a standard the product itself does not meet. But a colour well with no feedback invites picking a navy that makes the active tab invisible: `#2b3a55` reads **1.5:1 — dim against the panel**, in the panel, at the moment of choosing. Measured against `--bg-panel`, because accent-coloured text here is overwhelmingly panel furniture.
+
+**Verified in the running app**: picking Blue set all four tokens (`#58a6ff`, the two `rgba()` derivations, and hover lightened to `#6fb2ff`) with the readout at 6.9:1; a deliberately dim navy showed the warning; Green repainted the toolbar, commit hashes, graph nodes and folder icons together, with nothing left amber; and "Default" removed the inline properties and returned the app to `#e8a838`.
+
+---
+
+### ✅ Phase 8.6 — the universal binary
+
+`wails build` produces whatever the host is, which here is arm64 — an Intel Mac would refuse to open the result. `make build` is now `wails build -platform darwin/universal`, and `make archcheck` asserts the outcome rather than trusting the flag:
+
+```
+Architectures in the fat file: … are: x86_64 arm64
+```
+
+**This was one flag only because of a decision made in Phase 1.** §1.2 chose `modernc.org/sqlite` — pure Go, no CGO — over the cgo-based driver. With a cgo dependency anywhere in the tree, cross-compiling amd64 from an arm64 host needs a full cross toolchain, and "ship a universal binary" becomes a build-infrastructure project. Checked rather than assumed: `GOOS=darwin GOARCH=amd64 go build` completes in 1.4s against the whole module.
+
+The packaged app was launched and its native menu read back — `moonGit · Edit · Repository · Local · Branch · Remote · Query · Help`, the same eight 8.2 verified in dev, confirming the menu is installed in a real packaged build and not only under `wails dev`. 42MB, self-signed by Wails, unsigned and un-notarized by decision (§11).
 
 ---
 
@@ -1702,7 +1805,7 @@ Three places where this plan knowingly diverges — worth a second look before P
 
 ### Still open (not blocking — decide by the phase noted)
 
-- ~~**Light theme**~~ — **resolved: built in Phase 6.8**, and its contrast re-audited in 8.1, which found that 6.8's fix holds for `--text-muted` but that the badge system fails on its own tints (30 pairs, still open), ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. Custom accent is still open. See §9's Phase 6.8 entry, including the dark theme's own measured contrast failure now waiting on Phase 8.
+- ~~**Light theme**~~ — **resolved: built in Phase 6.8**, and its contrast re-audited in 8.1, which found that 6.8's fix holds for `--text-muted` but that the badge system fails on its own tints (30 pairs, still open). ~~Custom accent is still open.~~ ✅ **built in 8.5**, ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. Custom accent is still open. See §9's Phase 6.8 entry, including the dark theme's own measured contrast failure now waiting on Phase 8.
 - ~~**Git-flow / Index Editor / Investigate**~~ — **all three resolved.** Index Editor was built (§9, hunk and line staging). **Git-flow and Investigate were removed**: the PRD never defined either, both only ever fired a toast, and a control that does nothing is worse than an absent one — it costs a click to discover that. Their icons went with them, since an icon with no caller is a mapping to nothing. `icons.test.ts` records the reason.
 - ~~**Merge/diff tool integration**~~ — **resolved: built in.** A three-way modal with per-region choices; the escape hatch is the user's own editor, not a configured external differ. See §9.3 above.
 - ~~**Hooks, LFS and submodules**~~ — **resolved 2026-08-16: all three cut.** Asked plainly rather than by feature name — do you work with projects nested inside projects, with huge binary files, with scripts that run on every save — and the answer was none of the three. So the LFS blocker (§13a, no LFS repository to verify against) never needs resolving, and submodules stays a feature nobody here has asked for. **Cut, not deferred**: leaving them on a list makes every future review re-read three entries to reach the same conclusion. They return only if the audience does (see below), and then as new work with a real repository behind them.

@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { timeAgo } from '@/utils/format';
 import { canFastForwardOnly, defaultMergeMessage, previewOf, PREVIEW_LIMIT } from './mergePreview';
 import styles from './MergeWizard.module.css';
+import { useDialog } from '@/components/useDialog';
 
 /**
  * Picking what to merge, and seeing what that would do first (PLAN.md §9.3).
@@ -24,6 +25,7 @@ import styles from './MergeWizard.module.css';
  * opens on it, which is the only useful next step.
  */
 export function MergeWizard({ onClose }: { readonly onClose: () => void }) {
+  const dialog = useDialog('Merge a branch', onClose);
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const openMergeResolver = useWorkspaceStore((state) => state.openMerge);
   const { data: refs } = useRefs(repoPath);
@@ -46,8 +48,7 @@ export function MergeWizard({ onClose }: { readonly onClose: () => void }) {
     <div className={styles.backdrop} onClick={onClose}>
       <div
         className={styles.modal}
-        role="dialog"
-        aria-label="Merge a branch"
+        {...dialog}
         onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.header}>

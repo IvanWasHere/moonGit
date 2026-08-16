@@ -5,14 +5,24 @@
 # should never be built or tested.
 GO_PKGS := . ./internal/...
 
-.PHONY: dev build test test-go test-web lint typecheck check seed seed-reset \
+.PHONY: dev build archcheck test test-go test-web lint typecheck check seed seed-reset \
         seed-large seed-large-clean bench fonts bindings clean
 
 dev:            ## run the app with hot reload
 	wails dev
 
-build:          ## produce a packaged .app
-	wails build
+# A universal binary, not just this machine's architecture (PLAN.md §11).
+#
+# `wails build` alone produces whatever the host is — arm64 here — and an
+# Intel Mac would refuse to open the result. This is only cheap because the
+# project is CGO-free by decision (§1.2, modernc.org/sqlite): with a cgo
+# dependency, cross-compiling amd64 from an arm64 host needs a cross toolchain
+# and stops being one flag.
+build:          ## produce a packaged .app (universal: arm64 + amd64)
+	wails build -platform darwin/universal
+
+archcheck:      ## assert the built binary really is universal
+	@lipo -info build/bin/moonGit.app/Contents/MacOS/moonGit
 
 bindings:       ## regenerate TypeScript bindings from the Go services
 	rm -rf frontend/wailsjs/go
