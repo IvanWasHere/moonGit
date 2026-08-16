@@ -222,7 +222,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
     },
     'help.whatsNew': openForRemote(releasesUrl, 'the releases page'),
     'help.license': openLicense,
-    'help.about': () => showToast('moonGit 0.1.0 — a native macOS Git client', 'info'),
+    'help.about': () => showToast('moonGit 0.1.0 — a Git client for macOS', 'info'),
   };
 
   return (id: MenuItemId) => handlers[id]();

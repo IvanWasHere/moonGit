@@ -1514,7 +1514,9 @@ Vitest + RTL for units and components · ~~Playwright over `wails dev` for integ
 
 What survives is the part that was always the point: the tests, the a11y pass, the logger, the accent, and a universal binary, none of which need a certificate.
 
-**Phase 8, complete (2026-08-16).** ✅ the a11y pass — contrast in 8.1, focus and dialog semantics in 8.3 · ✅ the logger and its viewer (8.4) · ✅ the custom accent (8.5) · ✅ the universal binary (8.6) · ✅ menu-label parity, which was not on the list until it was reported (8.2) · ~~Playwright~~ **cut, see 8.7**.
+**Phase 8, complete (2026-08-16).** The list it started with: ✅ the a11y pass — contrast in 8.1, focus and dialog semantics in 8.3 · ✅ the logger and its viewer (8.4) · ✅ the custom accent (8.5) · ✅ the universal binary (8.6) · ~~Playwright~~ **cut, see 8.7**.
+
+**And six entries that were not on any list**, every one of them opened by using the app rather than by working through the plan: menu-label parity (8.2), 25 dead controls including no way to switch branches (8.8–8.9), overlays painting under the toolbar (8.10), `window.prompt` and `window.confirm` silently doing nothing in a packaged build (8.11), a verification pass that ran every new control against a throwaway repository (8.12), the release workflow (8.13), and the documentation (8.14). That is more than half the phase, and none of it was foreseen.
 
 **A third struck item: Playwright (2026-08-16, with Ivan).** The unit layer was already there — 740 frontend tests and Go tests covering `gitexec` spawn, stream, cancel and timeout. What Playwright would have added is the outer ring: the running app driven end to end. It is cut on the same reasoning as the certificate. The scaffolding is most of the cost — launching and stopping `wails dev` around each run, throwaway repositories per test, a new toolchain in the project — and it buys early warning of breakage for a product whose sole user runs it daily and would notice a broken commit button within minutes. **Cut, not deferred**, so that future reviews do not re-derive this. It returns if the audience does, alongside signing and the updater.
 
@@ -1673,7 +1675,7 @@ Architectures in the fat file: … are: x86_64 arm64
 
 The packaged app was launched and its native menu read back — `moonGit · Edit · Repository · Local · Branch · Remote · Query · Help`, the same eight 8.2 verified in dev, confirming the menu is installed in a real packaged build and not only under `wails dev`. 42MB, self-signed by Wails, unsigned and un-notarized by decision (§11).
 
-### ✅ Phase 8.7 — the plan is closed
+### ✅ Phase 8.7 — the plan is closed *(and then reopened — see 8.8)*
 
 All nine phases are built or deliberately cut. What is *not* built, and the reason in each case, matters more than the list of what is:
 
@@ -1690,6 +1692,8 @@ All nine phases are built or deliberately cut. What is *not* built, and the reas
 Every one of those was a decision taken with a reason recorded, not a thing forgotten. **The pattern worth carrying forward is that most of them were settled by measuring rather than arguing** — the Worker at 39ms, the Ignored chip at 35ms marginal, `ls-files` at 11.9MB, `git show` at 187.6MB, the contrast ramp hitting the tier above it. Four items in Phase 7 shrank or vanished once someone put a number on them, and two turned out to be worth far more than the plan implied.
 
 **The honest state of the thing:** it opens repositories, stages, commits, pushes, merges, rebases, cherry-picks, stashes, tags, searches, blames, diffs with syntax highlighting and hunk-level staging, runs a terminal, and survives 500k files and a million commits. It has 740 frontend tests, Go tests over the process layer, and a benchmark harness with recorded numbers. It ships as an unsigned universal binary that shows a Gatekeeper warning the first time it is opened, which is the accepted cost of not paying $99 to distribute software to one person.
+
+**This entry was written too early, and the six that follow it are why.** Within the hour Ivan reported that the Blame button did nothing, and pulling that thread found 25 dead controls (8.8), a whole class of overlay hidden under the toolbar (8.10), and four operations that worked in development and did nothing at all in the packaged build (8.11). None of it was visible to 747 passing tests. "Complete" meant *everything on the list is done*; it did not mean *the app works*, and only using it established the difference.
 
 ---
 
@@ -1844,6 +1848,38 @@ Against a disposable repository generated for the purpose (§13a's tier 2 — ne
 
 The zip round trip caught one thing worth recording, though it was a mistake in the testing rather than in the workflow: the first extraction showed an arm64-only binary, because the zip had been made *before* the universal rebuild. Sequencing, not a bug — but it is the same shape as every other error in this phase, and it was found by checking the artifact instead of assuming the command had done what it said.
 
+
+### ✅ Phase 8.14 — the README, and four screenshots that did not exist
+
+**The README described an application that had not existed for two phases.** Its "Not yet wired up" table was the worst of it — it still said, in bold, *"You cannot currently switch branches from the UI"*, along with Blame rendering nothing and Clone being a menu stub. All three had been built in 8.8–8.9. It also reported 648 tests against 782, put Phase 7 "in progress" with all nine complete, and said the licence was "Not yet chosen" beside a committed `LICENSE.md` reading MIT.
+
+Rewritten with emoji section headings, as asked, and — more to the point — with the claims re-checked rather than re-typed: the Makefile targets, all four keyboard shortcuts (⌘P, ⌘,, ⌃\`, ⌘↵ — the last lives in `CommitBox`, not `Workspace`), the nine services under `internal/`, the test count, and every link. **"Not built" is now six entries with a reason each**, and a new **Installing** section carries the Gatekeeper incantation, because the first thing a downloader meets is macOS calling the app damaged.
+
+**The four screenshots had never been taken.** `docs/screenshots/` was empty, so the table at the top of the README had been four broken images for as long as it had existed. They exist now:
+
+| | |
+|---|---|
+| `workspace.png` | the whole layout |
+| `diff.png` | cropped to the Changes pane — side-by-side, syntax highlighted, word-level diff, *Unstage hunk* |
+| `history.png` | cropped to the Journal — five branches of real lanes, and the qualifier search bar |
+| `merge.png` | the three-way resolver, mid-conflict |
+
+**The merge shot is a real conflict, not a mock-up.** A throwaway repository was built for it: two branches adding a different element to the same line of a header component, merged to produce a genuine `UU`. Photographing an invented conflict would have been easier and would have shown a resolver that had never resolved anything.
+
+**They do not meet `docs/README.md`'s own spec, and that is worth recording rather than glossing.** It asks for native-window captures at Retina 2× via `screencapture`, which macOS refused — *"could not create image from display"*, the Screen Recording permission, which only the user can grant. These are captured through the dev instance instead: the same UI and the same dark theme, at 1493×812 rather than true 2×, and without the native window frame. Honest depictions at the wrong resolution. Granting the permission, or `⌘⇧4` + space, gets the spec versions in about a minute.
+
+**A claim in four places that was not true.** The README, `wails.json`, the native About dialog and the in-app About toast all called moonGit "a native macOS Git client". Ivan pointed out that it is not one: the interface is React and CSS in a WKWebView, which is not AppKit however the app is packaged. All four now read "a Git client for macOS", and the Architecture section says what "no Electron" actually buys — the system's own WebKit rather than a bundled browser, so ~17MB instead of ~150MB, with a genuinely native shell around it (`NSMenu`, the system dialogs, the Keychain, a real pty) and a web-technology interface inside it.
+
+Worth keeping because the boundary is not cosmetic: it is exactly the seam that produced 8.11, where `window.prompt` worked in the browser the app is developed in and did nothing in the WebKit it ships in.
+
+Everything set up for the shots was reverted afterwards — the demo repository deleted and unregistered, `test-repo1` left on `main` with its ten working-tree changes, and the layout, log-all and search toggles put back.
+
+---
+
+**State at close (2026-08-16).** Nine phases, all built or deliberately cut. **782 frontend tests and Go tests over the process layer**, a benchmark harness with recorded numbers, a universal unsigned binary, and a release workflow that ships a DMG. The test counts quoted in the entries above are each one's tally at the time and are deliberately not updated — the arc from 608 to 782 is part of the record.
+
+**What the last six entries are really about.** Phases 0 through 7 were finished by working through a plan. Most of Phase 8 was finished by *using the application*: every one of 8.2, 8.8, 8.10 and 8.11 began with something Ivan noticed on screen, and each of them had passed a full green test suite. Three of the four were invisible to tests for the same structural reason — **the app is developed in a browser and shipped in a WKWebView**, and jsdom can no more composite a modal than it can open a native dialog. Two of those gaps now have tests standing in for a compositor. The general one does not, and cannot: nothing here can replace looking at the thing.
+
 ---
 
 ## 12. Risk register
@@ -1982,7 +2018,7 @@ Three places where this plan knowingly diverges — worth a second look before P
 
 ### Still open (not blocking — decide by the phase noted)
 
-- ~~**Light theme**~~ — **resolved: built in Phase 6.8**, and its contrast re-audited in 8.1, which found that 6.8's fix holds for `--text-muted` but that the badge system fails on its own tints (30 pairs, still open). ~~Custom accent is still open.~~ ✅ **built in 8.5**, ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. See §9's Phase 6.8 entry; the dark theme's own contrast failure that it flagged for Phase 8 was measured and fixed in 8.1.
+- ~~**Light theme**~~ — **resolved: built in Phase 6.8**, and its contrast re-audited in 8.1, which found that 6.8's fix holds for `--text-muted` but that the badge system fails on its own tints — **30 pairs, decided and kept** (8.1, with Ivan: small colour-coded chrome, where the *body text* failures were the ones worth fixing). ~~Custom accent is still open.~~ ✅ **built in 8.5**, ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. See §9's Phase 6.8 entry; the dark theme's own contrast failure that it flagged for Phase 8 was measured and fixed in 8.1.
 - ~~**Git-flow / Index Editor / Investigate**~~ — **all three resolved.** Index Editor was built (§9, hunk and line staging). **Git-flow and Investigate were removed**: the PRD never defined either, both only ever fired a toast, and a control that does nothing is worse than an absent one — it costs a click to discover that. Their icons went with them, since an icon with no caller is a mapping to nothing. `icons.test.ts` records the reason.
 - ~~**Merge/diff tool integration**~~ — **resolved: built in.** A three-way modal with per-region choices; the escape hatch is the user's own editor, not a configured external differ. See §9.3 above.
 - ~~**Hooks, LFS and submodules**~~ — **resolved 2026-08-16: all three cut.** Asked plainly rather than by feature name — do you work with projects nested inside projects, with huge binary files, with scripts that run on every save — and the answer was none of the three. So the LFS blocker (§13a, no LFS repository to verify against) never needs resolving, and submodules stays a feature nobody here has asked for. **Cut, not deferred**: leaving them on a list makes every future review re-read three entries to reach the same conclusion. They return only if the audience does (see below), and then as new work with a real repository behind them.

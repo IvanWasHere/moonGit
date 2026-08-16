@@ -4,7 +4,7 @@
 
 # 🌙 moonGit
 
-**A native macOS Git client.**
+**A Git client for macOS.**
 
 Wails v2 · React 19 · TypeScript · SQLite · no Electron
 
@@ -167,6 +167,10 @@ frontend/src/
   features/        one directory per feature, CSS Modules alongside
   stores/          Zustand, repo-scoped
 ```
+
+**What "no Electron" does and does not mean.** The interface is React and CSS rendered by **WKWebView** — the system's own WebKit — so nothing bundles a browser and the download is ~17MB rather than ~150MB. The shell around it is genuinely native: an `NSMenu` menu bar, the system file dialogs, the Keychain, a real pty. But the panels you look at are web technology, not AppKit, and this README does not claim otherwise.
+
+That boundary is not cosmetic — it caused real bugs. `window.prompt` and `window.confirm` exist in the browser the app is *developed* in and do nothing in the WebKit it *ships* in, which silently broke four controls (`PLAN.md` §11, 8.11).
 
 **SQLite stores app state only** — window layout, preferences, the repository list. Never refs, HEAD, status or ahead/behind counts. Git is the source of truth for git data; a cache of it would be a cache that goes stale in ways the user notices.
 

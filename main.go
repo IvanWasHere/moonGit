@@ -109,7 +109,7 @@ func main() {
 			Appearance:           mac.NSAppearanceNameDarkAqua,
 			About: &mac.AboutInfo{
 				Title:   "moonGit",
-				Message: "A native macOS Git client.\nCopyright © 2026 Ivan Marinkovic",
+				Message: "A Git client for macOS.\nCopyright © 2026 Ivan Marinkovic",
 			},
 		},
 

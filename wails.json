@@ -15,6 +15,6 @@
     "productName": "moonGit",
     "productVersion": "0.1.0",
     "copyright": "Copyright © 2026 Ivan Marinkovic",
-    "comments": "A native macOS Git client"
+    "comments": "A Git client for macOS"
   }
 }
