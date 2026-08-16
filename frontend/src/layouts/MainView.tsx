@@ -103,7 +103,7 @@ export function MainView() {
             title="Branches"
             actions={
               <>
-                <PanelAction title="New Branch" onClick={branch.create}>
+                <PanelAction title="New Branch" onClick={() => void branch.create()}>
                   <Icons.Stage size={11} />
                 </PanelAction>
                 <PanelAction

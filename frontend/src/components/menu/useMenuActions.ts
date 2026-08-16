@@ -166,8 +166,8 @@ export function useMenuActions(): (id: MenuItemId) => void {
 
     // --- Branch -----------------------------------------------------------
     'branch.checkout': branch.checkout,
-    'branch.create': branch.create,
-    'branch.rename': branch.rename,
+    'branch.create': () => void branch.create(),
+    'branch.rename': () => void branch.rename(),
     'branch.merge': openMergeTool,
     'branch.rebase': openRebaseWizard,
     // Cherry-picking needs a commit, and the Journal's context menu is where
@@ -182,7 +182,7 @@ export function useMenuActions(): (id: MenuItemId) => void {
       selectedCommit === null
         ? showToast('Select a commit in the Journal to reset onto', 'error')
         : openReset(selectedCommit),
-    'branch.delete': branch.remove,
+    'branch.delete': () => void branch.remove(),
 
     // --- Remote -----------------------------------------------------------
     'remote.fetch': doFetch,

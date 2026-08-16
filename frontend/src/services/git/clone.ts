@@ -1,3 +1,4 @@
+import { pathExists } from '@/services/wails';
 import { getGitRunner } from './GitRunner';
 import type { GitError } from './errors';
 import { err, ok, type Result } from './result';
@@ -44,6 +45,28 @@ export async function cloneRepository(
     return err({
       kind: 'Unknown',
       message: `Could not work out a folder name from "${url}"`,
+      stderr: '',
+      exitCode: -1,
+      args: ['clone', url],
+      repoPath: parentDir,
+    });
+  }
+
+  /*
+   * The parent has to exist before git is spawned there.
+   *
+   * The runner's cwd *is* this directory, so a missing one fails inside
+   * `fork/exec` and Go reports it as **"fork/exec /opt/homebrew/bin/git: no
+   * such file or directory"** — which reads as "git is not installed" and sends
+   * whoever hits it looking in entirely the wrong place. Found while verifying
+   * this function (8.12). In normal use the path comes from a directory
+   * picker and exists; this is for the case where it was removed between
+   * picking and cloning.
+   */
+  if (!(await pathExists(parentDir))) {
+    return err({
+      kind: 'Unknown',
+      message: `The folder ${parentDir} no longer exists`,
       stderr: '',
       exitCode: -1,
       args: ['clone', url],

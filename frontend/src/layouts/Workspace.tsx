@@ -14,6 +14,7 @@ import { MergeWizard } from '@/features/merge/MergeWizard';
 import { RebaseBanner } from '@/features/rebase/RebaseBanner';
 import { RebaseWizard } from '@/features/rebase/RebaseWizard';
 import { RepoSettingsModal } from '@/features/repo-settings/RepoSettingsModal';
+import { AskDialog } from '@/components/AskDialog';
 import { BlameView } from '@/features/blame/BlameView';
 import { ResetDialog } from '@/features/branches/ResetDialog';
 import { LicenseDialog } from '@/features/about/LicenseDialog';
@@ -164,6 +165,8 @@ export function Workspace({
       {licenseOpen && <LicenseDialog onClose={closeLicense} />}
       {cloneOpen && <CloneDialog onClose={closeClone} />}
       {compareOpen && <CompareDialog onClose={closeCompare} />}
+      {/* Last, so it sits above the dialog that asked the question. */}
+      <AskDialog />
       {quickOpen && <QuickOpen />}
       {settingsOpen && <SettingsModal onClose={closeSettings} />}
       {repoSettingsTab !== null && (

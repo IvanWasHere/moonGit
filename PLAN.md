@@ -1767,6 +1767,51 @@ Ivan, in seven words: *"blame modal shows below toolbar of the app"*. That is th
 
 A source-text assertion rather than a rendered one, because jsdom has no compositor and cannot answer "what covers what" at all. That is the same gap that made this bug invisible to the whole test suite while it was live, and it is worth naming: **nothing in this project can test stacking except a person looking at it.**
 
+
+### ✅ Phase 8.11 — four controls that worked in dev and did nothing in the app
+
+The verification pass asked for one thing: run the newly-wired controls rather than watch their dialogs open. The first one exposed a bug worse than the z-index one, because it was invisible in the environment everything had been tested in.
+
+**`window.prompt` returns `null` and `window.confirm` returns `false` in a packaged Wails app.** Wails v2 declares `WKUIDelegate` conformance and implements none of the three JS-dialog methods, so WKWebView falls back to its defaults — no dialog, no error, no sign anything happened. Both work perfectly in `wails dev`, which is a browser.
+
+**Measured, not inferred.** A temporary probe in `bootstrap.ts` called both and wrote the results to the preferences table; the packaged build was launched for twelve seconds and the row read back with `sqlite3`:
+
+```
+probe.jsdialogs|{"prompt":null,"confirm":false}
+```
+
+So **create a branch, rename a branch, delete a branch, and the confirmation guarding `reset --hard`** all returned early every time in the real app. Four controls, freshly built in 8.9, that passed 774 tests and worked in front of me in dev.
+
+**Replaced with `stores/askStore.ts` and `components/AskDialog.tsx`** — promise-based, so `await askText(…)` reads exactly like the `window.prompt` it replaces and the call sites barely changed. A second request while one is open settles the first as cancelled rather than dropping its resolver, because a dropped resolver is an `await` that hangs forever with nothing on screen to explain it.
+
+**The ban is now a test**, not a memory: `askStore.test.ts` walks every non-test source file and fails on any `window.prompt`, `window.confirm` or `alert` call, comments stripped so the ones explaining *why* do not trip it. That check would have caught this the day it was written.
+
+**Worth naming, because it is the third instance of the same shape.** The licence had to be inlined rather than read at runtime for exactly this reason, and that was reasoned about correctly in advance. Here the same trap was walked straight into. **The environment the app is developed in is a browser and the environment it ships in is not**, and anything that touches the platform — dialogs, the filesystem, the menu bar — has to be checked in a packaged build before it counts as working.
+
+### ✅ Phase 8.12 — the rest of the controls, run for real
+
+Against a disposable repository generated for the purpose (§13a's tier 2 — never `testGitHere`), with a bare remote to fetch and clone from, two branches and a dirty tree:
+
+| Control | Result |
+|---|---|
+| Create branch | `verify/from-dialog` created, and HEAD moved to it |
+| Rename branch | `verify/created` → `verify/renamed`, confirmed in `git branch` |
+| Delete branch | `verify/renamed` gone |
+| Checkout | switched, and switched back |
+| Stage All | `M src/a.ts` and untracked `src/new.ts` both staged |
+| Fetch | "Fetched and pruned" |
+| Refresh | no error |
+| Reset (**hard**) | HEAD moved to the initial commit, working tree emptied, `src/a.ts` reverted to its original contents |
+| Clone | a real clone with files, history and `main` checked out |
+
+**Two things the run corrected.**
+
+`create` is `switch --create` — it leaves you *on* the new branch — and the toast said only "Created". Now "Created and switched to …", because a message that understates what happened to HEAD is how someone commits to the wrong branch.
+
+`cloneRepository` binds its runner to the parent directory, so a parent that does not exist fails inside `fork/exec` and Go reports **"fork/exec /opt/homebrew/bin/git: no such file or directory"** — which reads as "git is not installed". It now checks the directory first and says which folder is missing.
+
+**And one thing the run did not correct**, because it turned out to be the fixture: the first clone produced an empty checkout. The bare repository's HEAD pointed at `master` while the branches pushed were `main`. Plain `git clone` from the command line does exactly the same thing with a warning, so the app was right and the test repository was wrong.
+
 ---
 
 ## 12. Risk register

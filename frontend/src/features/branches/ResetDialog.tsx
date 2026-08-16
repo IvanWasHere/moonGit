@@ -3,6 +3,7 @@ import { Button } from '@/components/Button';
 import { Icons } from '@/components/icons';
 import { useDialog } from '@/components/useDialog';
 import { useResetBranch } from '@/queries/mutations';
+import { askConfirm } from '@/stores/askStore';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import styles from './ResetDialog.module.css';
@@ -31,8 +32,16 @@ export function ResetDialog({
   const [mode, setMode] = useState<'soft' | 'mixed' | 'hard'>('mixed');
   const dialog = useDialog('Reset branch', onClose);
 
-  const run = () => {
-    if (mode === 'hard' && !window.confirm('Discard all uncommitted changes? This cannot be undone.')) {
+  const run = async () => {
+    // `askConfirm`, not `window.confirm` — the native one returns false in a
+    // packaged Wails app, which silently blocked every hard reset (8.11).
+    if (
+      mode === 'hard' &&
+      !(await askConfirm('Discard all uncommitted changes? This cannot be undone.', {
+        confirmLabel: 'Discard',
+        destructive: true,
+      }))
+    ) {
       return;
     }
     reset.mutate(
@@ -83,7 +92,7 @@ export function ResetDialog({
           <Button onClick={onClose}>Cancel</Button>
           <Button
             variant={mode === 'hard' ? 'danger' : 'primary'}
-            onClick={run}
+            onClick={() => void run()}
             disabled={reset.isPending}
           >
             {reset.isPending ? 'Resetting…' : 'Reset'}

@@ -4,6 +4,7 @@ import {
   useDeleteBranch,
   useRenameBranch,
 } from '@/queries/mutations';
+import { askConfirm, askText } from '@/stores/askStore';
 import { showToast } from '@/stores/notificationStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
@@ -27,9 +28,10 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
  */
 export interface BranchActions {
   checkout: () => void;
-  create: () => void;
-  rename: () => void;
-  remove: () => void;
+  /** Async because they ask a question first; callers may fire and forget. */
+  create: () => Promise<void>;
+  rename: () => Promise<void>;
+  remove: () => Promise<void>;
 }
 
 export function useBranchActions(): BranchActions {
@@ -55,32 +57,34 @@ export function useBranchActions(): BranchActions {
       });
     },
 
-    create: () => {
+    create: async () => {
       /*
-       * `window.prompt`, and not one of the app's own modals.
+       * `askText`, not `window.prompt` (PLAN.md §11, 8.11).
        *
-       * A branch name is a single line of text with no options; every modal in
-       * this app is a multi-field form with a header and a footer, and one
-       * built for this would be a form with one field. If branch creation ever
-       * grows a start point or a checkout-after toggle, it earns a real dialog
-       * then.
+       * The native prompt was the obvious primitive and does not exist in this
+       * app: Wails implements no `WKUIDelegate` dialog methods, so WKWebView
+       * returns null and this function returned early every time. It worked in
+       * `wails dev`, which is a browser, and did nothing in the packaged build.
        */
-      const name = window.prompt('New branch name');
+      const name = await askText('New branch name', '', 'Create');
       if (name === null || name.trim() === '') return;
       createBranch.mutate(
         { name: name.trim() },
         {
-          onSuccess: () => showToast(`Created ${name.trim()}`, 'success'),
+          // "Created and switched", because `BranchService.create` is
+          // `switch --create` — it leaves you on the new branch. A toast
+          // saying only "Created" understates what just happened to HEAD.
+          onSuccess: () => showToast(`Created and switched to ${name.trim()}`, 'success'),
           onError: reportError,
         },
       );
     },
 
-    rename: () => {
+    rename: async () => {
       if (selectedBranch === null) return needsBranch();
-      // Prefilled with the current name, because a rename is almost always an
-      // edit of it rather than a fresh one.
-      const to = window.prompt(`Rename ${selectedBranch} to`, selectedBranch);
+      // Prefilled with the current name and selected, because a rename is
+      // almost always an edit of it rather than a fresh one.
+      const to = await askText(`Rename ${selectedBranch} to`, selectedBranch, 'Rename');
       if (to === null || to.trim() === '' || to.trim() === selectedBranch) return;
       renameBranch.mutate(
         { from: selectedBranch, to: to.trim() },
@@ -91,11 +95,15 @@ export function useBranchActions(): BranchActions {
       );
     },
 
-    remove: () => {
+    remove: async () => {
       if (selectedBranch === null) return needsBranch();
       // Asks, because nothing in the app can undo it. git's own refusal to
       // delete an unmerged branch is the second line of defence, not the first.
-      if (!window.confirm(`Delete branch ${selectedBranch}?`)) return;
+      const ok = await askConfirm(`Delete branch ${selectedBranch}?`, {
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
       deleteBranch.mutate(
         { name: selectedBranch },
         {
