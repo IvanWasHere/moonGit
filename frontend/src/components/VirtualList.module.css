@@ -1,0 +1,18 @@
+/* The spacer: as tall as the whole list, holding a screenful of absolutely
+   positioned rows. `position: relative` is what those rows' offsets are
+   measured against. */
+.viewport {
+  position: relative;
+  width: 100%;
+}
+
+/* One row's place in the spacer, and nothing else — the row's own appearance
+   stays with the component that renders it. The vertical offset is an inline
+   `translateY` the virtualizer recomputes per row, so only what is constant
+   across rows belongs here. */
+.row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}

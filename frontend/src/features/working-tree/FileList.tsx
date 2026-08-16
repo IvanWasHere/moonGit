@@ -25,7 +25,26 @@ import {
 import { matchesStatusFilters } from './statusFilters';
 import { fileMenuFor, type FileMenuItem } from './fileMenu';
 import { useFileMenuActions } from './useFileMenuActions';
+import { VirtualList } from '@/components/VirtualList';
 import styles from './FileList.module.css';
+
+/**
+ * One `.file` row's height, in whole pixels.
+ *
+ * Whole on purpose: `VirtualList` measures with `offsetHeight`, an integer,
+ * and lays rows out at the running total, so a fractional row opens a hairline
+ * gap under every one of them. 8px of `.grid` padding around a 16px status
+ * badge, which is the tallest thing in the row and therefore what sets its
+ * height — the text beside it is shorter, and already whole.
+ *
+ * Measured in the running app rather than added up from the stylesheet, which
+ * had said 25. One pixel out costs nothing on screen, where rows are measured
+ * and positioned from the measurement, and 4% of the scrollbar's length.
+ *
+ * Unlike the Journal's, this is exact rather than an estimate: every row here
+ * has the same shape, so there is no decoration block to make one taller.
+ */
+const FILE_ROW_HEIGHT = 24;
 
 /**
  * The working tree, from `status --porcelain=v2` — one row per file, with a
@@ -62,6 +81,12 @@ export function FileList() {
   // open at a time without every row having to know about the others.
   const [menu, setMenu] = useState<{ entry: StatusEntry; x: number; y: number } | null>(null);
   const openMenu = (entry: StatusEntry, x: number, y: number) => setMenu({ entry, x, y });
+
+  // The scrolling element the virtualized list below attaches to. Held in
+  // state rather than a ref so the virtualizer re-resolves once it attaches —
+  // see `VirtualList`, where the reason is written down. Declared before the
+  // early returns, as every hook must be.
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
 
   if (repoPath === null) {
     return (
@@ -122,7 +147,7 @@ export function FileList() {
         matched={visible.length}
         total={files.length}
       />
-      <PanelBody>
+      <PanelBody ref={setScrollEl}>
         {/* No column header over no columns of data. It also costs 27px of a
             pane that is routinely ~115px tall, which is the difference between
             an empty state's escape hatch being on screen and being below the
@@ -154,9 +179,29 @@ export function FileList() {
             </button>
           </div>
         )}
-        {visible.map((entry) => (
-          <FileRow key={entry.path} entry={entry} onContextMenu={openMenu} />
-        ))}
+        {/*
+         * Virtualized, so the DOM holds a screenful whatever the changeset is.
+         *
+         * The number this exists for is not the repository's file count —
+         * `status` only ever reports files that changed, which on a clean tree
+         * is none. It is the escape hatch: "List every file" (PLAN.md §10,
+         * 7.2) puts the panel back on `--untracked-files=all`, and on the
+         * benchmark repository that is 50,000 rows one click away.
+         *
+         * Rows here are uniform, unlike the Journal's, so the estimate is
+         * exact rather than a starting guess — but they still go through
+         * `measureElement`, because a row whose path wraps on a narrow pane is
+         * the one case that would otherwise be mispositioned.
+         */}
+        {visible.length > 0 && (
+          <VirtualList
+            items={visible}
+            scrollElement={scrollEl}
+            getKey={(entry) => entry.path}
+            estimateHeight={() => FILE_ROW_HEIGHT}
+            renderRow={(entry) => <FileRow entry={entry} onContextMenu={openMenu} />}
+          />
+        )}
         {menu !== null && (
           <FileContextMenu
             entry={menu.entry}

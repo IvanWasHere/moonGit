@@ -5,8 +5,9 @@
    top and bottom of every row and its lines would not reach the next one.
 
    **Every row must be a whole number of pixels tall.** The Journal is
-   virtualized, and the virtualizer measures with `offsetHeight` — an integer —
-   while positioning rows at the running total of those measurements. A row
+   virtualized (`components/VirtualList`), and the virtualizer measures with
+   `offsetHeight` — an integer — while positioning rows at the running total of
+   those measurements. A row
    that is really 72.8px tall gets recorded as 73, so the next one starts 0.2px
    after this one ends and a transparent hairline appears under every row. In
    the text column that is invisible; through the commit graph it slices a
@@ -27,25 +28,6 @@
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background 0.1s;
-}
-
-/* The virtualized list's spacer: as tall as the whole history, holding a
-   screenful of absolutely-positioned rows. `position: relative` is what those
-   rows' offsets are relative to. */
-.viewport {
-  position: relative;
-  width: 100%;
-}
-
-/* Applied alongside `.entry`, not instead of it — the row keeps its flex
-   layout, borders and hover, and gains only its place in the spacer. The
-   vertical offset is an inline `translateY`, which the virtualizer recomputes
-   per row; only what is constant across rows belongs here. */
-.virtualRow {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
 }
 
 .entryBody {

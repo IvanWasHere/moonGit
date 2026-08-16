@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { Icons } from '@/components/icons';
 import { PanelBody } from '@/components/Panel';
+import { VirtualList } from '@/components/VirtualList';
 import { useLogPages } from '@/queries/git';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { timeAgo } from '@/utils/format';
@@ -29,9 +29,6 @@ import styles from './History.module.css';
  *   `measureElement`. A fixed row height would be simpler and faster, and it
  *   would mean truncating ref decorations — which `CommitGraph` is explicitly
  *   built to avoid, its SVG stretching to whatever the row turned out to be.
- * - **The positioning goes on `.entry` itself**, not on a wrapper around it.
- *   One node per row rather than two, in the one list where the node count is
- *   the entire point.
  * - **`PanelBody` is the scroll element**, not a container of our own. It is
  *   the only scrolling element in a panel, which is what keeps the header
  *   pinned; a second scroller nested inside it would scroll the header away.
@@ -139,54 +136,22 @@ export function JournalView() {
   const [menu, setMenu] = useState<{ commit: Commit; x: number; y: number } | null>(null);
   const runCommitAction = useCommitMenuActions(repoPath);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const rows = commits ?? [];
   /*
-   * `react-hooks/incompatible-library` warns that the React Compiler cannot
-   * memoize what this returns — the virtualizer hands back functions whose
-   * results change without their arguments changing, which is the whole
-   * mechanism of reading a live scroll position.
+   * The scrolling element, kept twice on purpose.
    *
-   * Suppressed rather than worked around because the compiler is not enabled
-   * in this build (`vite.config.ts` uses the plain React plugin), so the
-   * warning describes a hazard that does not exist yet. It is left as a marker:
-   * whoever turns the compiler on needs to opt this component out with a
-   * `'use no memo'` directive, and will find this comment when the warning
-   * comes back as an error.
+   * `VirtualList` needs it in state, so that attaching it re-renders and the
+   * virtualizer resolves it on a second pass — see that component for why a
+   * plain ref renders an empty list. The scroll reset below needs it in a ref,
+   * because assigning `scrollTop` on a value held in state is a mutation of
+   * state as far as the lint rules are concerned. One callback ref feeds both.
    */
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: (index) => estimateRowHeight(rows[index]),
-    /*
-     * Cache measured heights against the commit, not the row number.
-     *
-     * The default key is the index, and the index is not stable here: turning
-     * on `--all`, running a search or filtering to a file replaces what sits
-     * at every position. A tall decorated commit at index 3 would leave its
-     * 74px behind for whatever undecorated 55px commit replaced it, and the
-     * list would lay out with 19px gaps and overlaps until each row happened
-     * to be re-measured.
-     *
-     * The oid is the right key for the same reason it is the React key: a
-     * commit's height is a property of the commit.
-     */
-    getItemKey: (index) => rows[index]?.oid ?? index,
-    /*
-     * `measureElement` is left as virtual-core's own, which reads
-     * `offsetHeight` and is therefore an integer. That is only safe because
-     * Journal rows are whole pixels by construction — see the note on
-     * `.entry` in `History.module.css`, which is what makes the rounding a
-     * no-op rather than a hairline gap under every row.
-     *
-     * Overriding it to measure fractionally was tried and is worse: the
-     * fractional rect and the row's settled height disagree by two to three
-     * pixels, so rows overlap outright instead of being a fifth of a pixel
-     * apart. Integral rows are the fix; sub-pixel measurement is not.
-     */
-    overscan: OVERSCAN,
-  });
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
+  const attachScroll = useCallback((element: HTMLDivElement | null) => {
+    scrollRef.current = element;
+    setScrollEl(element);
+  }, []);
+  const rows = commits ?? [];
 
   /*
    * Back to the top whenever the list stops being the same list.
@@ -197,7 +162,7 @@ export function JournalView() {
    * Left alone, narrowing a search from a scrolled position lands you somewhere
    * arbitrary in the results, or past the end of them and looking at nothing.
    */
-  const listIdentity = `${repoPath ?? ''} ${logQuery ?? ''} ${logPath ?? ''} ${logAll}`;
+  const listIdentity = `${repoPath ?? ''} ${logQuery ?? ''} ${logPath ?? ''} ${logAll}`;
   useEffect(() => {
     // Assigning `scrollTop` rather than calling `scrollTo`: the two are the
     // same instant jump, and this one exists in jsdom, which is what lets the
@@ -206,25 +171,14 @@ export function JournalView() {
   }, [listIdentity]);
 
   /*
-   * Fetch the next page once the rendered window comes within `PREFETCH_ROWS`
-   * of the end of what is loaded.
-   *
-   * Driven off the last *virtual* row rather than a sentinel element at the
-   * bottom of the list, because in a virtualized list there is no such
-   * element — the end of the history is not in the DOM until you are already
-   * looking at it, so an intersection observer would fire only once the user
-   * had hit the bottom and was already waiting.
-   *
-   * `fetchNextPage` is safe to call repeatedly — React Query drops the call
-   * while one is in flight — so the `isFetchingNextPage` guard is about not
-   * re-running this on every scroll frame rather than about correctness.
+   * `VirtualList` calls this for as long as the window sits near the end, so
+   * the guards are what stop it queueing a fetch per scroll frame.
+   * `fetchNextPage` is itself safe to call again while one is in flight.
    */
-  const virtualRows = virtualizer.getVirtualItems();
-  const lastVisible = virtualRows[virtualRows.length - 1]?.index ?? 0;
-  useEffect(() => {
+  const loadMore = useCallback(() => {
     if (!hasNextPage || isFetchingNextPage) return;
-    if (lastVisible >= rows.length - PREFETCH_ROWS) void fetchNextPage();
-  }, [lastVisible, rows.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+    void fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   if (repoPath === null) {
     return (
@@ -286,29 +240,23 @@ export function JournalView() {
   return (
     <>
       <SearchBar matched={rows.length} hasMore={hasNextPage} />
-      <PanelBody ref={scrollRef}>
+      <PanelBody ref={attachScroll}>
         {banner}
-        {/*
-         * The spacer. Its height is every row's — measured where they have
-         * been, estimated where they have not — so the scrollbar reflects the
-         * whole history rather than the dozen rows actually in the DOM.
-         */}
-        <div className={styles.viewport} style={{ height: virtualizer.getTotalSize() }}>
-          {virtualizer.getVirtualItems().map((item) => {
-            const commit = rows[item.index];
-            if (commit === undefined) return null;
-            const row = graph?.rows[item.index];
+        <VirtualList
+          items={rows}
+          scrollElement={scrollEl}
+          getKey={(commit) => commit.oid}
+          estimateHeight={estimateRowHeight}
+          overscan={OVERSCAN}
+          onEndReached={loadMore}
+          endThreshold={PREFETCH_ROWS}
+          renderRow={(commit, index) => {
+            const row = graph?.rows[index];
             return (
               <div
-                key={commit.oid}
-                // Both are `measureElement`'s contract: it reads the index off
-                // the node to know which row it just measured.
-                data-index={item.index}
-                ref={virtualizer.measureElement}
-                className={`${styles.entry} ${styles.virtualRow} ${
+                className={`${styles.entry} ${
                   selectedCommit === commit.oid ? styles.selected : ''
                 }`}
-                style={{ transform: `translateY(${item.start}px)` }}
                 onClick={() => selectCommit(commit.oid)}
                 onContextMenu={(event) => {
                   event.preventDefault();
@@ -343,8 +291,8 @@ export function JournalView() {
                 </div>
               </div>
             );
-          })}
-        </div>
+          }}
+        />
         {/*
          * Below the spacer, not inside it: the virtualizer owns every offset in
          * there, and an extra child would be positioned at zero and land on top

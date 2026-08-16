@@ -1161,7 +1161,7 @@ Targets are 500k files / 1M commits. Concretely:
 1. ~~**History**: cursor-paged `git log --skip/--max-count` (or `--since` windows), TanStack Virtual, ~200-commit pages,~~ ✅ **built in 7.3 and 7.4** — `--skip`, 200-commit pages, TanStack Virtual; ~~graph lanes computed incrementally in the Worker~~ — **the Worker is withdrawn, measured at 39ms for 20,000 commits** (below)
 2. ~~**Status at 500k files**: enable `core.fsmonitor` + `core.untrackedCache` on open, and don't call `--untracked-files=all` on huge repos — degrade to `normal` above a file-count threshold~~ ✅ (below) — built, but not as written: the two mitigations turned out to be one, and the threshold is a duration rather than a file count
 3. **Streaming**: everything large goes through `RunStream`, parsed incrementally, never a single giant string
-4. **Rerenders**: `React.memo` + granular Zustand selectors; assert render counts in tests for the big lists
+4. **Rerenders**: `React.memo` + granular Zustand selectors; assert render counts in tests for the big lists — still open, and the only one of the five untouched
 5. ~~**Bundle**: lazy-load Monaco on first use~~ — **withdrawn: Monaco was never adopted** (§14.4). xterm ✅ and Shiki ✅ are both already lazy
 
 **And one item this list does not contain, which turned out to be the largest win in the phase: the commit-graph.** See Phase 7.1.
@@ -1279,6 +1279,29 @@ Three of the five bullets shrank or disappeared, which is worth as much as the t
 - **The Monaco bullet is void.** Monaco was never adopted (§14.4); Shiki won for the diff and is already lazy per-language, and the merge tool was built without an embedded editor. xterm has been a lazy 333 KB chunk since Phase 6.9. There is nothing left in this item.
 - **The parsers are not the bottleneck and never were.** `parseStatus` over 1.6MB of porcelain: 21ms. `parseRefs` over 1,772 refs: 3ms. `parseLog` over a page: below resolution. Every one of them is one to three orders of magnitude cheaper than the git command that produced its input. The phase's remaining effort belongs on what git is asked and how the payload crosses the bridge, not on how it is parsed.
 
+### ✅ Phase 7.5 — the Files panel, and the shared list
+
+`FileList` mapped over every entry. `components/VirtualList` now backs both it and the Journal, which is what the 7.3 entry deferred the extraction for: an abstraction shaped by one consumer is a guess, and the two turned out to differ in exactly the way that matters — the Journal's rows vary in height and the Files panel's do not — so measurement is unconditional rather than an option.
+
+**The number this was worth is smaller than "500,000 rows" implied, and the earlier note overstated it.** `status` only reports files that *changed*, which on a clean tree is none. The reachable case is the escape hatch: "List every file" (7.2) puts the panel back on `--untracked-files=all`, so a large untracked tree is one click from being one row each.
+
+**A bug that shipped for one commit and would have shipped for good.** Wired up, the Files panel came up **completely blank under a correctly sized scrollbar** — 4,000 entries in the tab count, a 96,000px spacer, and no rows. React attaches a child's refs before its parent's, so `VirtualList`'s effects ran while the `PanelBody` ref object was still null; the virtualizer resolved a null scroller, measured a zero-height viewport, and rendered nothing. **The Journal had the same defect and hid it**: it re-renders constantly for paging and watcher ticks, and recovers on the next pass. A static list never gets one. The fix is a callback ref writing to `useState`, so attaching re-renders and the virtualizer always gets a second look.
+
+That bug is now the first test in `VirtualList.test.tsx`, and the test was checked against the defect rather than assumed to cover it — reverting the component to a ref object fails three of its five tests.
+
+**Measured through the running app** against a repository with 4,000 untracked files:
+
+| | |
+|---|---|
+| rows in the DOM, scrolled to the end of 4,000 | **18** |
+| spacer | 96,000px — exactly 4,000 × 24 |
+| row height | 24px, every row |
+| gap between adjacent rows | 0.0000px |
+
+The row height was measured rather than added up: the stylesheet arithmetic said 25, and one pixel out costs nothing on screen but 4% of the scrollbar's length.
+
+**Found while testing, not fixed:** 30,000 untracked files took the backend to `fork/exec git: too many open files`. The watcher appears to hold a descriptor per watched path, which does not scale to a large working tree. Logged below; it is a watcher bug, not a rendering one, and the 4,000-file fixture was enough to finish this item.
+
 ### ✅ Phase 7.4 — the Journal, paged
 
 The data half. 200 commits is now a page rather than a ceiling: scrolling toward the end of the loaded rows fetches the next one with `--skip`, and `JournalView` no longer caps anything.
@@ -1332,7 +1355,8 @@ Verified after both fixes with the rows measured directly in the page: heights e
 - ~~**A trigger for the commit-graph on the history axis.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.1 above. It was the shape the entry predicted (time the log, configure when slow) but reached by splitting `configureRepository` in two rather than by adding a caller to it.
 - ~~**Cursor-paged, virtualized history**~~ ✅ **both halves built and verified 2026-08-16** — virtualized in 7.3, paged in 7.4, both above.
 - **The streaming audit.** `CommitService` is still the only service that streams. Two measured payloads argue it should not be: `ls-files` returns **11.9MB in a single buffered string** (2191ms) for quick open's corpus, and an unbounded `log` is **219MB**. The second is already streamed; the first is not.
-- **The Files panel, virtualized.** `FileList` renders every entry — 500,000 rows on `big-files`. Discovered while building 7.3 and left alone deliberately; doing it now gives the shared list component two real callers instead of one guessed-at abstraction.
+- ~~**The Files panel, virtualized.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.5 above, along with the shared `VirtualList` the Journal now also uses.
+- **The watcher holds a file descriptor per watched path.** 30,000 untracked files took the backend to `fork/exec git: too many open files`, which is every git command in the app failing at once. Found while building 7.5. Needs a watch on directories rather than files, or a cap with a fallback to polling — and a decision about what the panel shows when a tree is too large to watch.
 - **Rerender hardening.** Untouched.
 - **The Ignored chip against a genuinely large repository** — carried over from §9's Phase 6.12 entry, which deferred it here. `status --ignored` on `big-files` is 4407ms, so the pause that entry warns about is real and now has a number.
 
@@ -1379,9 +1403,9 @@ Phase 8  Quality & release     4d
 
 Phases 2 and 4 are independent and can run in parallel (parsers need no UI; the port runs on fixtures).
 
-**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), its paging (7.4), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
+**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), its paging (7.4), the Files panel and the shared `VirtualList` (7.5), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
 
-1. The Files panel, virtualized — `FileList` renders all 500k rows today
+1. The watcher's file-descriptor exhaustion — every git command fails at once when it trips, which makes it the most severe thing left
 2. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
 3. Rerender hardening
 4. The Ignored chip against a genuinely large repository
