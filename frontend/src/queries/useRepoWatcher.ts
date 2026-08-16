@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { ignoreService } from '@/services/git';
+import { useWatchStore } from '@/stores/watchStore';
 import { onRepoChanged, unwatchRepo, watchRepo } from '@/services/wails';
 import { keysToInvalidate } from './keys';
 
@@ -42,11 +43,25 @@ export function useRepoWatcher(repoPath: string | null): void {
       const ignored = await ignoreService(repoPath).ignoredDirectories();
       if (cancelled) return;
       try {
-        await watchRepo(repoPath, ignored.ok ? [...ignored.value] : []);
+        const info = await watchRepo(repoPath, ignored.ok ? [...ignored.value] : []);
+        if (cancelled) return;
+        /*
+         * Keep what the watcher reported, rather than discarding it.
+         *
+         * This return value used to be dropped on the floor, which is how
+         * `degraded` came to exist in Go, be documented in `watch.ts` as
+         * something "the UI should say", and then reach no UI at all — it was
+         * visible only as a debug stat on `DevBridgePage`. A tree too large to
+         * watch in full would quietly stop updating and say nothing (PLAN.md
+         * §10, 7.6).
+         */
+        useWatchStore.getState().record(repoPath, info);
       } catch (cause: unknown) {
         // A repository that cannot be watched is still usable — it just will
         // not refresh by itself, which is better than refusing to open it.
+        // Recorded as `null` so the panel can say so instead of looking live.
         console.warn(`could not watch ${repoPath}`, cause);
+        if (!cancelled) useWatchStore.getState().record(repoPath, null);
       }
     })();
 
@@ -61,6 +76,10 @@ export function useRepoWatcher(repoPath: string | null): void {
     return () => {
       cancelled = true;
       off();
+      // Back to "not known yet" rather than a stale verdict: reopening this
+      // repository re-establishes the watch, and a remembered `degraded` would
+      // otherwise render before the new watch has reported anything.
+      useWatchStore.getState().forget(repoPath);
       void unwatchRepo(repoPath).catch(() => {
         // Teardown: the watch dies with the process anyway.
       });

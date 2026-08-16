@@ -24,7 +24,30 @@
   /* --- text --- */
   --text-primary: #e2e8f0;
   --text-secondary: #8b9ab5;
-  --text-muted: #556580;
+  /*
+   * Was the mockup's #556580 (PLAN.md §10, 8.1). Raised along its own hue —
+   * hsl(219, 20%) — from 42% to 54% lightness so that panel headers, the PATH
+   * column and commit timestamps clear WCAG AA:
+   *
+   *     on --bg-darkest  3.21 -> 4.94 ✓      on --bg-panel  2.93 -> 4.52 ✓
+   *
+   * **Deliberately not raised further, and the ceiling is the reason.** To also
+   * clear AA on --bg-input, --bg-hover, --bg-active and --bg-selected it would
+   * need to reach roughly #919eb6, which is *brighter than --text-secondary
+   * above it* — the three-tier text ramp would collapse into two, the bottom
+   * tier outranking the middle. Even at this value the gap to secondary closes
+   * from 2.50x to 1.43x, so there is not much room left before the tiers stop
+   * reading as tiers.
+   *
+   * Still below AA, knowingly: the status-chip letters on --bg-input (4.16)
+   * and muted text on hover/active/selected rows (3.80 / 3.44 / 3.28). Those
+   * need a different fix than a brighter grey — see 8.1.
+   *
+   * This is a deviation from §7's rule that the mockup's tokens do not drift.
+   * It is the second one, and it is the same deviation the light theme already
+   * made in 6.8 for the same token and the same reason.
+   */
+  --text-muted: #7283a1;
 
   /* --- accent --- */
   --accent: #e8a838;

@@ -1161,7 +1161,7 @@ Targets are 500k files / 1M commits. Concretely:
 1. ~~**History**: cursor-paged `git log --skip/--max-count` (or `--since` windows), TanStack Virtual, ~200-commit pages,~~ ✅ **built in 7.3 and 7.4** — `--skip`, 200-commit pages, TanStack Virtual; ~~graph lanes computed incrementally in the Worker~~ — **the Worker is withdrawn, measured at 39ms for 20,000 commits** (below)
 2. ~~**Status at 500k files**: enable `core.fsmonitor` + `core.untrackedCache` on open, and don't call `--untracked-files=all` on huge repos — degrade to `normal` above a file-count threshold~~ ✅ (below) — built, but not as written: the two mitigations turned out to be one, and the threshold is a duration rather than a file count
 3. **Streaming**: everything large goes through `RunStream`, parsed incrementally, never a single giant string — ◐ `log` and `ls-files` both stream as of 7.7 (below); **the audit found a third payload nobody had listed**, `git show` on a commit, which is still buffered and still unbounded
-4. **Rerenders**: `React.memo` + granular Zustand selectors; assert render counts in tests for the big lists — still open, and the only one of the five untouched
+4. ~~**Rerenders**: `React.memo` + granular Zustand selectors; assert render counts in tests for the big lists~~ ✅ **done in 7.8, and two of its three clauses were withdrawn on measurement** — `React.memo` is not warranted (23 rows), the selectors were already granular, and the render-count tests found the real cost somewhere else entirely (below)
 5. ~~**Bundle**: lazy-load Monaco on first use~~ — **withdrawn: Monaco was never adopted** (§14.4). xterm ✅ and Shiki ✅ are both already lazy
 
 **And one item this list does not contain, which turned out to be the largest win in the phase: the commit-graph.** See Phase 7.1.
@@ -1431,16 +1431,78 @@ Verified after both fixes with the rows measured directly in the page: heights e
 
 The `git show` finding is unmeasured — the bench has no big-commit case, and adding one (`git show` over the largest commit in `big-history`) is the first step, not the fix. Added to the list below rather than fixed here, because the fix is a UI decision as much as a service one: either the commit diff scopes to the selected file the way the working-tree diff does, or it streams, and which is right depends on whether the file list for a commit should render before its patches do.
 
+### ✅ Phase 7.6, closed — the degraded flag reaches a screen
+
+The watcher has reported `Degraded` since 7.6, `services/wails/watch.ts` has documented it since then as something "the UI should say", and it said nothing. The reason turned out to be one line: `useRepoWatcher` called `watchRepo(...)` and **discarded the returned `WatchInfo`**. The flag existed, was documented, was correct, and reached exactly one place — a debug stat on `DevBridgePage`. Nothing was broken; nothing was connected.
+
+**Three decisions in a small change.**
+
+**A store, not a query key.** The first attempt put the `WatchInfo` in the TanStack cache beside `tuning`, which has the shape of precedent — per-repository state, written by one place, read by another. It is the wrong precedent. `tuning` is *pulled*: it has a `queryFn` that reads SQLite. This is *pushed*: `useRepoWatcher` is the sole writer, and asking Go again would race with it, so the key would have been a query with no fetcher — `enabled` and `staleTime: Infinity` bolted on to stop TanStack doing the one thing it exists to do. `stores/watchStore.ts` is keyed by repository path so a switch cannot show the previous repository's health, which matters exactly when one of the two is enormous.
+
+**Three states, not two.** `undefined` is "the watch is still being established", and it is neither of the other two. Treated as unhealthy it flashes a warning on screen during **every** repository open; treated as healthy it is right by accident and stops being right the moment somebody gives it a default. It is invisible on screen when it is correct, so the rule lives in `watchWarningFor` (`features/explorer/watchBanner.ts`) as a pure function with tests rather than as a condition inside JSX. Teardown calls `forget` rather than leaving the last verdict behind, so reopening a repository cannot render a stale `degraded` before the new watch has said anything.
+
+**The wording is narrow on purpose, and this is the part most likely to be "fixed" later into being wrong.** `.git` is watched even when the descriptor budget runs out, so commits, checkouts, staging and branch switches all still report. What stops arriving is edits to files in the uncovered part. So the banner says *"Repository too large to watch fully — file edits may not appear on their own"*, and not "this repository is not being watched", which would be false and would send someone hunting for a bug in the half that works. A second, distinct sentence covers the case where `Watch` threw outright and nothing refreshes at all — two failures, two sentences, because collapsing them would make the common one alarming and the rare one vague. **The failure being fixed here was silence; overshooting into alarm is its own bug.** A test asserts the degraded message does *not* claim the repository is unwatched.
+
+It renders on both Files tabs, unlike the 7.2 untracked banner beneath it: an unwatched subtree goes stale in the Tree exactly as it does in Changes, and the Tree is where a file that has quietly stopped updating is most believable. The action is a plain repo-wide invalidation — the manual refresh `watch.ts` asked for. `Icons.Unwatched` was added to the registry rather than borrowing `ToastError`, since an icon named for a toast rendered outside a toast is how a registry starts meaning nothing.
+
+### ✅ Phase 7.8 — rerender hardening, where two thirds of the item did not survive being measured
+
+§10's fourth bullet asked for three things. Measuring first — the phase's habit by now — kept one.
+
+**`React.memo` on the list rows: withdrawn.** Selecting a commit does re-render every visible row, exactly as the bullet assumed. The number is **23**. `JournalView` renders its rows through a `renderRow` closure, so a store change re-runs all of them — and all of them is a windowed list's window, which is bounded by the viewport and not by the 500 commits loaded behind it. Memoizing would add a props comparison per row per render, plus memoized callbacks to keep those comparisons meaningful, to avoid re-rendering 22 rows of small JSX. That is the graph Worker argument again (39ms, since re-measured at 22ms): real machinery against a cost nobody waits on. The measurement is kept as an assertion in `JournalView.rerender.test.tsx`, bounded well below the loaded count, so the regression it *does* catch is a list that stops being windowed at all.
+
+**Granular selectors: already correct, now pinned.** `JournalView` subscribes to seven individual fields rather than to an object, and a test asserts that a Files-panel filter change re-renders none of its rows. The failure mode is a future edit reaching for `useWorkspaceStore((s) => ({ ... }))`, which makes every panel a subscriber to every keystroke in every other panel — invisible in review, caught here.
+
+**The one that was real, and was not in the bullet: `FileList` re-sorted the entire list on every keystroke.** `sortEntries` uses `localeCompare` and ran unmemoized on each render, as did the status-chip filter. Typing in the filter box re-renders the panel per character, so both re-ran per character for an answer that could not have changed — the entries had not. Measured over 50,000 entries: **the sort is 14.2ms, and the filter pass the keystroke is actually for is 2.1ms.** 50,000 is not a hypothetical; it is the "List every file" escape hatch from 7.2, one click away on `big-files`. Fourteen milliseconds is most of a frame, spent recomputing something already known. Both are now `useMemo`ed on what they genuinely depend on, and the filter pass deliberately is not — it is the one that depends on the keystroke.
+
+Three tests hold it: no re-sort on typing, no re-sort on selection, **and a re-sort when the status chips change** — the third because a test that only proves the memo never recomputes would pass against an empty dependency array, which is the other way to get this wrong and the one that puts stale files on screen.
+
+**A note on the test double, because it wasted a cycle and will waste another.** Written the obvious way, the no-re-sort test fails, and fails convincingly: the memo really does recompute. The cause is the mock returning a fresh object from `useStatus` on every call. TanStack Query does not — structural sharing keeps `data` referentially stable between renders, and the memo depends on that. A double that reallocates per call is not a stricter test, it is a test of the double.
+
+### ✅ Phase 7.9 — the Ignored chip, and a warning that was pointing at the wrong number
+
+§9's Phase 6.12 entry deferred this here as "the pause the plan warns about", and §10 gave it a number: `status --ignored` on `big-files` is 4407ms. Measured properly, **the chip is not what costs that.**
+
+| repository | `status --ignored` | plain `status` | the chip's *marginal* cost |
+|---|---:|---:|---:|
+| moonGit itself — 18,163 ignored files | 67ms (17 rows) | 32ms | **35ms** |
+| `big-files` — 500k files, 50k untracked | 3434ms | 3582ms `all` / 3105ms `normal` | **~330ms** |
+
+The 4407ms was never the chip's price; it is what *any* status costs on that repository. On `big-files` the ignored query is in fact **cheaper than the status the panel already runs**, because `--ignored` goes with `--untracked-files=normal` (which collapses) while the panel's default asks for `=all`. And on a repository with a genuinely enormous ignored tree — this one, 18,163 files — the collapse does its job and the whole query is 67ms. There is no multi-second pause attributable to clicking the chip.
+
+Also measured, since it looked like an obvious win and was not: `ls-files --others --ignored --exclude-standard --directory` answers a similar question in 31ms here and 1634ms on `big-files` — roughly half. Not adopted. `status --ignored` returns the `!` records already shaped like every other entry the panel renders, and swapping to `ls-files` would trade 35ms nobody perceives for a second code path producing a different type. The measurement is recorded so the next person does not have to take it on faith.
+
+**What the measurement did leave is a real gap, in the place nobody was looking.** The "Listing ignored files…" notice rendered only when the list was *empty* — and the one repository where the query is genuinely slow is also the one with 50,000 untracked files, so its list is emphatically not empty and it showed nothing at all. Three and a half seconds of an inert-looking chip, in exactly the case the original warning was about, guarded by a condition that excluded it. The notice now also renders as a banner above the rows when there are rows, placed outside the scrolling `PanelBody` like the panel's other two banners — inside it would either scroll away from a multi-second query or need `position: sticky` with a hardcoded offset for a column header that only sometimes exists.
+
+✅ **Exercised against `big-files` in the running app** — see 7.10. The notice held for ~2 seconds, in precisely the non-empty-list case the old condition excluded.
+
+### ✅ Phase 7.10 — all three verifications, against the running app
+
+Done in the browser, not the native window: `wails dev` serves the same frontend against the same live Go backend on **:34115** (§4.1's dev harness, already used for `#/dev/bridge`), which makes the bound methods callable from a console and the DOM readable. `big-files` was registered by inserting a row into `repositories` through the `store` pipe — the native directory picker cannot be driven from a browser, and the DB is a dumb pipe precisely so this kind of thing is possible. Both the row and the watch were removed afterwards.
+
+**7.6 — the degraded banner. Confirmed.** `watcher.Service.Watch` on `big-files` returns `{dirs: 69, descriptors: 4096, degraded: true}` in 202ms: the descriptor budget is exhausted 69 directories into a 500k-file tree. The workspace then rendered *both* banners, stacked and legible — the watcher's above the 7.2 untracked one — which was an open question when the placement was chosen blind:
+
+> 👁 Repository too large to watch fully — file edits may not appear on their own · **Refresh**
+> ▽ Large repository — untracked folders are collapsed · **List every file**
+
+**7.7 — the streaming `listPaths`. Confirmed, and this is the one that could only be proven here.** The bridge call recorded on the way past was `RunStream` — not `Run` — with `args: ["ls-files","-z","--cached","--others","--exclude-standard"]` and `delimiter: "nul"`. Quick open then reported **"Showing 50 of 550001"**: 500,000 tracked plus 50,000 untracked plus one, streamed in 64 KB chunks and reassembled. That number is three assertions at once — the `Set` de-duplicated without losing anything, the NUL carry rejoined every path split across a chunk boundary (550,001 clean filenames, no mangled ones), and the chunk-count guard did not trip, which it would have if a single event had been dropped. The unit tests could establish the logic; only this could establish that 11.9MB crosses the bridge in pieces and arrives whole.
+
+**7.9 — the Ignored chip's notice. Confirmed, and it needed the fix.** With the chip on, `big-files` has a non-empty list (the collapsed `untracked/` row), so this is exactly the case the old condition excluded. Polling the DOM through the toggle, the notice was present for **~2 seconds** and gone once the query resolved. Under the previous condition that window showed nothing at all.
+
+**One console exception, and it is not ours.** A `TypeError: Cannot read properties of null (reading 'nodes')` from inside `wails/ipc.js` — Wails' own browser-dev IPC shim, with a stack entirely in its own bundle. The same class of browser-dev-mode IPC artifact already recorded in Phase 4 for `EventsOff`. Nothing from app code, and specifically no "lost in transit".
+
 ### Still open in this phase
+
+**Nothing. Phase 7 is complete as of 2026-08-16** — the last three items were verified against the running app in 7.10. The entries below are kept as the record of how each was closed.
 
 - ~~**A trigger for the commit-graph on the history axis.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.1 above. It was the shape the entry predicted (time the log, configure when slow) but reached by splitting `configureRepository` in two rather than by adding a caller to it.
 - ~~**Cursor-paged, virtualized history**~~ ✅ **both halves built and verified 2026-08-16** — virtualized in 7.3, paged in 7.4, both above.
-- ~~**The streaming audit.**~~ ✅ **Built 2026-08-16** — see Phase 7.7 below. `TreeService.listPaths` streams; `CommitService` is no longer the only service that does. **Not yet verified against the real bridge** — the unit tests drive a double, and the one thing this change is *for* is bridge behaviour, so it wants a `wails dev` run against `big-files` before it is called finished.
+- ~~**The streaming audit.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.7, and 7.10 for the verification: `RunStream` confirmed on the wire and 550,001 paths reassembled through the real bridge.
 - ~~**The Files panel, virtualized.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.5 above, along with the shared `VirtualList` the Journal now also uses.
 - ~~**`git show` on a commit, buffered and unbounded**~~ ✅ **measured and resolved 2026-08-16** — 187.6MB unscoped, 70ms/319B scoped, and the query that would have run it deleted along with `useCommit` and their query keys. See 7.7.
-- **Surfacing the watcher's `Degraded` flag.** All that is left of 7.6: a tree too large to watch in full stops updating and says nothing about it. Copy the status panel's banner (7.2). Note that the banner already in `FilesPane.tsx` is *not* this one — it reports the 7.2 untracked-files degrade; `watcher.degraded` currently surfaces only as a debug stat on `DevBridgePage`.
-- **Rerender hardening.** Untouched.
-- **The Ignored chip against a genuinely large repository** — carried over from §9's Phase 6.12 entry, which deferred it here. `status --ignored` on `big-files` is 4407ms, so the pause that entry warns about is real and now has a number.
+- ~~**Surfacing the watcher's `Degraded` flag.**~~ ✅ **Built and verified 2026-08-16 — 7.6 is closed.** See below, and 7.10: `degraded: true` at 69 directories against a 4096-descriptor budget, with both banners rendering stacked.
+- ~~**Rerender hardening.**~~ ✅ **Done 2026-08-16 (7.8).** Two of the bullet's three clauses withdrawn on measurement; the real cost was an unmemoized 14.2ms sort per keystroke in `FileList`, which the bullet never mentioned.
+- ~~**The Ignored chip against a genuinely large repository**~~ ✅ **measured and resolved 2026-08-16 (7.9)** — and the warning was pointing at the wrong number. The chip's marginal cost is 35ms on a repository with 18,163 ignored files and ~330ms on `big-files`; the 4407ms is what any status costs there. The real gap was a loading notice whose condition excluded the only case that needed it.
 
 ---
 
@@ -1451,6 +1513,56 @@ Vitest + RTL for units and components · Playwright over `wails dev` for integra
 **Two struck items, and the decision behind them (2026-08-16, with Ivan).** Apple Developer enrolment is declined — moonGit ships unsigned and un-notarized, and the Gatekeeper warning on first open is accepted. That is a coherent position for a tool whose audience is its author, but it takes **auto-update down with it**: an updater without a signature is an unverified download replacing the running application, which is a worse thing to ship than no updater at all. Both are therefore out of Phase 8 rather than deferred inside it. If the audience ever widens, they come back as a pair — never the updater alone.
 
 What survives is the part that was always the point: the tests, the a11y pass, the logger, the accent, and a universal binary, none of which need a certificate.
+
+---
+
+### ✅ Phase 8.1 — the contrast audit, and the dark theme's dim grey
+
+6.8 measured `--text-muted` and deferred the dark theme's failure here. Re-run against the running app — every text-painting element, its **composited** effective background (semi-transparent layers flattened, not the nearest opaque ancestor), WCAG's large-text exemption applied — the picture is larger than the one token, and the two themes fail for different reasons.
+
+**Dark — 100 to 292 elements checked depending on what was open; 7 distinct failures, ~54 instances. It is almost entirely one token.**
+
+| foreground | background | ratio | what it is |
+|---|---|---:|---|
+| `--text-muted` #556580 | `--bg-input` #1a2230 | **2.71** | status-chip letters |
+| `--text-muted` | `--bg-panel` #151b23 | **2.93** | every panel header — "Repositories", "Branches", "Status/File/Path" |
+| `--text-muted` | diff add/del row tints | 2.98 / 3.05 | line numbers inside a hunk |
+| `--text-muted` | `--bg-darkest` #0d1117 | **3.21** | the PATH column, commit timestamps, filenames |
+| `--green` #3fb950 | selected-row composite | 4.09 | a branch tag on the selected row |
+
+**Light — 30 distinct failures, 55 instances, and none of them is `--text-muted`.** 6.8 fixed that token here and the fix holds. What fails instead is a pattern 6.8 never looked at: **coloured text on a 12%-alpha tint of its own colour** — `#9a6700` on accent-dim (4.17), `#1a7f37` on green-dim (4.07), `#cf222e` on red-dim (4.16), `#0969da` on blue-dim (3.64). That is every status badge and branch tag. Plus Shiki's tokens over the word-diff marks, which are 0.28-alpha and land as low as **2.96**. The light theme, which 6.8 declared fixed, has more failing pairs than the dark one it flagged.
+
+**And the constraint that makes this a design decision rather than a fix.** Walking `--text-muted` up its own hue ramp (hsl 219°, 20%):
+
+| lightness | hex | on body | on panel | worst surface |
+|---|---|---:|---:|---:|
+| 42% (today) | #556580 | 3.21 | 2.93 | 2.13 |
+| 52% | #6c7d9d | 4.56 ✓ | 4.17 | 3.03 |
+| 54% | #7283a1 | 4.94 ✓ | 4.52 ✓ | 3.28 |
+| **64%** | **#919eb6** | 7.00 ✓ | 6.41 ✓ | **4.66 ✓** |
+
+To pass on *every* surface it must reach #919eb6 — **which is lighter than `--text-secondary` (#8b9ab5)**. The three-tier text ramp cannot satisfy AA on the darker surfaces without collapsing into two tiers: muted would outrank the level above it. Passing on body and panel alone — where the overwhelming majority of muted text actually lives — costs much less (#7283a1) and leaves hover/active/selected rows failing.
+
+**Decided with Ivan (2026-08-16): the partial fix.** Dark `--text-muted` goes from the mockup's `#556580` to **`#7283a1`** — up its own hue ramp, 42% to 54% lightness. It clears AA where that text overwhelmingly lives and stops short of collapsing the hierarchy. The alternative of accepting it outright was on the table and declined; the full re-ramp was judged out of proportion to one token.
+
+**Verified live, and the improvement is most of the problem:**
+
+| | before | after |
+|---|---:|---:|
+| distinct failing pairs (dark) | 7 | **2** |
+| failing element instances | ~54 | **2** |
+
+Everything that was failing on the body and the panel now passes — panel headers, the PATH column, timestamps, filenames, and the diff's in-hunk line numbers, which came along for free because their tinted row backgrounds are close to the body's. What remains, knowingly:
+
+- `--text-muted` on `--bg-input` — **4.16**, the status-chip letters, one element
+- `--green` on the selected row's composite — **4.09**, a branch tag, one element
+- Shiki's `#ff7b72` over an added-line word mark — **4.18**, three elements in that file
+
+None is fixable by a brighter grey; they are a badge-tint problem and a syntax-theme problem, the same two patterns the light theme fails on. Left for a later pass rather than bodged now.
+
+**The cost, stated so nobody rediscovers it as a bug:** the gap between `--text-muted` and `--text-secondary` narrows from **2.50x to 1.43x**. The three tiers still read as three, verified on screen, but there is little room left. Any future proposal to brighten muted again should move `--text-secondary` and `--text-primary` first.
+
+**The light theme's 30 badge failures are untouched** and remain open — coloured text on a 12%-alpha tint of itself, plus Shiki over the 0.28-alpha word marks. They need a decision of their own about the badge system, not a token nudge.
 
 ---
 
@@ -1479,18 +1591,15 @@ Phase 3  State & persistence   1d       │  ✅  committing to itself
 Phase 4  Mithril → React       2.5d     │  ✅
 Phase 5  Wire real git         2.5d   ──┘  ✅
 Phase 6  Feature build-out     2–3w        ✅  all 12 items, §9
-Phase 7  Performance           1w          ◐   §10 — see below
+Phase 7  Performance           1w          ✅  §10 — all items closed or withdrawn
 Phase 8  Quality & release     4d
 ```
 
 Phases 2 and 4 are independent and can run in parallel (parsers need no UI; the port runs on fixtures).
 
-**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), its paging (7.4), the Files panel and the shared `VirtualList` (7.5), the watcher's three bugs (7.6), the streaming audit (7.7), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
+**Phase 7, complete (2026-08-16).** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), its paging (7.4), the Files panel and the shared `VirtualList` (7.5), the watcher's three bugs and its degraded banner (7.6), the streaming audit (7.7), rerender hardening (7.8), the Ignored chip (7.9), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
 
-1. Rerender hardening
-2. The Ignored chip against a genuinely large repository
-3. Surfacing the watcher's degraded flag (7.6)
-4. A `wails dev` run against `big-files` to confirm 7.7 did what it claims — the unit tests drive a double, and the bridge is the thing that changed
+**Nothing remains.** The last three items needed a running app rather than a test double, and 7.10 supplied one: `RunStream` confirmed on the wire with 550,001 paths reassembled, `degraded: true` with both banners stacked, and the Ignored notice holding for ~2 seconds on a non-empty list.
 
 7.7 added an item and then closed it in the same day, which is the shape an audit should have: it found a 187.6MB payload nobody had listed, measured it, and the measurement showed the query behind it had no callers and could simply go. Net effect on the list is one item shorter than before the audit started.
 
@@ -1593,7 +1702,7 @@ Three places where this plan knowingly diverges — worth a second look before P
 
 ### Still open (not blocking — decide by the phase noted)
 
-- ~~**Light theme**~~ — **resolved: built in Phase 6.8**, ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. Custom accent is still open. See §9's Phase 6.8 entry, including the dark theme's own measured contrast failure now waiting on Phase 8.
+- ~~**Light theme**~~ — **resolved: built in Phase 6.8**, and its contrast re-audited in 8.1, which found that 6.8's fix holds for `--text-muted` but that the badge system fails on its own tints (30 pairs, still open), ahead of schedule because Settings needed an Appearance section with something in it. Light/dark/system, GitHub-derived light palette, Shiki following the theme. The token structure was *nearly* mechanical as predicted — the 30 literal colours the audit found are the part that was not. Custom accent is still open. See §9's Phase 6.8 entry, including the dark theme's own measured contrast failure now waiting on Phase 8.
 - ~~**Git-flow / Index Editor / Investigate**~~ — **all three resolved.** Index Editor was built (§9, hunk and line staging). **Git-flow and Investigate were removed**: the PRD never defined either, both only ever fired a toast, and a control that does nothing is worse than an absent one — it costs a click to discover that. Their icons went with them, since an icon with no caller is a mapping to nothing. `icons.test.ts` records the reason.
 - ~~**Merge/diff tool integration**~~ — **resolved: built in.** A three-way modal with per-region choices; the escape hatch is the user's own editor, not a configured external differ. See §9.3 above.
 - ~~**Hooks, LFS and submodules**~~ — **resolved 2026-08-16: all three cut.** Asked plainly rather than by feature name — do you work with projects nested inside projects, with huge binary files, with scripts that run on every save — and the answer was none of the three. So the LFS blocker (§13a, no LFS repository to verify against) never needs resolving, and submodules stays a feature nobody here has asked for. **Cut, not deferred**: leaving them on a list makes every future review re-read three entries to reach the same conclusion. They return only if the audience does (see below), and then as new work with a real repository behind them.

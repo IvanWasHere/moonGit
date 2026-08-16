@@ -10,8 +10,10 @@ import {
   type StatusFilter,
   type StatusFilterSpec,
 } from '@/features/working-tree/statusFilters';
+import { useWatchState } from '@/stores/watchStore';
 import { useWorkspaceStore, type FilesTab } from '@/stores/workspaceStore';
 import { FileTree } from './FileTree';
+import { watchWarningFor } from './watchBanner';
 import styles from './FilesPane.module.css';
 
 /**
@@ -51,9 +53,49 @@ export function FilesPane() {
             would be a control that lies. */}
         {filesTab === 'changes' && <StatusChips />}
       </div>
+      {/* On both tabs, unlike the one below it: an unwatched part of the tree
+          goes stale in the Tree exactly as it does in Changes, and the Tree is
+          where a file that has silently stopped updating is most believable. */}
+      <WatcherBanner />
       {filesTab === 'changes' && <DegradedBanner />}
       {filesTab === 'changes' ? <FileList /> : <FileTree />}
     </>
+  );
+}
+
+/**
+ * Says so when the file watcher is not covering the whole working tree.
+ *
+ * The watcher has always known this — `WatchInfo.Degraded` is set when the
+ * tree would cost more file descriptors than the process can spare, and
+ * `services/wails/watch.ts` has documented it since 7.6 as something "the UI
+ * should say". It said nothing: `useRepoWatcher` discarded the return value of
+ * `Watch`, so the flag reached a debug stat and no further (PLAN.md §10, 7.6).
+ *
+ * Whether to warn at all, and in what words, is `watchWarningFor` — the rule
+ * has a third state that is invisible on screen when it is right, so it is
+ * pinned by tests rather than by a condition in this JSX.
+ */
+function WatcherBanner() {
+  const repoPath = useWorkspaceStore((state) => state.repoPath);
+  const watch = useWatchState(repoPath);
+  const queryClient = useQueryClient();
+
+  const warning = watchWarningFor(watch);
+  if (repoPath === null || warning === null) return null;
+
+  return (
+    <div className={styles.degraded}>
+      <Icons.Unwatched size={11} />
+      <span className={styles.degradedText}>{warning.message}</span>
+      <button
+        type="button"
+        className={styles.degradedAction}
+        onClick={() => void queryClient.invalidateQueries({ queryKey: gitKeys.repo(repoPath) })}
+      >
+        Refresh
+      </button>
+    </div>
   );
 }
 

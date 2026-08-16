@@ -209,3 +209,23 @@
   background: var(--bg-hover);
   color: var(--text-primary);
 }
+
+/* "Listing ignored files…" while rows are already on screen (PLAN.md §10, 7.9).
+
+   Rendered as a sibling of the scrolling `PanelBody`, not inside it — the same
+   placement as the Files panel's other two banners. Inside, it would either
+   scroll away from a query that can run for seconds on a large repository, or
+   need `position: sticky` with a hardcoded offset for a column header that
+   only renders when there are rows. Outside, it is simply always visible and
+   there is no arithmetic to get wrong. */
+.ignoredLoading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: var(--bg-active);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}

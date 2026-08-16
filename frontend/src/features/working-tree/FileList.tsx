@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StatusBadge } from '@/components/Badges';
 import {
   ContextMenu,
@@ -88,6 +88,42 @@ export function FileList() {
   // early returns, as every hook must be.
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
 
+  /*
+   * The merge and the sort, memoized on what they actually depend on — which
+   * is not the filter text (PLAN.md §10, item 4).
+   *
+   * `sortEntries` uses `localeCompare`, and typing in the filter box
+   * re-renders this component on every keystroke. Unmemoized, that re-sorted
+   * the whole list per character for a result that cannot have changed:
+   * **measured at 14.2ms for 50,000 entries**, against 2.1ms for the filter
+   * pass that keystroke is actually for. 50,000 is not hypothetical — it is
+   * the "List every file" escape hatch on the benchmark repository, one click
+   * away (7.2), and 14ms is most of a frame spent redoing an answer we had.
+   *
+   * Above the early returns because hooks must be, which means handling the
+   * `undefined` status the `isPending` branch below returns on.
+   */
+  const files = useMemo(
+    () =>
+      status === undefined
+        ? []
+        : // The ordinary status never reports ignored entries — `STATUS_ARGS`
+          // does not ask for them — so they arrive from their own query and
+          // are merged in here rather than filtered out of one list.
+          sortEntries([
+            ...status.entries.filter((entry) => entry.kind !== 'ignored'),
+            ...(showIgnored ? (ignored ?? []) : []),
+          ]),
+    [status, showIgnored, ignored],
+  );
+
+  // Likewise independent of the filter text: the chips change far less often
+  // than the keystrokes do.
+  const byStatus = useMemo(
+    () => files.filter((entry) => matchesStatusFilters(entry, statusFilters)),
+    [files, statusFilters],
+  );
+
   if (repoPath === null) {
     return (
       <PanelBody>
@@ -115,14 +151,6 @@ export function FileList() {
     );
   }
 
-  // The ordinary status never reports ignored entries — `STATUS_ARGS` does not
-  // ask for them — so they arrive from their own query and are merged in here
-  // rather than being filtered out of one list.
-  const files = sortEntries([
-    ...status.entries.filter((entry) => entry.kind !== 'ignored'),
-    ...(showIgnored ? (ignored ?? []) : []),
-  ]);
-
   if (files.length === 0 && !ignoredLoading) {
     return (
       <>
@@ -134,9 +162,11 @@ export function FileList() {
     );
   }
 
-  const byStatus = files.filter((entry) => matchesStatusFilters(entry, statusFilters));
   // Matched on the display path, which for a rename is `old → new` — so either
   // half of a rename finds it, and that is the row the user is looking for.
+  // Not memoized, deliberately: this is the one of the three that genuinely
+  // depends on the keystroke, and at 2.1ms over 50,000 entries it is what the
+  // typing is for rather than waste alongside it.
   const visible = filterBy(byStatus, filter, (entry) => [displayPath(entry)]);
 
   return (
@@ -147,6 +177,12 @@ export function FileList() {
         matched={visible.length}
         total={files.length}
       />
+      {ignoredLoading && files.length > 0 && (
+        <div className={styles.ignoredLoading}>
+          <Icons.Sync size={11} />
+          <span>Listing ignored files…</span>
+        </div>
+      )}
       <PanelBody ref={setScrollEl}>
         {/* No column header over no columns of data. It also costs 27px of a
             pane that is routinely ~115px tall, which is the difference between
@@ -159,8 +195,25 @@ export function FileList() {
             <div className={styles.pathCell}>Path</div>
           </div>
         )}
-        {/* Three empty states, because three different things went wrong and
-            only one of them is fixed by clearing the chips. */}
+        {/*
+         * The Ignored chip is still working (PLAN.md §10, 7.9).
+         *
+         * Two shapes for one fact, because the panel is in two different
+         * states underneath it. With nothing else to show, the empty state is
+         * the whole answer. With rows already on screen, replacing them would
+         * be a lie — they are current — so the notice goes above them as a
+         * banner and the list stays readable and scrollable while the query
+         * runs.
+         *
+         * The second case is narrow and used to be silent. `--ignored` costs
+         * 35ms over a plain status on a repository with 18,163 ignored files,
+         * which nobody perceives — but on the 500k-file benchmark repository
+         * the same query is 3434ms, and that repository has 50,000 untracked
+         * files, so the list is *not* empty and the old condition rendered
+         * nothing at all. Three and a half seconds of a chip that looks
+         * inert is the pause §9's Phase 6.12 entry warned about; it just was
+         * not where that entry expected to find it.
+         */}
         {ignoredLoading && files.length === 0 && (
           <EmptyState icon={Icons.Sync} message="Listing ignored files…" />
         )}

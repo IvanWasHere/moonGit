@@ -25,6 +25,7 @@ import {
   ClockArrowLeft,
   Columns2,
   Columns3,
+  EyeOff,
   FileCheck,
   FileCode,
   FileDiff,
@@ -106,6 +107,14 @@ export const Icons = {
   Rebase: ArrowDownUp,
   /** The terminal drawer (Phase 6.9). Not in the mockup, which has no shell. */
   Terminal: SquareTerminal,
+  /**
+   * Part of the working tree is not being watched (Phase 7.6/7.7). Not in the
+   * mockup, which had no watcher and so could never be out of date.
+   *
+   * Named for the condition rather than the picture, like everything else here
+   * — the banner it marks is about what the app has stopped seeing.
+   */
+  Unwatched: EyeOff,
 
   // --- diff viewer (no mockup equivalent; the mockup had one view) ---
   /** Unified view — one column, git's own patch order. */ DiffInline: Rows3,
