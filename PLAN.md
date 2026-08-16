@@ -1279,6 +1279,52 @@ Three of the five bullets shrank or disappeared, which is worth as much as the t
 - **The Monaco bullet is void.** Monaco was never adopted (§14.4); Shiki won for the diff and is already lazy per-language, and the merge tool was built without an embedded editor. xterm has been a lazy 333 KB chunk since Phase 6.9. There is nothing left in this item.
 - **The parsers are not the bottleneck and never were.** `parseStatus` over 1.6MB of porcelain: 21ms. `parseRefs` over 1,772 refs: 3ms. `parseLog` over a page: below resolution. Every one of them is one to three orders of magnitude cheaper than the git command that produced its input. The phase's remaining effort belongs on what git is asked and how the payload crosses the bridge, not on how it is parsed.
 
+### ✅ Phase 7.6 — the watcher: a descriptor budget, ignored directories, and a feedback loop
+
+**Three bugs. The reported one was the least interesting of them.**
+
+**What it actually was.** The cap was `maxWatchedDirs = 6000` — a cap on *directories*. On macOS fsnotify uses kqueue, and its `watchDirectoryFiles` opens a descriptor for the directory **and one for every entry inside it**, to mimic inotify. So the cost of a watch tracks the *file* count, and the cap measured the wrong quantity entirely: 30,000 files in 150 directories passed a 6,000-directory check and cost 30,317 descriptors against a process limit of 10,240. The first guess in §10's entry — "holds a descriptor per watched path" — was right about the effect and wrong about the mechanism; our code never watched a file.
+
+**Why it presented as something else.** The watcher does not fail when it runs out; the *process* does. `w.Add` errors were discarded, so the watcher looked healthy while every subsequent `git` spawn died on `fork/exec: too many open files`. It reads as the repository being broken.
+
+**The fix.** The budget is now in descriptors, counted as `1 + len(children)` per directory, and derived from `RLIMIT_NOFILE` at runtime rather than assumed — a constant would be wrong on one machine or the other. 2,048 descriptors are reserved for everything that is not a watch, and the whole budget is capped at 4,096. The walk is **breadth-first**, so a truncated one keeps the shallow directories a person actually edits rather than whichever subtree a depth-first walk happened to enter; a directory too expensive to afford is skipped rather than ending the walk. Directories created later are charged against the same budget — without that, checking out a branch that adds a dependency tree walks into the same crash slowly.
+
+Verified end to end, and the test was checked against the defect rather than assumed to cover it:
+
+| against the 30,000-file fixture | descriptors | degraded | git afterwards |
+|---|---|---|---|
+| budget removed (the old behaviour) | 30,317 | false | **fails immediately** |
+| with the budget | 3,986 | true | 20 consecutive commands, all fine |
+
+**The budget alone made the failure honest, not absent.** moonGit's own tree is 1,499 directories and 18,451 files, almost all `node_modules`. Under the budget it reported `degraded` and coverage stopped around depth three — `frontend/src` watched, `frontend/src/features/history` not — so editing a file in this very repository would not have invalidated anything. A bigger budget is the wrong answer: `node_modules` is gitignored, so **every event from it is spurious by definition**, invisible to `git status` and therefore an invalidation that finds nothing. Watching it during an `npm install` is a self-inflicted event storm.
+
+**So the frontend now says what to skip.** `Watch(repoPath, excludeDirs)` takes repository-relative directories, and `IgnoreService.ignoredDirectories` produces them from `ls-files --others --ignored --exclude-standard --directory` — `--directory` being the whole reason it is cheap, collapsing 18,000 ignored files to the one entry `node_modules/`. Deciding what is ignored stays on the TypeScript side, where git knowledge belongs (§4); Go watches what it is told and validates that nothing in the list escapes the repository. Best-effort: a repository whose ignores cannot be listed is still watched, just less completely.
+
+| this repository | dirs | descriptors | complete |
+|---|---|---|---|
+| before the budget | 1,499 attempted | ~20,000 | crashes |
+| budget, no exclusions | 549 | 4,096 | **no** — truncated at depth 3 |
+| budget + exclusions | **82** | **494** | yes |
+
+git reports five ignored directories here — `.claude`, `build/bin`, `frontend/dist`, `frontend/node_modules`, `node_modules` — and dropping them is a 9× reduction. Verified in the running app: `degraded: false`, and touching `frontend/src/features/history/` — depth four, previously unwatched — emits `worktree`.
+
+### ✅ The third bug: the app was re-querying git five times a second, forever
+
+Found only because the end-to-end check counted events instead of just looking for one. With the app idle and nothing on disk changing, **26 events arrived in 5 seconds** — exactly the debounce interval, back to back, on every repository.
+
+`.git/index` was never rewritten; its modification time never moved. A probe on the raw fsnotify stream found **42 events in five seconds, all of them `CHMOD` on `.git/index`, and nothing else**. kqueue raises `NOTE_ATTRIB` when a file's *access* time moves, and reading a file moves its access time. So: `git status` reads the index → attribute event → classified as "the index changed" → status query invalidated → `git status` reads the index. A perfect loop, and the reason it was invisible is that it looks exactly like a responsive app.
+
+Attribute-only events inside `.git` are now dropped. **Only inside `.git`** — in the working tree a mode change is a real change `git status` reports, so a Chmod there is worth acting on; inside `.git` nothing is ever communicated by an attribute alone, because git signals through the contents it writes.
+
+| idle, nothing changing | events |
+|---|---|
+| before | 26 in 5s |
+| after | **0 in 8s** |
+
+One edit still produces 2 events and then settles to nothing, so detection was not traded away for quiet.
+
+**Still open: `Degraded` is reported to nobody.** `WatchInfo` has carried the flag since Phase 1 and `useRepoWatcher` discards the result. It matters much less now that a normal repository is watched in full, but a tree genuinely too large still stops updating silently, which is the one failure a user cannot diagnose. The status panel's own degrade banner (7.2) is the shape to copy.
+
 ### ✅ Phase 7.5 — the Files panel, and the shared list
 
 `FileList` mapped over every entry. `components/VirtualList` now backs both it and the Journal, which is what the 7.3 entry deferred the extraction for: an abstraction shaped by one consumer is a guess, and the two turned out to differ in exactly the way that matters — the Journal's rows vary in height and the Files panel's do not — so measurement is unconditional rather than an option.
@@ -1356,7 +1402,7 @@ Verified after both fixes with the rows measured directly in the page: heights e
 - ~~**Cursor-paged, virtualized history**~~ ✅ **both halves built and verified 2026-08-16** — virtualized in 7.3, paged in 7.4, both above.
 - **The streaming audit.** `CommitService` is still the only service that streams. Two measured payloads argue it should not be: `ls-files` returns **11.9MB in a single buffered string** (2191ms) for quick open's corpus, and an unbounded `log` is **219MB**. The second is already streamed; the first is not.
 - ~~**The Files panel, virtualized.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.5 above, along with the shared `VirtualList` the Journal now also uses.
-- **The watcher holds a file descriptor per watched path.** 30,000 untracked files took the backend to `fork/exec git: too many open files`, which is every git command in the app failing at once. Found while building 7.5. Needs a watch on directories rather than files, or a cap with a fallback to polling — and a decision about what the panel shows when a tree is too large to watch.
+- **Surfacing the watcher's `Degraded` flag.** All that is left of 7.6: a tree too large to watch in full stops updating and says nothing about it. Copy the status panel's banner (7.2).
 - **Rerender hardening.** Untouched.
 - **The Ignored chip against a genuinely large repository** — carried over from §9's Phase 6.12 entry, which deferred it here. `status --ignored` on `big-files` is 4407ms, so the pause that entry warns about is real and now has a number.
 
@@ -1403,12 +1449,12 @@ Phase 8  Quality & release     4d
 
 Phases 2 and 4 are independent and can run in parallel (parsers need no UI; the port runs on fixtures).
 
-**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), its paging (7.4), the Files panel and the shared `VirtualList` (7.5), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
+**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), its paging (7.4), the Files panel and the shared `VirtualList` (7.5), the watcher's three bugs (7.6), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
 
-1. The watcher's file-descriptor exhaustion — every git command fails at once when it trips, which makes it the most severe thing left
-2. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
-3. Rerender hardening
-4. The Ignored chip against a genuinely large repository
+1. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
+2. Rerender hardening
+3. The Ignored chip against a genuinely large repository
+4. Surfacing the watcher's degraded flag (7.6)
 
 The estimate has not been revised. Four of the eight items in §10 turned out to be cheaper or void and two turned out to be worth far more than the plan implied, which roughly cancels; the honest position is that the week was never measured either.
 

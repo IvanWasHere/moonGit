@@ -10,8 +10,8 @@ export function Unwatch(arg1) {
   return window['go']['watcher']['Service']['Unwatch'](arg1);
 }
 
-export function Watch(arg1) {
-  return window['go']['watcher']['Service']['Watch'](arg1);
+export function Watch(arg1, arg2) {
+  return window['go']['watcher']['Service']['Watch'](arg1, arg2);
 }
 
 export function Watching() {

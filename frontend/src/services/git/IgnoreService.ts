@@ -84,6 +84,42 @@ export class IgnoreService {
     });
     return mapParsed(result, parseCheckIgnore, { args, repoPath: this.runner.repoPath });
   }
+
+  /**
+   * Ignored directories, for the file watcher to skip (PLAN.md §10, 7.6).
+   *
+   * **`--directory` is the whole reason this is cheap.** Without it git lists
+   * every ignored *file* — 18,000 of them in this repository — and the watcher
+   * wants the one entry `node_modules/` that stands for all of them. With it,
+   * a directory none of whose contents are tracked collapses to a single line.
+   *
+   * It answers a different question from `useIgnoredFiles`, which is why it is
+   * a separate call rather than a filter over that one: this is the cheap
+   * structural summary the watcher needs at open, and that is the expensive
+   * per-file listing the Ignored chip needs on demand.
+   *
+   * Failure is not propagated as an error. A repository whose ignored
+   * directories cannot be listed should still be watched — just less well,
+   * which the watcher already has a word for.
+   */
+  async ignoredDirectories(options: ReadOptions = {}): Promise<Result<string[], GitError>> {
+    const args = [
+      'ls-files',
+      '-z',
+      '--others', // untracked...
+      '--ignored', // ...and ignored, which together mean "ignored"
+      '--exclude-standard', // .gitignore, .git/info/exclude, the global file
+      '--directory', // collapse a wholly-ignored directory to one entry
+    ];
+    const result = await this.runner.exec(args, toExecOptions(options));
+    if (!result.ok) return result;
+
+    const dirs = result.value.stdout
+      .split('\0')
+      .filter((entry) => entry.endsWith('/'))
+      .map((entry) => entry.slice(0, -1));
+    return ok(dirs);
+  }
 }
 
 const services = new Map<string, IgnoreService>();

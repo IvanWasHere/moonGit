@@ -7,6 +7,6 @@ export function Startup(arg1:context.Context):Promise<void>;
 
 export function Unwatch(arg1:string):Promise<boolean>;
 
-export function Watch(arg1:string):Promise<watcher.WatchInfo>;
+export function Watch(arg1:string,arg2:Array<string>):Promise<watcher.WatchInfo>;
 
 export function Watching():Promise<Array<watcher.WatchInfo>>;

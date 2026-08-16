@@ -81,7 +81,7 @@ func TestWatchReportsWorktreeChange(t *testing.T) {
 	col := &collector{}
 	col.install(s)
 
-	if _, err := s.Watch(repo); err != nil {
+	if _, err := s.Watch(repo, nil); err != nil {
 		t.Fatal(err)
 	}
 	defer s.Unwatch(repo)
@@ -100,7 +100,7 @@ func TestWatchReportsCommit(t *testing.T) {
 	col := &collector{}
 	col.install(s)
 
-	if _, err := s.Watch(repo); err != nil {
+	if _, err := s.Watch(repo, nil); err != nil {
 		t.Fatal(err)
 	}
 	defer s.Unwatch(repo)
@@ -143,7 +143,7 @@ func TestDebounceCoalescesBurst(t *testing.T) {
 	col := &collector{}
 	col.install(s)
 
-	if _, err := s.Watch(repo); err != nil {
+	if _, err := s.Watch(repo, nil); err != nil {
 		t.Fatal(err)
 	}
 	defer s.Unwatch(repo)
@@ -172,7 +172,7 @@ func TestUnwatchStopsEvents(t *testing.T) {
 	col := &collector{}
 	col.install(s)
 
-	if _, err := s.Watch(repo); err != nil {
+	if _, err := s.Watch(repo, nil); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(100 * time.Millisecond)
@@ -197,7 +197,7 @@ func TestUnwatchStopsEvents(t *testing.T) {
 
 func TestWatchRejectsNonRepository(t *testing.T) {
 	s := New()
-	if _, err := s.Watch(t.TempDir()); err == nil {
+	if _, err := s.Watch(t.TempDir(), nil); err == nil {
 		t.Fatal("expected an error for a directory that is not a repository")
 	}
 }
@@ -205,11 +205,11 @@ func TestWatchRejectsNonRepository(t *testing.T) {
 func TestWatchIsIdempotent(t *testing.T) {
 	repo := makeRepo(t)
 	s := New()
-	first, err := s.Watch(repo)
+	first, err := s.Watch(repo, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := s.Watch(repo)
+	second, err := s.Watch(repo, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

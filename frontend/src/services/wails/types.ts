@@ -75,7 +75,14 @@ export interface RepoChangeEvent {
 export interface WatchInfo {
   repoPath: string;
   dirs: number;
-  /** True when the working tree was too large to watch and only .git is monitored. */
+  /** File descriptors those directories cost — the resource that bounds this. */
+  descriptors: number;
+  /**
+   * True when part of the working tree is not watched, because covering it
+   * would have cost more descriptors than the process can spare. `.git` is
+   * always covered, so commits, checkouts and staging still report; edits to
+   * files in the unwatched part do not.
+   */
   degraded: boolean;
 }
 

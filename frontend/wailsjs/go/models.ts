@@ -397,6 +397,7 @@ export namespace watcher {
 	export class WatchInfo {
 	    repoPath: string;
 	    dirs: number;
+	    descriptors: number;
 	    degraded: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -407,6 +408,7 @@ export namespace watcher {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.repoPath = source["repoPath"];
 	        this.dirs = source["dirs"];
+	        this.descriptors = source["descriptors"];
 	        this.degraded = source["degraded"];
 	    }
 	}

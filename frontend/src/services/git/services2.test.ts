@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { GitRunRequest, GitRunResult } from '../wails';
 import { GitRunner, type GitBridge } from './GitRunner';
+import { IgnoreService } from './IgnoreService';
 import { MergeService, RebaseService } from './IntegrationService';
 import { BLAME_FILE, STASH_LIST } from './parsers/__fixtures__/stashblame';
 import { BlameService, RemoteService, TagService } from './RemoteService';
@@ -323,5 +324,57 @@ describe('BlameService', () => {
     expect(args).toContain('-w');
     expect(args).toContain('-M');
     expect(args[args.indexOf('-L') + 1]).toBe('10,20');
+  });
+});
+
+/**
+ * The watcher's exclusion list (PLAN.md §10, 7.6).
+ *
+ * The whole value of this call is in its flags, so the flags are what is
+ * asserted: `--directory` is what turns 18,000 ignored files into the one
+ * entry `node_modules/`, and dropping it would hand the watcher a list it
+ * cannot use and a command that walks the entire ignored tree to build it.
+ */
+describe('IgnoreService.ignoredDirectories', () => {
+  it('asks for collapsed directories rather than every ignored file', async () => {
+    const { runner, bridge } = runnerFor('');
+    await new IgnoreService(runner).ignoredDirectories();
+
+    const args = bridge.requests[0]?.args ?? [];
+    expect(args).toContain('--directory');
+    expect(args).toContain('--ignored');
+    expect(args).toContain('--others');
+    expect(args).toContain('--exclude-standard');
+    expect(args).toContain('-z');
+  });
+
+  it('returns directories with the trailing slash stripped', async () => {
+    const { runner } = runnerFor('node_modules/\0frontend/dist/\0');
+    const result = await new IgnoreService(runner).ignoredDirectories();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual(['node_modules', 'frontend/dist']);
+  });
+
+  /*
+   * `--directory` collapses a wholly-ignored directory but still lists loose
+   * ignored files beside it. Handing `.env.local` to the watcher as a
+   * directory to skip would be meaningless at best; it is dropped by the same
+   * trailing-slash test that identifies the directories.
+   */
+  it('ignores loose files in the same listing', async () => {
+    const { runner } = runnerFor('node_modules/\0.env.local\0coverage/\0');
+    const result = await new IgnoreService(runner).ignoredDirectories();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual(['node_modules', 'coverage']);
+  });
+
+  it('reads no output as nothing to exclude', async () => {
+    const { runner } = runnerFor('');
+    const result = await new IgnoreService(runner).ignoredDirectories();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
   });
 });
