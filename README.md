@@ -2,7 +2,7 @@
 
 <img src="build/appicon.png" alt="" width="128" height="128">
 
-# 🌙 moonGit
+# moonGit
 
 **A Git client for macOS.**
 
@@ -125,7 +125,13 @@ make test          # Go + frontend tests
 make lint          # go vet + eslint
 make typecheck     # tsc --noEmit
 make bindings      # regenerate the TypeScript bindings from the Go services
+make crosscheck    # assert the Go side still builds for Windows and Linux
 ```
+
+moonGit ships for macOS only. The Go side is kept compiling for Windows and
+Linux anyway — `make check` enforces it — so a macOS-only API is noticed the
+day it is added rather than a year later. Nothing has ever *run* on either, and
+the interface still assumes macOS (`PLAN.md` §11, 8.15).
 
 ### Test repositories
 

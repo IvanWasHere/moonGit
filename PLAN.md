@@ -1880,6 +1880,78 @@ Everything set up for the shots was reverted afterwards — the demo repository 
 
 **What the last six entries are really about.** Phases 0 through 7 were finished by working through a plan. Most of Phase 8 was finished by *using the application*: every one of 8.2, 8.8, 8.10 and 8.11 began with something Ivan noticed on screen, and each of them had passed a full green test suite. Three of the four were invisible to tests for the same structural reason — **the app is developed in a browser and shipped in a WKWebView**, and jsdom can no more composite a modal than it can open a native dialog. Two of those gaps now have tests standing in for a compositor. The general one does not, and cannot: nothing here can replace looking at the thing.
 
+
+### ✅ Phase 8.15 — it compiles for Windows and Linux, which is not the same as running there
+
+Asked whether the app could build for the other two platforms. The compiler answered most of it: **Linux already compiled clean with no changes at all**, and Windows failed on exactly one function.
+
+**The one blocker was `watchBudget`.** The watcher sizes its descriptor budget from `RLIMIT_NOFILE` (7.6), and `syscall.Rlimit` does not exist on Windows. Split by build tag, following the pattern `gitexec` already used for `proc_unix.go` / `proc_windows.go`. The Windows version is a constant, and the comment says why that is not the cop-out it looks like: `fsnotify` there uses `ReadDirectoryChangesW`, which watches a whole tree through one handle, so there is no descriptor budget to divide — the scarce thing is a different thing.
+
+`GOOS=windows`, `GOOS=linux` and `GOOS=darwin` all build and vet clean; the watcher's own tests still pass.
+
+**Rather more was already portable than expected**, because earlier phases wrote it that way without saying so: `gitexec`'s process-group handling is build-tagged, `shellapi` has `darwin`/`windows`/`default` branches for open and reveal, `ptyapi` picks `powershell.exe` off Unix, and credentials go through `zalando/go-keyring`, which is Keychain here, Credential Manager on Windows and Secret Service on Linux.
+
+**What compiling does not establish, and this phase has earned the right to be pedantic about it.** Three bugs in this phase passed a green test suite and were found by looking at the screen (8.10), by running a control (8.11), and by a reported symptom (8.8). A cross-compile is weaker evidence than any of those. Known gaps, none of them verified because nothing in this project has ever run on either OS:
+
+| | |
+|---|---|
+| `--titlebar-inset: 78px` | reserved for traffic lights that do not exist off macOS, so a dead strip above a normal title bar |
+| `mac.TitleBarHiddenInset()` | ignored elsewhere, so the window keeps its own title bar *and* the inset above |
+| ~~`menu.AppMenu()` / `menu.EditMenu()`~~ | ✅ fixed in 8.16 — they were used unconditionally and would have rendered as two blank entries on Windows |
+| ⌘ in every label | the handlers already accept `ctrlKey`; the labels still say ⌘ |
+| pty on Windows | ConPTY, never exercised |
+| packaging | the DMG and the universal binary are macOS-only; Windows wants NSIS, Linux an AppImage or a .deb |
+
+**Decided with Ivan: stop here, and keep it compiling.** No UI work, no packaging, no CI artefacts for platforms nobody runs.
+
+**"Keep it compiling" is only true if something checks it**, so `make crosscheck` builds the Go side for both and `make check` depends on it — two seconds, and it is how a macOS-only API gets noticed on the day it is added rather than a year later. Confirmed non-vacuous by breaking `budget_windows.go` on purpose and watching the target fail. The release workflow runs the same check, and the README says plainly that the app ships for macOS only and has never run anywhere else.
+
+**So: it compiles, and that is all that is claimed.** The honest next step, if there ever is one, is not more code but somebody running it on one of the two.
+
+
+### ✅ Phase 8.16 — the Windows menu bar, which would have had two blank entries
+
+Asked to fix the Windows build. **The build was not broken** — `wails build -platform windows/amd64` cross-compiles from macOS and produces a valid 23MB `PE32+` executable in nine seconds, and the cross-compile guard from 8.15 was already green. So the first job was finding out what *was* wrong, rather than fixing the thing that was named.
+
+**It was the menu bar.** `appmenu.Service.Set` prepended `menu.AppMenu()` and `menu.EditMenu()` unconditionally. Both return a `MenuItem` carrying only a **`Role`** — no label, no submenu — which macOS expands into real menus. Wails' Windows menu builder does not look at `Role` at all:
+
+```go
+for _, menuItem := range menu.Items {
+    submenu := mainMenu.AddSubMenu(menuItem.Label)   // Label. Not Role.
+    if menuItem.SubMenu != nil { … }
+}
+```
+
+So on Windows those two would render as **two blank entries at the front of the menu bar**, and because the platform never fills them in, the app would also have had **no Edit menu at all** — the opposite of the macOS situation, where Edit is what makes ⌘C and ⌘V work (6.11). Wails' own source says it plainly, three lines above the definition: `// These roles are Mac only`.
+
+Now `menuPrefix(goos)` returns the two roles on darwin and nothing anywhere else. Windows and Linux hand clipboard shortcuts to the webview directly, so there is nothing to replace them with.
+
+**It takes the OS as an argument so the decision is testable from a Mac.** A test that could only fail on a machine nobody in this project has is not a test — and this bug was found by reading Wails' source rather than by running anything, which is exactly the evidence 8.15 warned was weaker than it looks. Four cases: darwin gets two role-carrying items with no labels, and windows, linux and freebsd get none.
+
+**Verified on macOS after the change**, because this is the code path that builds the menu people actually use: the bar still reads `moonGit · Edit · Repository · Local · Branch · Remote · Query · Help`, and Edit still holds Undo/Redo/Cut/Copy/Paste.
+
+Still unverified on Windows, and still true that nothing here has run there. What changed is that the one Windows defect visible from this machine is gone.
+
+
+### ✅ Phase 8.17 — multi-select in the Changes list, and ⌘A
+
+Asked for ⌘A to select all in the file changes. The Files list had **single** selection — one `{path, side}` driving the diff pane — so there was nothing for ⌘A to select *into*: a Select All with no Select Some. Built as multi-select with ⌘A, ⌘-click and shift-click.
+
+**The plumbing was already there, again.** `useStage` and `useUnstage` have taken `paths: string[]` since Phase 5 and had only ever been handed one — the same shape as the branch mutations in 8.8. Stage and Unstage now act on the whole selection, which is what a list you can ⌘A into has to mean; selecting five files and staging one of them would be worse than no ⌘A at all.
+
+**The rules are a pure module with 17 tests**, because they are invisible in a screenshot and mostly invisible in casual use:
+
+- **The anchor is the whole difference between this and a `Set`.** Shift-click extends from the last *plain* click, and the anchor deliberately does not move when a range is taken — otherwise a second shift-click can only ever grow the selection, and pulling back up the list leaves the earlier rows stuck. Tested by taking a five-row range and then shrinking it to two.
+- **Ranges are measured against the *visible* list**, filters and all. Against the unfiltered list, a range would quietly pull in rows the status chips are hiding — and then stage them.
+- **The selection is pruned to what is on screen.** The watcher re-runs status on every save and both filters narrow the list; a selection holding paths nobody can see is a selection that stages files nobody can see. `pruneSelection` returns the *same object* when nothing changed, which the tests assert, because it runs on every render.
+- **⌘-clicking away the active row moves the diff** to another selected file rather than leaving the pane on a file that is no longer selected.
+
+**⌘A is bound in the list, not on `window`, and that is the interesting part.** macOS already delivers ⌘A through the Edit menu (6.11), and every text field in the app depends on it — the commit box, the filter boxes, the settings inputs. A window-level handler fires *alongside* that one, so it checks the focused element first and only calls `preventDefault` when focus is not in an input, textarea or contenteditable. Verified both ways in the running app: with focus on the list ⌘A was prevented and selected all ten files; with focus in the commit textarea it was **not** prevented and the file selection did not move.
+
+**Two marks, not one.** `.selected` is membership and five rows can carry it; `.active` is the one whose diff is showing, drawn as an accent edge. Without the second, a selection of five looks like five rows and no answer to "which am I looking at".
+
+**Verified end to end on a throwaway repository**: five modified files, ⌘A, one press of Stage, and `git status` reported all five staged. Right-clicking inside a selection keeps it; right-clicking outside replaces it, so a context-menu action on one of five selected files does not silently narrow to one.
+
 ---
 
 ## 12. Risk register

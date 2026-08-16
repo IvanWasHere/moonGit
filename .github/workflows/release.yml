@@ -88,6 +88,9 @@ jobs:
       - name: Test
         run: |
           go vet . ./internal/...
+          # The Go side is kept compiling for Windows and Linux even though
+          # neither is shipped (PLAN.md §11, 8.15).
+          for os in windows linux; do GOOS=$os GOARCH=amd64 go build . ./internal/...; done
           go test . ./internal/...
           cd frontend && npm ci && npm run lint && npm run typecheck && npm run test
 

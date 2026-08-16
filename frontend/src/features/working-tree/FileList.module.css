@@ -229,3 +229,13 @@
   font-size: 11px;
   color: var(--text-secondary);
 }
+
+/* The row whose diff is on screen, within a multi-file selection (8.17).
+
+   `.selected` is membership — five rows can carry it. `.active` is the one the
+   Changes pane is showing, and without a second mark a selection of five looks
+   like five rows and no answer to "which one am I looking at". A left edge
+   rather than a stronger fill: the fill is already spoken for. */
+.active {
+  box-shadow: inset 2px 0 0 var(--accent);
+}

@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -48,6 +49,29 @@ func New() *Service { return &Service{} }
 
 func (s *Service) Startup(ctx context.Context) { s.ctx = ctx }
 
+// menuPrefix is what goes in front of the application's own menus.
+//
+// On macOS: the app menu and Edit, both as Wails *roles* — items with no label
+// and no submenu that the platform fills in. Edit is load-bearing rather than
+// decorative; without it macOS has no key equivalents to route and ⌘C/⌘V stop
+// working across the whole app (measured in Phase 6.11).
+//
+// **Everywhere else: nothing.** Wails' Windows menu builder reads `Label` and
+// `SubMenu` and ignores `Role`, so these two would render as a pair of blank
+// menu entries — and since the platform never fills them in, an app that
+// prepended them would show two empty menus *and* no Edit menu. Windows and
+// Linux hand clipboard shortcuts to the webview directly, so there is nothing
+// to replace them with.
+//
+// Takes the OS as an argument so the decision is testable from any machine;
+// nothing in this project has ever run on Windows (PLAN.md §11, 8.15).
+func menuPrefix(goos string) []*menu.MenuItem {
+	if goos != "darwin" {
+		return nil
+	}
+	return []*menu.MenuItem{menu.AppMenu(), menu.EditMenu()}
+}
+
 // Set replaces the native application menu with the app menu, Edit, and these.
 //
 // Those two are prepended here rather than sent from the frontend: they are
@@ -64,12 +88,19 @@ func (s *Service) Startup(ctx context.Context) { s.ctx = ctx }
 //
 // The Window menu is *not* here: nothing in it works in a frameless window,
 // which this app's is (`TitleBarHiddenInset`).
+//
+// **Both are macOS-only, and prepending them anywhere else is a visible bug.**
+// `menu.AppMenu()` and `menu.EditMenu()` return a `MenuItem` carrying only a
+// `Role` — no label, no submenu — and Wails' Windows menu builder ignores
+// `Role` entirely, reading `Label` and `SubMenu`. The result on Windows is two
+// blank entries at the front of the menu bar and no Edit menu at all. See
+// `menuPrefix`.
 func (s *Service) Set(menus []Menu) error {
 	if s.ctx == nil {
 		return errors.New("appmenu: not started")
 	}
 
-	items := []*menu.MenuItem{menu.AppMenu(), menu.EditMenu()}
+	items := menuPrefix(runtime.GOOS)
 
 	for _, m := range menus {
 		if m.Label == "" {

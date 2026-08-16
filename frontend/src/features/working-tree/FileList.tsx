@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StatusBadge } from '@/components/Badges';
 import {
   ContextMenu,
@@ -23,6 +23,7 @@ import {
   type DisplayStatus,
 } from './statusDisplay';
 import { matchesStatusFilters } from './statusFilters';
+import { clickFile, pruneSelection, selectAll } from './fileSelection';
 import { fileMenuFor, type FileMenuItem } from './fileMenu';
 import { useFileMenuActions } from './useFileMenuActions';
 import { VirtualList } from '@/components/VirtualList';
@@ -72,6 +73,10 @@ export function FileList() {
   const filter = useWorkspaceStore((state) => state.panelFilters.files);
   const statusFilters = useWorkspaceStore((state) => state.statusFilters);
   const setStatusFilters = useWorkspaceStore((state) => state.setStatusFilters);
+  const selectedPaths = useWorkspaceStore((state) => state.selectedPaths);
+  const selectionAnchor = useWorkspaceStore((state) => state.selectionAnchor);
+  const selectedFile = useWorkspaceStore((state) => state.selectedFile);
+  const setFileSelection = useWorkspaceStore((state) => state.setFileSelection);
   const { data: status, isPending, error } = useStatus(repoPath);
   // Only fetched while the chip is on — it is the expensive query in the panel.
   const showIgnored = statusFilters.includes('ignored');
@@ -124,6 +129,82 @@ export function FileList() {
     [files, statusFilters],
   );
 
+  // Matched on the display path, which for a rename is `old → new` — so either
+  // half of a rename finds it, and that is the row the user is looking for.
+  // Not memoized, deliberately: this is the one of the three that genuinely
+  // depends on the keystroke, and at 2.1ms over 50,000 entries it is what the
+  // typing is for rather than waste alongside it.
+  const visible = filterBy(byStatus, filter, (entry) => [displayPath(entry)]);
+
+  const visiblePaths = visible.map((entry) => entry.path);
+
+  /*
+   * ⌘A, and the reason it is bound here rather than on `window` (8.17).
+   *
+   * macOS already delivers ⌘A through the Edit menu, and text fields rely on
+   * it — the commit box, the filter box, the settings inputs. A window-level
+   * handler would fire *alongside* that one and hijack select-all wherever the
+   * user was typing. So it only acts when focus is not in an editable element,
+   * and only then does it call `preventDefault`.
+   */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'a' || !(event.metaKey || event.ctrlKey)) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable === true) return;
+      if (visiblePaths.length === 0) return;
+      event.preventDefault();
+      const next = selectAll(visiblePaths);
+      const first = visible.find((entry) => entry.path === next.active);
+      setFileSelection(
+        next.paths,
+        next.anchor,
+        first === undefined ? null : { path: first.path, side: defaultSide(first) },
+      );
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [visiblePaths, visible, setFileSelection]);
+
+  /*
+   * Forget anything the filters have taken off screen.
+   *
+   * The watcher re-runs status on every save and the chips narrow the list, so
+   * a selection left alone would accumulate paths nobody can see — and then
+   * stage them. `pruneSelection` returns the same object when nothing changed,
+   * so this does not loop.
+   */
+  useEffect(() => {
+    const pruned = pruneSelection(
+      { paths: selectedPaths, anchor: selectionAnchor, active: selectedFile?.path ?? null },
+      visiblePaths,
+    );
+    if (pruned.paths.size === selectedPaths.size) return;
+    const stillActive = visible.find((entry) => entry.path === pruned.active);
+    setFileSelection(
+      pruned.paths,
+      pruned.anchor,
+      stillActive === undefined ? null : { path: stillActive.path, side: defaultSide(stillActive) },
+    );
+  }, [visiblePaths, visible, selectedPaths, selectionAnchor, selectedFile, setFileSelection]);
+
+  const onRowClick = (entry: StatusEntry, modifiers: { toggle: boolean; range: boolean }) => {
+    const next = clickFile(
+      { paths: selectedPaths, anchor: selectionAnchor, active: selectedFile?.path ?? null },
+      entry.path,
+      visiblePaths,
+      modifiers,
+    );
+    const active = visible.find((candidate) => candidate.path === next.active);
+    setFileSelection(
+      next.paths,
+      next.anchor,
+      active === undefined ? null : { path: active.path, side: defaultSide(active) },
+    );
+  };
+
+
   if (repoPath === null) {
     return (
       <PanelBody>
@@ -161,13 +242,6 @@ export function FileList() {
       </>
     );
   }
-
-  // Matched on the display path, which for a rename is `old → new` — so either
-  // half of a rename finds it, and that is the row the user is looking for.
-  // Not memoized, deliberately: this is the one of the three that genuinely
-  // depends on the keystroke, and at 2.1ms over 50,000 entries it is what the
-  // typing is for rather than waste alongside it.
-  const visible = filterBy(byStatus, filter, (entry) => [displayPath(entry)]);
 
   return (
     <>
@@ -252,7 +326,9 @@ export function FileList() {
             scrollElement={scrollEl}
             getKey={(entry) => entry.path}
             estimateHeight={() => FILE_ROW_HEIGHT}
-            renderRow={(entry) => <FileRow entry={entry} onContextMenu={openMenu} />}
+            renderRow={(entry) => (
+              <FileRow entry={entry} onContextMenu={openMenu} onSelect={onRowClick} />
+            )}
           />
         )}
         {menu !== null && (
@@ -334,31 +410,47 @@ function FileContextMenu({
 function FileRow({
   entry,
   onContextMenu,
+  onSelect,
 }: {
   readonly entry: StatusEntry;
   readonly onContextMenu: (entry: StatusEntry, x: number, y: number) => void;
+  readonly onSelect: (entry: StatusEntry, modifiers: { toggle: boolean; range: boolean }) => void;
 }) {
-  const selected = useWorkspaceStore((state) => state.selectedFile);
+  const selectedPaths = useWorkspaceStore((state) => state.selectedPaths);
+  const active = useWorkspaceStore((state) => state.selectedFile);
   const selectFile = useWorkspaceStore((state) => state.selectFile);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
 
   const path = displayPath(entry);
   const { name, dir } = splitPath(entry);
   const sides = sidesOf(entry);
-  const isSelected = selected?.path === entry.path;
+  const isSelected = selectedPaths.has(entry.path);
+  // The one whose diff is showing, which is one member of the selection —
+  // marked differently so a set of five rows still says which is on screen.
+  const isActive = active?.path === entry.path;
   const isIgnored = entry.kind === 'ignored';
 
   return (
     <div
       className={`${styles.file} ${isSelected ? styles.selected : ''} ${
-        isIgnored ? styles.ignoredRow : ''
-      }`}
-      onClick={() => selectFile({ path: entry.path, side: defaultSide(entry) })}
+        isActive ? styles.active : ''
+      } ${isIgnored ? styles.ignoredRow : ''}`}
+      onClick={(event) =>
+        onSelect(entry, {
+          // ⌘ on macOS, Ctrl elsewhere — both, so the list behaves on a
+          // platform this has never run on (8.15).
+          toggle: event.metaKey || event.ctrlKey,
+          range: event.shiftKey,
+        })
+      }
       onContextMenu={(event) => {
         event.preventDefault();
-        // Select as well as open: every action in the menu is about this file,
-        // and leaving the diff pane showing a different one is disorienting.
-        selectFile({ path: entry.path, side: defaultSide(entry) });
+        // Right-clicking a row *outside* the selection replaces it; inside it,
+        // the selection stands, so "Stage" on one of five selected files does
+        // not silently narrow to one.
+        if (!selectedPaths.has(entry.path)) {
+          selectFile({ path: entry.path, side: defaultSide(entry) });
+        }
         onContextMenu(entry, event.clientX, event.clientY);
       }}
       title={path}
@@ -375,14 +467,14 @@ function FileRow({
               status={sides.staged}
               side="staged"
               path={entry.path}
-              active={isSelected && selected.side === 'staged'}
+              active={isActive && active?.side === 'staged'}
               onSelect={selectFile}
             />
             <SideBadge
               status={sides.worktree}
               side="worktree"
               path={entry.path}
-              active={isSelected && selected.side === 'worktree'}
+              active={isActive && active?.side === 'worktree'}
               onSelect={selectFile}
             />
           </>

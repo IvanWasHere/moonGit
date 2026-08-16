@@ -5,7 +5,7 @@
 # should never be built or tested.
 GO_PKGS := . ./internal/...
 
-.PHONY: dev build archcheck test test-go test-web lint typecheck check seed seed-reset \
+.PHONY: dev build archcheck crosscheck test test-go test-web lint typecheck check seed seed-reset \
         seed-large seed-large-clean bench fonts bindings clean
 
 dev:            ## run the app with hot reload
@@ -28,6 +28,16 @@ bindings:       ## regenerate TypeScript bindings from the Go services
 	rm -rf frontend/wailsjs/go
 	wails generate module
 
+# Windows and Linux are not shipped, but the Go side is kept compiling for them
+# (PLAN.md §11, 8.15) — cheap to check, and it is how a macOS-only API gets
+# noticed on the day it is added rather than a year later. Two seconds.
+crosscheck:     ## assert the Go side still builds for windows and linux
+	@for os in windows linux; do \
+		printf '  GOOS=%-8s ' $$os; \
+		GOOS=$$os GOARCH=amd64 go build $(GO_PKGS) || exit 1; \
+		echo OK; \
+	done
+
 test: test-go test-web
 
 test-go:
@@ -43,7 +53,7 @@ lint:
 typecheck:
 	cd frontend && npm run typecheck
 
-check: lint typecheck test  ## everything CI would run
+check: lint typecheck crosscheck test  ## everything CI would run
 
 seed:           ## put testGitHere/test-repo{1,2} into a rich state
 	./scripts/seed-test-repos.sh --yes

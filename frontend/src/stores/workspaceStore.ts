@@ -103,6 +103,17 @@ interface WorkspaceState {
   readonly repoPath: string | null;
   readonly selectedBranch: string | null;
   readonly selectedFile: FileSelection | null;
+  /**
+   * Every file selected in the Changes list (PLAN.md §11, 8.17).
+   *
+   * Separate from `selectedFile` rather than replacing it: `selectedFile`
+   * carries the *side* the diff pane is showing, which is a property of one
+   * row and meaningless for a set. The two are kept in step — `selectedFile`
+   * is always the active member of this set, or null when it is empty.
+   */
+  readonly selectedPaths: ReadonlySet<string>;
+  /** Where a shift-click measures from. See `features/working-tree/fileSelection.ts`. */
+  readonly selectionAnchor: string | null;
   readonly selectedCommit: string | null;
   readonly commitMessage: string;
   /** The commit composer is opened on demand, not always on screen. */
@@ -231,6 +242,8 @@ interface WorkspaceState {
   openRepo: (repoId: number, repoPath: string) => void;
   selectBranch: (name: string) => void;
   selectFile: (selection: FileSelection | null) => void;
+  /** Replace the whole multi-selection, keeping `selectedFile` in step. */
+  setFileSelection: (paths: ReadonlySet<string>, anchor: string | null, active: FileSelection | null) => void;
   selectCommit: (oid: string | null) => void;
   setCommitMessage: (message: string) => void;
   openCommit: () => void;
@@ -290,6 +303,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   repoPath: null,
   selectedBranch: null,
   selectedFile: null,
+  selectedPaths: new Set<string>(),
+  selectionAnchor: null,
   selectedCommit: null,
   commitMessage: '',
   commitOpen: false,
@@ -337,6 +352,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       // Everything else is scoped to the previous repository.
       selectedBranch: null,
       selectedFile: null,
+      selectedPaths: new Set<string>(),
+      selectionAnchor: null,
       selectedCommit: null,
       commitMessage: '',
       commitOpen: false,
@@ -375,8 +392,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     });
   },
 
-  selectBranch: (name) => set({ selectedBranch: name, selectedFile: null }),
-  selectFile: (selection) => set({ selectedFile: selection }),
+  selectBranch: (name) =>
+    set({
+      selectedBranch: name,
+      selectedFile: null,
+      selectedPaths: new Set<string>(),
+      selectionAnchor: null,
+    }),
+  // A single-file select collapses the multi-selection onto it, so every other
+  // route into the list (the tree, a context menu, `followSelection` after a
+  // stage) leaves the two in agreement rather than stale.
+  selectFile: (selection) =>
+    set({
+      selectedFile: selection,
+      selectedPaths: selection === null ? new Set<string>() : new Set([selection.path]),
+      selectionAnchor: selection?.path ?? null,
+    }),
+
+  setFileSelection: (selectedPaths, selectionAnchor, selectedFile) =>
+    set({ selectedPaths, selectionAnchor, selectedFile }),
   selectCommit: (oid) => set({ selectedCommit: oid }),
   setCommitMessage: (commitMessage) => set({ commitMessage }),
   openCommit: () => set({ commitOpen: true }),

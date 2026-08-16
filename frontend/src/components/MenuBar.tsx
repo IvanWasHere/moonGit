@@ -59,6 +59,18 @@ export function MenuBar({
 
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
+  const selectedPaths = useWorkspaceStore((state) => state.selectedPaths);
+
+  /*
+   * Every selected file, or the active one (PLAN.md §11, 8.17).
+   *
+   * Stage and Unstage have always taken an array — they were simply never
+   * given more than one path. With multi-select in the Changes list they now
+   * act on the whole selection, which is what a list you can ⌘A into has to
+   * mean, or selecting five files and pressing Stage would stage one of them.
+   */
+  const selectionPaths = (): string[] =>
+    selectedPaths.size > 0 ? [...selectedPaths] : selectedFile === null ? [] : [selectedFile.path];
   const toggleCommit = useWorkspaceStore((state) => state.toggleCommit);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
   const openMergeWizard = useWorkspaceStore((state) => state.openMergeWizard);
@@ -242,7 +254,7 @@ export function MenuBar({
       run: () =>
         selectedFile === null
           ? needsSelection()
-          : stage.mutate({ paths: [selectedFile.path] }, { onError: reportError }),
+          : stage.mutate({ paths: selectionPaths() }, { onError: reportError }),
     },
     {
       kind: 'button',
@@ -262,7 +274,7 @@ export function MenuBar({
       run: () =>
         selectedFile === null
           ? needsSelection()
-          : unstage.mutate({ paths: [selectedFile.path] }, { onError: reportError }),
+          : unstage.mutate({ paths: selectionPaths() }, { onError: reportError }),
     },
     { kind: 'separator' },
     {

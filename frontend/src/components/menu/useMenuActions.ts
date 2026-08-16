@@ -34,6 +34,18 @@ export function useMenuActions(): (id: MenuItemId) => void {
 
   const repoPath = useWorkspaceStore((state) => state.repoPath);
   const selectedFile = useWorkspaceStore((state) => state.selectedFile);
+  const selectedPaths = useWorkspaceStore((state) => state.selectedPaths);
+
+  /*
+   * Every selected file, or the active one (PLAN.md §11, 8.17).
+   *
+   * Stage and Unstage have always taken an array — they were simply never
+   * given more than one path. With multi-select in the Changes list they now
+   * act on the whole selection, which is what a list you can ⌘A into has to
+   * mean, or selecting five files and pressing Stage would stage one of them.
+   */
+  const selectionPaths = (): string[] =>
+    selectedPaths.size > 0 ? [...selectedPaths] : selectedFile === null ? [] : [selectedFile.path];
   const openCommit = useWorkspaceStore((state) => state.openCommit);
   const openSettings = useWorkspaceStore((state) => state.openSettings);
   const openMerge = useWorkspaceStore((state) => state.openMerge);
@@ -148,11 +160,11 @@ export function useMenuActions(): (id: MenuItemId) => void {
     'local.stage': () =>
       selectedFile === null
         ? needsFile()
-        : stage.mutate({ paths: [selectedFile.path] }, { onError: reportError }),
+        : stage.mutate({ paths: selectionPaths() }, { onError: reportError }),
     'local.unstage': () =>
       selectedFile === null
         ? needsFile()
-        : unstage.mutate({ paths: [selectedFile.path] }, { onError: reportError }),
+        : unstage.mutate({ paths: selectionPaths() }, { onError: reportError }),
     // Both open the stack, which is where stashing and restoring both live.
     // The previous `local.stash` called the service directly and never
     // invalidated, so a successful stash left the panels showing the changes
