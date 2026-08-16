@@ -38,13 +38,21 @@ export const gitKeys = {
   refs: (repoPath: string): QueryKey => [repoPath, 'refs'],
   currentBranch: (repoPath: string): QueryKey => [repoPath, 'currentBranch'],
   log: (repoPath: string, params: unknown = {}): QueryKey => [repoPath, 'log', params],
-  commit: (repoPath: string, oid: string): QueryKey => [repoPath, 'commit', oid],
-  /** `worktree` = unstaged, `staged` = index against HEAD. */
-  diff: (
-    repoPath: string,
-    scope: 'worktree' | 'staged' | 'commit',
-    params: unknown = {},
-  ): QueryKey => [repoPath, 'diff', scope, params],
+  /**
+   * `worktree` = unstaged, `staged` = index against HEAD.
+   *
+   * There is no `commit` scope, and no `commit` key beside `log`. Both existed
+   * for `useCommit`/`useCommitDiff`, which had no callers and were removed in
+   * Phase 7.7 (PLAN.md §10) — an unscoped commit diff measured 187.6MB. A key
+   * for a query nobody makes is the same trap as the query itself, one level
+   * down: it reads as evidence that the feature exists.
+   */
+  diff: (repoPath: string, scope: 'worktree' | 'staged', params: unknown = {}): QueryKey => [
+    repoPath,
+    'diff',
+    scope,
+    params,
+  ],
   /**
    * A blob's contents. Content-addressed, so it never goes stale and is never
    * invalidated — an object id names exactly one sequence of bytes forever.

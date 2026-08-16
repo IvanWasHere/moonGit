@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'vitest';
 import { refArgs } from '@/services/git/BranchService';
+import { commitDiffArgs } from '@/services/git/DiffService';
 import { LS_FILES_ARGS } from '@/services/git/TreeService';
 import {
   createLogParser,
@@ -316,6 +317,99 @@ describe.skipIf(!enabled)('Phase 7 baseline', () => {
     });
 
     report('History axis — 1M commits, ~5 concurrent lanes', rows);
+  }, BENCH_TIMEOUT);
+
+  /**
+   * The commit-diff axis — added by the Phase 7.7 streaming audit.
+   *
+   * `useCommitDiff` calls `DiffService.commit(oid)` with **no `paths`**, so
+   * selecting a commit fetches that commit's entire patch as one buffered
+   * string. The working-tree and staged diff queries both accept a path scope;
+   * this one does not, and until now nobody had put a number on what that
+   * costs.
+   *
+   * `big-files` is the worst case and it is not synthetic: the seed script
+   * builds it as **one commit containing 500k files**, so `show HEAD` there is
+   * the whole corpus rendered as a patch. `big-history`'s HEAD is the opposite
+   * end — a small ordinary commit, which is what a Journal click usually is.
+   * The third row measures the *proposed fix* rather than only the problem:
+   * the same command scoped to a single path, which is what `useCommitDiff`
+   * would pass if it behaved like its two siblings.
+   */
+  it('commit-diff axis — what selecting a commit costs', () => {
+    const rows: Row[] = [];
+
+    /*
+     * Total, like `report` and for the same reason.
+     *
+     * `time` raises maxBuffer to 1GB, which was ample for every payload the
+     * earlier axes measured. This axis exists precisely because nobody knows
+     * how large this one is, so it may be the first to exceed it — and a run
+     * that throws here would take the other rows down with it. A row saying
+     * "larger than a gigabyte" is a finding, not a failure; it is in fact a
+     * more damning one than any number would be.
+     */
+    const measure = (what: string, repo: string, args: readonly string[], note: string): void => {
+      try {
+        const r = time(repo, args);
+        rows.push({ what, ms: r.ms, bytes: r.out.length, note });
+      } catch (cause) {
+        const why = cause instanceof Error ? cause.message : String(cause);
+        rows.push({
+          what,
+          ms: NaN,
+          bytes: 0,
+          note: /maxBuffer/i.test(why) ? 'EXCEEDED 1GB BUFFER' : `failed: ${why.slice(0, 60)}`,
+        });
+      }
+    };
+
+    const head = (repo: string): string =>
+      execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    const bigCommit = head(BIG_FILES);
+    measure(
+      'show (500k-file commit)',
+      BIG_FILES,
+      commitDiffArgs(bigCommit),
+      'what useCommitDiff runs today',
+    );
+
+    // The fix, measured beside the problem. One path out of 500k.
+    const onePath = execFileSync('git', ['-C', BIG_FILES, 'ls-files'], {
+      encoding: 'utf8',
+      maxBuffer: 1 << 30,
+    })
+      .split('\n')[0]
+      ?.trim();
+    if (onePath !== undefined && onePath !== '') {
+      measure(
+        'show, scoped to one path',
+        BIG_FILES,
+        [...commitDiffArgs(bigCommit), '--', onePath],
+        'what the two sibling queries do',
+      );
+    }
+
+    /*
+     * Not the common case, though it was added believing it was.
+     *
+     * `genrepo -mode=history` writes commit objects with no tree changes —
+     * that is how a million of them take two minutes — so every commit in
+     * `big-history` has an **empty** diff and this row times `git show`
+     * finding nothing on a 1M-commit repository. Useful as a process floor,
+     * worthless as a typical patch. **Neither bench repository contains an
+     * ordinary multi-file commit**, which is a gap in the corpus (§13a) and
+     * not something to paper over by labelling this row as though it were one.
+     */
+    measure(
+      'show (empty commit)',
+      BIG_HISTORY,
+      commitDiffArgs(head(BIG_HISTORY)),
+      'process floor — big-history commits change nothing',
+    );
+
+    report('Commit-diff axis — the payload the 7.7 audit found', rows);
   }, BENCH_TIMEOUT);
 
   /**

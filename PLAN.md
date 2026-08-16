@@ -1160,7 +1160,7 @@ Targets are 500k files / 1M commits. Concretely:
 
 1. ~~**History**: cursor-paged `git log --skip/--max-count` (or `--since` windows), TanStack Virtual, ~200-commit pages,~~ ✅ **built in 7.3 and 7.4** — `--skip`, 200-commit pages, TanStack Virtual; ~~graph lanes computed incrementally in the Worker~~ — **the Worker is withdrawn, measured at 39ms for 20,000 commits** (below)
 2. ~~**Status at 500k files**: enable `core.fsmonitor` + `core.untrackedCache` on open, and don't call `--untracked-files=all` on huge repos — degrade to `normal` above a file-count threshold~~ ✅ (below) — built, but not as written: the two mitigations turned out to be one, and the threshold is a duration rather than a file count
-3. **Streaming**: everything large goes through `RunStream`, parsed incrementally, never a single giant string
+3. **Streaming**: everything large goes through `RunStream`, parsed incrementally, never a single giant string — ◐ `log` and `ls-files` both stream as of 7.7 (below); **the audit found a third payload nobody had listed**, `git show` on a commit, which is still buffered and still unbounded
 4. **Rerenders**: `React.memo` + granular Zustand selectors; assert render counts in tests for the big lists — still open, and the only one of the five untouched
 5. ~~**Bundle**: lazy-load Monaco on first use~~ — **withdrawn: Monaco was never adopted** (§14.4). xterm ✅ and Shiki ✅ are both already lazy
 
@@ -1396,13 +1396,49 @@ Verified after both fixes with the rows measured directly in the page: heights e
 
 **Found on the way, not fixed:** `features/working-tree/FileList.tsx` maps over its entries with no cap and no virtualization. On the 500k-file repository that is 500,000 DOM rows. It is the obvious second consumer of this work, but extracting a shared list component from one caller would be guessing at the abstraction — worth doing when it has two real users, which is now next door. Added to the list below.
 
+### ✅ Phase 7.7 — the streaming audit, and the payload it found that nobody had listed
+
+`TreeService.listPaths` now streams. It is the second service to, after `CommitService`, and the change is the shape §4.1 designed for: `execStream` with `delimiter: 'nul'`, an incremental splitter that carries the tail across chunk boundaries, and a `Set` that de-duplicates as chunks arrive rather than a second full-size array at the end. On the bench repository that command returns **11.9MB**, and it used to cross the bridge as a single JSON string — one allocation of the whole payload in Go, another in the webview, and a parse of both before the first path was usable.
+
+**Three things about this entry are worth more than the change itself.**
+
+**One: the carry is not defensive coding, it is load-bearing.** The obvious implementation splits each chunk on NUL independently, and it passes every test written against realistic input, because Go cuts at the last delimiter inside its window and so chunks *usually* end on a whole record. Twice they do not — a record longer than the hard cap is flushed mid-record to bound memory, and the final chunk is whatever `flush()` had left (`internal/gitexec/chunker.go`). Without the carry, one long path becomes two plausible-looking short ones and quick open offers files that do not exist. `createLogParser` already carries a partial field for exactly this reason; the same reason applies here and the tests now pin it.
+
+**Two: this does not make quick open faster, and the entry that asked for it implied it would.** Git itself takes **2191ms** to produce that output. The audit changes the shape of the transfer, not the wait. Quick open is still gated on the command finishing, because its consumer is a TanStack query with one resolved value — progressive delivery is a separate change to `usePaths` and `QuickOpen`, and `listPaths` deliberately does *not* ship an unused `onBatch` hook in anticipation of it. The bench's own header said this in advance and it is worth repeating: it measures git and the parsers, never the bridge, so **there is no new number for this change**. What it buys is measured in allocations, not milliseconds, and confirming it needs a `wails dev` run against `big-files` that has not happened yet.
+
+**Three: the audit was supposed to be a two-item list and it is not.** §10 named two large payloads, `log` (219MB, already streamed) and `ls-files` (11.9MB, now streamed). Walking every command in `services/git/*` to confirm nothing else qualified turned up a third that nobody had written down:
+
+- **`git show` on a commit is buffered and unbounded — and the query that would run it is dead code.** `useCommitDiff` (`queries/git.ts:316`) calls `DiffService.commit(oid)` with **no `paths`**, where the working-tree and staged queries both pass a scope. But it has **zero callers**: `DiffPane` renders only `useWorkingTreeDiff` and `useStagedDiff`, and nothing in `features/history/` renders a diff at all. Selecting a commit in the Journal does not fetch its patch, because selecting a commit in the Journal does not fetch a diff. The only live caller of `DiffService.commit` is `pages/DevServicesPanel.tsx:168`, a dev smoke-test panel that runs it against HEAD of whatever repository is open.
+
+  **This was recorded here first as a live unbounded payload, which was wrong**, and the error is worth keeping visible because of how it happened: the audit traced the call *forward* from the service to the query and stopped there, having found a query that looked like a caller. It is not one. `useCommit` in the same file is dead by the same measure — `CommitBox` imports a different `useCommit` from `queries/mutations`. The lesson for the rest of the audit is that reaching a hook is not reaching a consumer; only a component renders anything.
+
+  **Resolved by deletion**, on the §14 precedent that removed Git-flow and Investigate for less: `useCommitDiff` and `useCommit` are gone, along with `gitKeys.commit` and the `'commit'` member of the diff-scope union, which existed only to serve them. A key for a query nobody makes is the same trap one level down — it reads as evidence the feature exists. `queries/git.ts` keeps a comment where the hook was, carrying the numbers, so that whoever builds a commit-diff view writes it scoped the first time. `LARGE_DIFF_LINES = 2000` in `features/diff/diffView.ts` would not have saved it — that is a *render* guard applied after the payload has already crossed.
+
+  Left in place: `CommitService.get` and `DiffService.commit`, whose only non-test caller is the dev smoke-test panel. Those are service-layer vocabulary rather than wired-up features, and deleting them would be widening the cleanup past what was asked.
+
+  **Measured 2026-08-16**, with a `commitDiffArgs` export so the bench runs the app's own command rather than a copy:
+
+  | what | median | output |
+  |---|---:|---:|
+  | `show` on the 500k-file commit — what `useCommitDiff` would run | 2201ms | **187.6M** |
+  | `show` scoped to one path — what the two sibling queries do | 70ms | 319B |
+  | `show` on an empty commit — process floor, see below | 77ms | — |
+
+  **187.6MB puts it in the same class as the unbounded `log` (219.1M) that this plan calls "the payload the bridge must never carry whole".** It is not a smaller cousin of that problem; it is the same size. And the fix is not a trade-off: scoping to the selected path is **31× faster and 590,000× smaller**, which is what the working-tree and staged queries have always done.
+
+  **The third row is a warning about the corpus, not a measurement.** It was added as "the common case, for scale" and it is nothing of the kind: `genrepo -mode=history` writes commit objects with no tree changes — that is how a million commits take two minutes — so every commit in `big-history` has an *empty* diff, and 77ms is `git show` finding nothing. **Neither bench repository contains an ordinary multi-file commit.** `big-files` has exactly one commit and it is the 500k-file monster; `big-history` has a million and they are all empty. So the bench can measure the pathological case and the scoped case but has nothing in between, and the row is labelled for what it is rather than relabelled to look useful. Added to §13a as a gap.
+- Everything else genuinely is bounded, and by design rather than by luck: `BlobService` takes an explicit `maxBytes` and checks the object's size with `cat-file -s` *before* fetching it (512KB for text, 8MB for images); `IgnoreService.ignoredDirectories` passes `--directory` so a wholly-ignored tree collapses to one entry; `for-each-ref` over 1,772 refs is 3ms; `status` at 500k files is 1.6MB and has the 7.2 degrade in front of it. `commands.ts` lists `grep` as read-only but nothing calls it.
+
+The `git show` finding is unmeasured — the bench has no big-commit case, and adding one (`git show` over the largest commit in `big-history`) is the first step, not the fix. Added to the list below rather than fixed here, because the fix is a UI decision as much as a service one: either the commit diff scopes to the selected file the way the working-tree diff does, or it streams, and which is right depends on whether the file list for a commit should render before its patches do.
+
 ### Still open in this phase
 
 - ~~**A trigger for the commit-graph on the history axis.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.1 above. It was the shape the entry predicted (time the log, configure when slow) but reached by splitting `configureRepository` in two rather than by adding a caller to it.
 - ~~**Cursor-paged, virtualized history**~~ ✅ **both halves built and verified 2026-08-16** — virtualized in 7.3, paged in 7.4, both above.
-- **The streaming audit.** `CommitService` is still the only service that streams. Two measured payloads argue it should not be: `ls-files` returns **11.9MB in a single buffered string** (2191ms) for quick open's corpus, and an unbounded `log` is **219MB**. The second is already streamed; the first is not.
+- ~~**The streaming audit.**~~ ✅ **Built 2026-08-16** — see Phase 7.7 below. `TreeService.listPaths` streams; `CommitService` is no longer the only service that does. **Not yet verified against the real bridge** — the unit tests drive a double, and the one thing this change is *for* is bridge behaviour, so it wants a `wails dev` run against `big-files` before it is called finished.
 - ~~**The Files panel, virtualized.**~~ ✅ **Built and verified 2026-08-16** — see Phase 7.5 above, along with the shared `VirtualList` the Journal now also uses.
-- **Surfacing the watcher's `Degraded` flag.** All that is left of 7.6: a tree too large to watch in full stops updating and says nothing about it. Copy the status panel's banner (7.2).
+- ~~**`git show` on a commit, buffered and unbounded**~~ ✅ **measured and resolved 2026-08-16** — 187.6MB unscoped, 70ms/319B scoped, and the query that would have run it deleted along with `useCommit` and their query keys. See 7.7.
+- **Surfacing the watcher's `Degraded` flag.** All that is left of 7.6: a tree too large to watch in full stops updating and says nothing about it. Copy the status panel's banner (7.2). Note that the banner already in `FilesPane.tsx` is *not* this one — it reports the 7.2 untracked-files degrade; `watcher.degraded` currently surfaces only as a debug stat on `DevBridgePage`.
 - **Rerender hardening.** Untouched.
 - **The Ignored chip against a genuinely large repository** — carried over from §9's Phase 6.12 entry, which deferred it here. `status --ignored` on `big-files` is 4407ms, so the pause that entry warns about is real and now has a number.
 
@@ -1449,12 +1485,14 @@ Phase 8  Quality & release     4d
 
 Phases 2 and 4 are independent and can run in parallel (parsers need no UI; the port runs on fixtures).
 
-**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), its paging (7.4), the Files panel and the shared `VirtualList` (7.5), the watcher's three bugs (7.6), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
+**Phase 7, in progress.** Done: the bench repositories and the stopwatch (7.0), the commit-graph and its history-axis trigger (7.1), status at 500k files (7.2), the virtualized Journal (7.3), its paging (7.4), the Files panel and the shared `VirtualList` (7.5), the watcher's three bugs (7.6), the streaming audit (7.7), and two parser bugs the benchmark found. Withdrawn on measurement: the graph Worker, the Monaco bundle item, and any parser optimisation. Remaining, in value order:
 
-1. The streaming audit — `ls-files` still returns 11.9MB in one buffered string
-2. Rerender hardening
-3. The Ignored chip against a genuinely large repository
-4. Surfacing the watcher's degraded flag (7.6)
+1. Rerender hardening
+2. The Ignored chip against a genuinely large repository
+3. Surfacing the watcher's degraded flag (7.6)
+4. A `wails dev` run against `big-files` to confirm 7.7 did what it claims — the unit tests drive a double, and the bridge is the thing that changed
+
+7.7 added an item and then closed it in the same day, which is the shape an audit should have: it found a 187.6MB payload nobody had listed, measured it, and the measurement showed the query behind it had no callers and could simply go. Net effect on the list is one item shorter than before the audit started.
 
 The estimate has not been revised. Four of the eight items in §10 turned out to be cheaper or void and two turned out to be worth far more than the plan implied, which roughly cancels; the honest position is that the week was never measured either.
 
@@ -1485,6 +1523,8 @@ Both have **real GitHub remotes** (`github.com/IvanWasHere/test-repo{1,2}.git`) 
 | **1. Fixtures** | Static command-output samples committed under `src/services/git/__fixtures__/` | Parser unit tests (§5). Pathological filenames, merge commits, renames, binary diffs, submodules, detached HEAD, CRLF | n/a — plain text |
 | **2. Generated repos** | Scripted throwaway repos built in `os.tmpdir()` per test | Integration tests, and **all destructive operations**: discard, reset, force-push, rebase, conflict resolution | ✅ yes — disposable by design |
 | **3. `testGitHere/`** | The two real repos above | Manual dev loop, and network/auth operations against a live remote | ⚠️ **no** — see below |
+
+**Gap found by the 7.7 audit (2026-08-16): neither bench repository holds an ordinary commit.** `big-files` has exactly one commit, and it is 500k files; `big-history` has a million, and `genrepo -mode=history` gives all of them empty trees, because writing no tree changes is what makes a million commits take two minutes. So the commit-diff axis can measure the pathological case (187.6MB) and the scoped case (319B) with nothing in between, and any future question about what a *normal* patch costs has no repository to ask. Fixing it means a `-mode=commits` that writes real tree changes, or a third smaller repository; it is not urgent, but it should be known before someone reads a number off that axis and generalises from it.
 
 **Rule: automated tests never mutate `testGitHere/`.** These are user-owned and pushed to GitHub; a test that force-pushes or hard-resets them destroys real state and can't be undone by a test runner. Playwright specs create their own repos in a temp dir via a `makeRepo()` helper and tear them down after. `testGitHere` is for the human-in-the-loop dev cycle and manual verification of the auth flow.
 

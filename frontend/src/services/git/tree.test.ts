@@ -7,7 +7,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { GitRunRequest, GitRunResult } from '../wails';
+import type { GitRunRequest, GitRunResult, GitStreamResult } from '../wails';
 import { GitRunner, type GitBridge } from './GitRunner';
 import { resetRepoLocks } from './RepoLock';
 import { TreeService } from './TreeService';
@@ -18,6 +18,14 @@ interface Plan {
   readonly stdout?: string;
   readonly exitCode?: number;
   readonly stderr?: string;
+  /**
+   * Chunks the streaming path delivers. `listPaths` streams, so its plans set
+   * this; `ignored` buffers and sets `stdout`.
+   */
+  readonly deliver?: readonly string[];
+  /** What Go claims it sent, when the test needs it to disagree with `deliver`. */
+  readonly chunks?: number;
+  readonly bytesOut?: number;
 }
 
 let lastRequest: GitRunRequest | null = null;
@@ -34,16 +42,20 @@ function serviceFor(plan: Plan): TreeService {
         timedOut: false,
       });
     },
-    runStream: () =>
-      Promise.resolve({
-        stderr: '',
-        exitCode: 0,
+    runStream: (request: GitRunRequest, handlers): Promise<GitStreamResult> => {
+      lastRequest = request;
+      const deliver = plan.deliver ?? [];
+      for (const [index, chunk] of deliver.entries()) handlers.onChunk(chunk, index);
+      return Promise.resolve({
+        stderr: plan.stderr ?? '',
+        exitCode: plan.exitCode ?? 0,
         durationMs: 1,
         timedOut: false,
         canceled: false,
-        bytesOut: 0,
-        chunks: 0,
-      }),
+        bytesOut: plan.bytesOut ?? deliver.join('').length,
+        chunks: plan.chunks ?? deliver.length,
+      });
+    },
   };
   return new TreeService(new GitRunner(REPO, { bridge }));
 }
@@ -95,7 +107,7 @@ describe('ignored', () => {
 
 describe('listPaths', () => {
   it('asks for tracked plus unignored untracked files', async () => {
-    await serviceFor({ stdout: '' }).listPaths();
+    await serviceFor({ deliver: [] }).listPaths();
     expect(lastRequest?.args).toEqual([
       'ls-files',
       '-z',
@@ -109,13 +121,58 @@ describe('listPaths', () => {
     // `ls-files` prints one line per index entry, and an unmerged path has
     // three. Quick open shows files, not index entries.
     const result = await serviceFor({
-      stdout: 'a.txt\0conflict.txt\0conflict.txt\0conflict.txt\0b.txt\0',
+      deliver: ['a.txt\0conflict.txt\0conflict.txt\0conflict.txt\0b.txt\0'],
     }).listPaths();
     expect(result.ok && result.value).toEqual(['a.txt', 'conflict.txt', 'b.txt']);
   });
 
   it('reads an empty repository as no paths', async () => {
-    const result = await serviceFor({ stdout: '' }).listPaths();
+    const result = await serviceFor({ deliver: [] }).listPaths();
     expect(result.ok && result.value).toEqual([]);
+  });
+
+  it('streams rather than buffering — 11.9MB does not cross the bridge whole', async () => {
+    // The point of the audit (PLAN.md §10). If someone reverts this to
+    // `exec`, the buffered `run` double returns '' and the paths vanish.
+    const result = await serviceFor({ deliver: ['a.txt\0b.txt\0'] }).listPaths();
+    expect(result.ok && result.value).toEqual(['a.txt', 'b.txt']);
+  });
+
+  it('joins a path split across two chunks', async () => {
+    // Go cuts at the last NUL in its window, but flushes mid-record for a
+    // path longer than the hard cap, and the final chunk is whatever is left.
+    // Splitting each chunk on its own would invent two short paths here.
+    const result = await serviceFor({
+      deliver: ['src/very/long/', 'path/to/file.txt\0other.txt\0'],
+    }).listPaths();
+    expect(result.ok && result.value).toEqual(['src/very/long/path/to/file.txt', 'other.txt']);
+  });
+
+  it('keeps a tail that arrived without its terminating NUL', async () => {
+    // A truncated last record is data, not noise — dropping it would lose a
+    // file silently. The chunk-count check is what calls truncation an error.
+    const result = await serviceFor({ deliver: ['a.txt\0b.txt'] }).listPaths();
+    expect(result.ok && result.value).toEqual(['a.txt', 'b.txt']);
+  });
+
+  it('fails when a chunk is lost in transit instead of returning a short corpus', async () => {
+    // An event bus can drop a chunk while the process still exits 0. Without
+    // this, quick open renders "no matches" over a repository full of files.
+    const result = await serviceFor({
+      deliver: ['a.txt\0'],
+      chunks: 2,
+      bytesOut: 4096,
+    }).listPaths();
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.stderr).toMatch(/lost in transit/);
+  });
+
+  it('still fails on a real error', async () => {
+    const result = await serviceFor({
+      deliver: [],
+      exitCode: 128,
+      stderr: 'fatal: not a git repository',
+    }).listPaths();
+    expect(result.ok).toBe(false);
   });
 });

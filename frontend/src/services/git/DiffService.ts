@@ -32,6 +32,16 @@ function withPaths(args: readonly string[], paths: readonly string[] | undefined
   return [...args, '--', ...paths];
 }
 
+/**
+ * What `commit()` runs. Exported so the Phase 7 benchmark measures the app's
+ * command rather than a retyped copy of it that drifts the first time someone
+ * edits a flag (`bench/git.bench.test.ts`) — the same reason `STATUS_ARGS`,
+ * `LOG_BASE_ARGS` and `LS_FILES_ARGS` are constants.
+ */
+export function commitDiffArgs(oid: string): string[] {
+  return ['show', '--format=', '--first-parent', ...DIFF_OUTPUT_ARGS, oid];
+}
+
 export class DiffService {
   constructor(private readonly runner: GitRunner) {}
 
@@ -64,11 +74,7 @@ export class DiffService {
    * which this parser is not built to read.)
    */
   commit(oid: string, options: DiffOptions = {}): Promise<Result<DiffFile[], GitError>> {
-    const args = withPaths(
-      ['show', '--format=', '--first-parent', ...DIFF_OUTPUT_ARGS, oid],
-      options.paths,
-    );
-    return this.run(args, options);
+    return this.run(withPaths(commitDiffArgs(oid), options.paths), options);
   }
 
   /**

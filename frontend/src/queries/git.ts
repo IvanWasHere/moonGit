@@ -267,18 +267,6 @@ export function useLogPages(
   });
 }
 
-export function useCommit(
-  repoPath: string | null,
-  oid: string | null,
-): UseQueryResult<Commit | null, GitQueryError> {
-  return useQuery({
-    queryKey: gitKeys.commit(repoPath ?? '', oid ?? ''),
-    queryFn: async ({ signal }) =>
-      unwrap(await commitService(repoPath ?? '').get(oid ?? '', { signal })),
-    enabled: enabled(repoPath) && oid !== null && oid !== '',
-  });
-}
-
 export function useWorkingTreeDiff(
   repoPath: string | null,
   paths?: readonly string[],
@@ -313,17 +301,21 @@ export function useStagedDiff(
   });
 }
 
-export function useCommitDiff(
-  repoPath: string | null,
-  oid: string | null,
-): UseQueryResult<DiffFile[], GitQueryError> {
-  return useQuery({
-    queryKey: gitKeys.diff(repoPath ?? '', 'commit', oid),
-    queryFn: async ({ signal }) =>
-      unwrap(await diffService(repoPath ?? '').commit(oid ?? '', { signal })),
-    enabled: enabled(repoPath) && oid !== null && oid !== '',
-  });
-}
+/*
+ * There is no `useCommitDiff`, deliberately (PLAN.md §10, Phase 7.7).
+ *
+ * One existed, unused, calling `DiffService.commit(oid)` with no `paths` where
+ * the two queries above both take a scope. Measured against the bench
+ * repository that unscoped call returns **187.6MB in a single buffered
+ * string** — the same payload class as the unbounded `git log` this codebase
+ * streams specifically to avoid — while the same command scoped to one path is
+ * 70ms and 319B.
+ *
+ * It is gone rather than fixed because nothing rendered it: a commit-diff view
+ * does not exist in the app, so the hook was a shape waiting for someone to
+ * wire it up and inherit the payload. If that view is built, write the query
+ * with a required path scope and these numbers in front of you.
+ */
 
 /** One directory's entries, with git's verdict on each attached. */
 export interface DirEntry extends FileInfo {
